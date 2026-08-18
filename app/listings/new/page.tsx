@@ -1,66 +1,106 @@
 "use client";
 
-import Link from "next/link";
+import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { ArrowRight } from "lucide-react";
 import { AppPage } from "@/components/layout/AppPage";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { PortalPanel } from "@/components/ui/Portal";
-import { demoSites } from "@/lib/demo";
+import { ListingWizard } from "@/components/listings/ListingWizard";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
+import type { ListingKind } from "@/lib/listingForm";
 
-export default function CreateListingPage() {
+const kinds: {
+  id: ListingKind;
+  title: string;
+  summary: string;
+  description: string;
+  icon: string;
+  accent: "green" | "orange";
+}[] = [
+  {
+    id: "people",
+    title: "Surplus food for people",
+    summary: "Suitable for charity donation & community redistribution",
+    description:
+      "Edible food that is safe for human consumption and within a suitable use-by date",
+    icon: "/listing/veggie_basket.png",
+    accent: "green",
+  },
+  {
+    id: "farm",
+    title: "Surplus not fit for human consumption",
+    summary: "Suitable for livestock feed, bio energy or agricultural re-use",
+    description:
+      "Food past its use-by date, food scraps or surplus suitable for livestock feed or agricultural re-use",
+    icon: "/listing/farmhouse.png",
+    accent: "orange",
+  },
+];
+
+function CreateListingContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const type = searchParams.get("type");
+
+  if (type === "people" || type === "farm") {
+    return <ListingWizard kind={type} />;
+  }
+
   return (
     <AppPage
       eyebrow="Listings"
       title="Create listing"
-      description="List surplus from a site. Charities and farmers nearby can claim it for pickup."
+      description="Firstly tell us what type of surplus food you have, so we can notify the right recipients."
     >
-      <PortalPanel title="Listing details" subtitle="Same fields as restaurant create listing">
-        <form className="grid max-w-2xl gap-5">
-          <div className="space-y-2">
-            <Label htmlFor="site">Site</Label>
-            <select
-              id="site"
-              className="shadow-input h-11 w-full rounded-xl border-2 border-transparent bg-[#F5F1E8] px-4 text-sm text-[#1a1a1a] focus:border-[#A68FD9] focus:bg-white focus:outline-none"
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {kinds.map((kind) => (
+          <button
+            key={kind.id}
+            type="button"
+            onClick={() => router.push(`/listings/new?type=${kind.id}`)}
+            className={`rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+              kind.accent === "green"
+                ? "border-saveful-green/30"
+                : "border-saveful-orange/30"
+            }`}
+          >
+            <div
+              className={`inline-flex rounded-2xl px-3 py-2 ${
+                kind.accent === "green" ? "bg-[#EEF0E6]" : "bg-[#F6EFE5]"
+              }`}
             >
-              {demoSites.map((site) => (
-                <option key={site.id}>{site.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="title">Food title</Label>
-            <Input id="title" placeholder="Evening bread and pastries" />
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="qty">Quantity (kg)</Label>
-              <Input id="qty" placeholder="12" />
+              <Image src={kind.icon} alt="" width={56} height={56} className="h-14 w-14 object-contain" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="audience">Audience</Label>
-              <select
-                id="audience"
-                className="shadow-input h-11 w-full rounded-xl border-2 border-transparent bg-[#F5F1E8] px-4 text-sm text-[#1a1a1a] focus:border-[#A68FD9] focus:bg-white focus:outline-none"
-              >
-                <option>People</option>
-                <option>Animals</option>
-                <option>Both</option>
-              </select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="window">Pickup window</Label>
-            <Input id="window" placeholder="Today · 8:00 pm – 9:30 pm" />
-          </div>
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button">Publish listing</Button>
-            <Link href="/listings">
-              <Button type="button" variant="secondary">Cancel</Button>
-            </Link>
-          </div>
-        </form>
-      </PortalPanel>
+            <h2
+              className={`mt-4 font-saveful-bold text-lg uppercase leading-snug ${
+                kind.accent === "green" ? "text-saveful-green" : "text-saveful-orange"
+              }`}
+            >
+              {kind.title}
+            </h2>
+            <p className="mt-2 font-saveful-semibold text-sm text-gray-800">{kind.summary}</p>
+            <p className="mt-2 font-saveful text-sm leading-relaxed text-gray-500">
+              {kind.description}
+            </p>
+            <span
+              className={`mt-5 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-saveful-semibold text-sm text-white ${
+                kind.accent === "green" ? "bg-saveful-green" : "bg-saveful-orange"
+              }`}
+            >
+              List this surplus
+              <ArrowRight className="h-4 w-4" />
+            </span>
+          </button>
+        ))}
+      </div>
     </AppPage>
+  );
+}
+
+export default function CreateListingPage() {
+  return (
+    <Suspense fallback={<SavefulPageLoader message="Loading listing form…" />}>
+      <CreateListingContent />
+    </Suspense>
   );
 }
