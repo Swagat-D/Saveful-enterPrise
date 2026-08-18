@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { AppPage } from "@/components/layout/AppPage";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PortalPanel } from "@/components/ui/Portal";
 import { demoSites } from "@/lib/demo";
 
 export default function CreateListingPage() {
@@ -11,46 +15,52 @@ export default function CreateListingPage() {
       title="Create listing"
       description="List surplus from a site. Charities and farmers nearby can claim it for pickup."
     >
-      <form className="max-w-2xl space-y-4 rounded-3xl border border-white bg-white p-6 shadow-sm">
-        <label className="block">
-          <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">Site</span>
-          <select className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm">
-            {demoSites.map((site) => (
-              <option key={site.id}>{site.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">Food title</span>
-          <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="Evening bread and pastries" />
-        </label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">Quantity (kg)</span>
-            <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="12" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">Audience</span>
-            <select className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm">
-              <option>People</option>
-              <option>Animals</option>
-              <option>Both</option>
+      <PortalPanel title="Listing details" subtitle="Same fields as restaurant create listing">
+        <form className="grid max-w-2xl gap-5">
+          <div className="space-y-2">
+            <Label htmlFor="site">Site</Label>
+            <select
+              id="site"
+              className="shadow-input h-11 w-full rounded-xl border-2 border-transparent bg-[#F5F1E8] px-4 text-sm text-[#1a1a1a] focus:border-[#A68FD9] focus:bg-white focus:outline-none"
+            >
+              {demoSites.map((site) => (
+                <option key={site.id}>{site.name}</option>
+              ))}
             </select>
-          </label>
-        </div>
-        <label className="block">
-          <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">Pickup window</span>
-          <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="Today · 8:00 pm – 9:30 pm" />
-        </label>
-        <div className="flex gap-2 pt-2">
-          <button type="button" className="rounded-xl bg-saveful-green px-4 py-2.5 font-saveful-semibold text-white">
-            Publish listing
-          </button>
-          <Link href="/listings" className="rounded-xl border border-gray-200 px-4 py-2.5 font-saveful-semibold text-gray-700">
-            Cancel
-          </Link>
-        </div>
-      </form>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="title">Food title</Label>
+            <Input id="title" placeholder="Evening bread and pastries" />
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="qty">Quantity (kg)</Label>
+              <Input id="qty" placeholder="12" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="audience">Audience</Label>
+              <select
+                id="audience"
+                className="shadow-input h-11 w-full rounded-xl border-2 border-transparent bg-[#F5F1E8] px-4 text-sm text-[#1a1a1a] focus:border-[#A68FD9] focus:bg-white focus:outline-none"
+              >
+                <option>People</option>
+                <option>Animals</option>
+                <option>Both</option>
+              </select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="window">Pickup window</Label>
+            <Input id="window" placeholder="Today · 8:00 pm – 9:30 pm" />
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button type="button">Publish listing</Button>
+            <Link href="/listings">
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Link>
+          </div>
+        </form>
+      </PortalPanel>
     </AppPage>
   );
 }

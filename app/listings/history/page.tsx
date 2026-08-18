@@ -1,6 +1,7 @@
 "use client";
 
 import { AppPage } from "@/components/layout/AppPage";
+import { PortalPanel, StatusBadge } from "@/components/ui/Portal";
 import { demoListings } from "@/lib/demo";
 
 export default function CollectionHistoryPage() {
@@ -12,23 +13,24 @@ export default function CollectionHistoryPage() {
       title="Collection history"
       description="Completed pickups across HQ and branches."
     >
-      <div className="space-y-3">
-        {collected.map((listing) => (
-          <article key={listing.id} className="rounded-3xl border border-white bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
+      <PortalPanel title="Completed pickups" subtitle={`${collected.length} collections`}>
+        <div className="space-y-3">
+          {collected.map((listing) => (
+            <article
+              key={listing.id}
+              className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-[#FCFCFA] p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
-                <h2 className="font-saveful-bold text-lg text-gray-900">{listing.title}</h2>
+                <h2 className="font-saveful-bold text-base text-gray-900">{listing.title}</h2>
                 <p className="mt-1 font-saveful text-sm text-gray-600">
                   {listing.siteName} · {listing.quantityKg} kg
                 </p>
               </div>
-              <span className="rounded-full bg-saveful-green/10 px-3 py-1 font-saveful text-xs text-saveful-green">
-                Collected
-              </span>
-            </div>
-          </article>
-        ))}
-      </div>
+              <StatusBadge tone="green">Collected</StatusBadge>
+            </article>
+          ))}
+        </div>
+      </PortalPanel>
     </AppPage>
   );
 }

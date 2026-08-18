@@ -1,6 +1,7 @@
 "use client";
 
 import { AppPage } from "@/components/layout/AppPage";
+import { PortalPanel } from "@/components/ui/Portal";
 
 const updates = [
   {
@@ -24,14 +25,19 @@ export default function UpdatesPage() {
       title="Updates"
       description="Claims, pickups, and site alerts across the organisation."
     >
-      <div className="space-y-3">
-        {updates.map((update) => (
-          <article key={update.title} className="rounded-3xl border border-white bg-white p-5 shadow-sm">
-            <h2 className="font-saveful-bold text-lg text-gray-900">{update.title}</h2>
-            <p className="mt-1 font-saveful text-sm text-gray-600">{update.body}</p>
-          </article>
-        ))}
-      </div>
+      <PortalPanel title="Recent activity" subtitle="Same feed as restaurant Updates">
+        <div className="space-y-3">
+          {updates.map((update) => (
+            <article
+              key={update.title}
+              className="rounded-2xl border border-gray-100 bg-[#FCFCFA] p-4"
+            >
+              <h2 className="font-saveful-bold text-base text-gray-900">{update.title}</h2>
+              <p className="mt-1 font-saveful text-sm text-gray-600">{update.body}</p>
+            </article>
+          ))}
+        </div>
+      </PortalPanel>
     </AppPage>
   );
 }

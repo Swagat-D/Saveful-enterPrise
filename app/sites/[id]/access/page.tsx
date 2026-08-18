@@ -3,6 +3,10 @@
 import { use } from "react";
 import Link from "next/link";
 import { AppPage } from "@/components/layout/AppPage";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PortalPanel, StatusBadge } from "@/components/ui/Portal";
 import { demoSites } from "@/lib/demo";
 
 export default function ManageAccessPage({
@@ -16,31 +20,40 @@ export default function ManageAccessPage({
   return (
     <AppPage
       eyebrow="Site access"
-      title={site ? `Manage access · ${site.name}` : "Manage access"}
+      title={site ? site.name : "Manage access"}
       description="Invite a site manager or remove access for this location only."
+      actions={
+        <Link href="/sites">
+          <Button variant="secondary">Back to sites</Button>
+        </Link>
+      }
     >
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-3xl border border-white bg-white p-6 shadow-sm">
-          <h2 className="font-saveful-bold text-lg text-gray-900">Current manager</h2>
-          <p className="mt-2 font-saveful text-sm text-gray-600">
+        <PortalPanel title="Current manager" subtitle="Assigned to this site only">
+          <p className="font-saveful-semibold text-gray-900">
             {site?.hasManager ? site.managerName : "No manager assigned"}
           </p>
           <p className="mt-1 font-saveful text-sm text-gray-500">{site?.email}</p>
-        </section>
-        <section className="rounded-3xl border border-white bg-white p-6 shadow-sm">
-          <h2 className="font-saveful-bold text-lg text-gray-900">Invite manager</h2>
-          <div className="mt-4 space-y-3">
-            <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="Manager name" />
-            <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="Email" />
-            <button type="button" className="rounded-xl bg-saveful-green px-4 py-2.5 font-saveful-semibold text-white">
-              Send invite
-            </button>
+          <div className="mt-4">
+            <StatusBadge tone={site?.hasManager ? "green" : "amber"}>
+              {site?.hasManager ? "Managed" : "Needs manager"}
+            </StatusBadge>
           </div>
-        </section>
+        </PortalPanel>
+        <PortalPanel title="Invite manager" subtitle="They only get this location">
+          <form className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="manager-name">Manager name</Label>
+              <Input id="manager-name" placeholder="Priya Nair" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manager-email">Email</Label>
+              <Input id="manager-email" type="email" placeholder="manager@yourbusiness.com" />
+            </div>
+            <Button type="button">Send invite</Button>
+          </form>
+        </PortalPanel>
       </div>
-      <Link href="/sites" className="inline-block font-saveful-semibold text-sm text-saveful-green hover:underline">
-        Back to sites
-      </Link>
     </AppPage>
   );
 }

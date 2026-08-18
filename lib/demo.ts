@@ -78,3 +78,33 @@ export const demoListings: SurplusListing[] = [
     pickupWindow: "Yesterday · 7:00 pm – 8:00 pm",
   },
 ];
+
+const day = (offset: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - offset);
+  return date.toISOString().slice(0, 10);
+};
+
+export const demoGrowth = [
+  { date: day(6), listings: 2, collections: 1, claims: 1 },
+  { date: day(5), listings: 3, collections: 2, claims: 2 },
+  { date: day(4), listings: 1, collections: 1, claims: 0 },
+  { date: day(3), listings: 4, collections: 2, claims: 3 },
+  { date: day(2), listings: 2, collections: 3, claims: 1 },
+  { date: day(1), listings: 5, collections: 2, claims: 4 },
+  { date: day(0), listings: 3, collections: 2, claims: 2 },
+];
+
+export const CHART_COLORS = {
+  green: "#2D5F4F",
+  teal: "#0F766E",
+  purple: "#7C6BB0",
+  orange: "#F7931E",
+};
+
+export const CHART_TOOLTIP = {
+  borderRadius: 12,
+  border: "1px solid #E5E7EB",
+  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
+  fontSize: 12,
+};

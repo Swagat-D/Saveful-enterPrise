@@ -1,14 +1,21 @@
+"use client";
+
 import { PortalShell } from "@/components/layout/PortalShell";
-import { PageHeader } from "@/components/layout/PageHeader";
+import {
+  PortalPageHeader,
+  PortalPageShell,
+} from "@/components/ui/Portal";
 
 export function AppPage({
   eyebrow,
+  brand,
   title,
   description,
   actions,
   children,
 }: {
   eyebrow?: string;
+  brand?: React.ReactNode;
   title: string;
   description?: string;
   actions?: React.ReactNode;
@@ -16,17 +23,16 @@ export function AppPage({
 }) {
   return (
     <PortalShell>
-      <div className="relative h-full overflow-y-auto bg-[#F7F6F2] p-4 md:p-8">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <PageHeader
-            eyebrow={eyebrow}
-            title={title}
-            description={description}
-            actions={actions}
-          />
-          {children}
-        </div>
-      </div>
+      <PortalPageShell>
+        <PortalPageHeader
+          eyebrow={eyebrow}
+          brand={brand}
+          title={title}
+          description={description}
+          actions={actions}
+        />
+        {children}
+      </PortalPageShell>
     </PortalShell>
   );
 }

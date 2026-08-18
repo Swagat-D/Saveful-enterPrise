@@ -1,65 +1,96 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { Plus } from "lucide-react";
 import { AppPage } from "@/components/layout/AppPage";
+import { Button } from "@/components/ui/button";
+import { PortalChip, PortalPanel, StatusBadge } from "@/components/ui/Portal";
 import { demoListings } from "@/lib/demo";
+import type { ListingStatus } from "@/types/enterprise";
 
-const statusClass: Record<string, string> = {
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  CLAIMED: "bg-blue-50 text-blue-700",
-  COLLECTED: "bg-saveful-green/10 text-saveful-green",
-  EXPIRED: "bg-gray-100 text-gray-600",
-  CANCELLED: "bg-red-50 text-red-700",
-  PARTIAL: "bg-amber-50 text-amber-700",
+const filters: { key: "all" | ListingStatus; label: string }[] = [
+  { key: "ACTIVE", label: "Active" },
+  { key: "all", label: "All" },
+  { key: "CLAIMED", label: "Claimed" },
+  { key: "COLLECTED", label: "Collected" },
+  { key: "EXPIRED", label: "Expired" },
+];
+
+const statusTone: Record<ListingStatus, "green" | "amber" | "blue" | "red" | "slate"> = {
+  ACTIVE: "green",
+  PARTIAL: "amber",
+  CLAIMED: "blue",
+  COLLECTED: "green",
+  EXPIRED: "slate",
+  CANCELLED: "red",
 };
 
 export default function ListingsPage() {
+  const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("ACTIVE");
+  const rows =
+    filter === "all"
+      ? demoListings
+      : demoListings.filter((listing) => listing.status === filter);
+
   return (
     <AppPage
       eyebrow="Surplus"
       title="Listings"
-      description="See surplus across every site. Filter by audience and status, then open a listing to edit or track collection."
+      description="See surplus across every site. Filter by status, then track claims and collections."
       actions={
-        <Link
-          href="/listings/new"
-          className="rounded-xl bg-saveful-green px-4 py-2.5 font-saveful-semibold text-white"
-        >
-          Create listing
+        <Link href="/listings/new">
+          <Button>
+            <Plus className="h-4 w-4" />
+            Create listing
+          </Button>
         </Link>
       }
     >
-      <div className="flex flex-wrap gap-2">
-        {["Active", "All", "Claimed", "Collected", "Expired"].map((filter) => (
-          <button
-            key={filter}
-            type="button"
-            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 font-saveful text-xs text-gray-700"
-          >
-            {filter}
-          </button>
-        ))}
-      </div>
-      <div className="space-y-3">
-        {demoListings.map((listing) => (
-          <article key={listing.id} className="rounded-3xl border border-white bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="font-saveful text-xs uppercase tracking-wide text-gray-500">
+      <PortalPanel
+        title="Organisation listings"
+        subtitle={`${rows.length} shown`}
+        action={
+          <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap">
+            {filters.map((item) => (
+              <PortalChip
+                key={item.key}
+                active={filter === item.key}
+                onClick={() => setFilter(item.key)}
+              >
+                {item.label}
+              </PortalChip>
+            ))}
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {rows.map((listing) => (
+            <article
+              key={listing.id}
+              className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-[#FCFCFA] p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="font-saveful text-[11px] uppercase tracking-wide text-gray-500">
                   {listing.siteName}
                 </p>
-                <h2 className="mt-1 font-saveful-bold text-lg text-gray-900">{listing.title}</h2>
-                <p className="mt-1 font-saveful text-sm text-gray-600">{listing.pickupWindow}</p>
+                <h2 className="mt-1 font-saveful-bold text-base text-gray-900 sm:text-lg">
+                  {listing.title}
+                </h2>
+                <p className="mt-1 font-saveful text-sm text-gray-600">
+                  {listing.quantityKg} kg · {listing.audience === "ANIMAL" ? "Animals" : "People"} · {listing.pickupWindow}
+                </p>
               </div>
-              <span className={`rounded-full px-3 py-1 font-saveful text-xs ${statusClass[listing.status]}`}>
-                {listing.status}
-              </span>
-            </div>
-            <p className="mt-3 font-saveful text-sm text-gray-500">
-              {listing.quantityKg} kg · {listing.audience === "ANIMAL" ? "Animals" : "People"}
+              <StatusBadge tone={statusTone[listing.status]}>{listing.status}</StatusBadge>
+            </article>
+          ))}
+          {rows.length === 0 ? (
+            <p className="rounded-xl bg-gray-50 px-4 py-10 text-center font-saveful text-sm text-gray-500">
+              No listings in this filter yet.
             </p>
-          </article>
-        ))}
-      </div>
+          ) : null}
+        </div>
+      </PortalPanel>
     </AppPage>
   );
 }

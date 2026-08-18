@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { AppPage } from "@/components/layout/AppPage";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PortalPanel } from "@/components/ui/Portal";
 
 export default function CreateSitePage() {
   return (
@@ -10,30 +14,28 @@ export default function CreateSitePage() {
       title="Add location"
       description="Add a branch so another kitchen can list surplus and manage its own team."
     >
-      <form className="max-w-xl space-y-4 rounded-3xl border border-white bg-white p-6 shadow-sm">
-        <label className="block">
-          <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">
-            Location name
-          </span>
-          <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="e.g. Surry Hills Kitchen" />
-        </label>
-        <label className="block">
-          <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">Address</span>
-          <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="Search restaurant address" />
-        </label>
-        <label className="block">
-          <span className="mb-1 block font-saveful-semibold text-sm text-gray-700">Postcode</span>
-          <input className="w-full rounded-xl border border-gray-200 bg-[#F5F1E8] px-4 py-3 font-saveful text-sm" placeholder="Auto-filled from the map" />
-        </label>
-        <div className="flex gap-2 pt-2">
-          <button type="button" className="rounded-xl bg-saveful-green px-4 py-2.5 font-saveful-semibold text-white">
-            Save location
-          </button>
-          <Link href="/sites" className="rounded-xl border border-gray-200 px-4 py-2.5 font-saveful-semibold text-gray-700">
-            Cancel
-          </Link>
-        </div>
-      </form>
+      <PortalPanel title="Location details" subtitle="Map search will fill address and postcode later">
+        <form className="grid max-w-xl gap-5">
+          <div className="space-y-2">
+            <Label htmlFor="name">Location name</Label>
+            <Input id="name" placeholder="e.g. Surry Hills Kitchen" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="address">Address</Label>
+            <Input id="address" placeholder="Search restaurant address" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="postcode">Postcode</Label>
+            <Input id="postcode" placeholder="Auto-filled from the map" />
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button type="button">Save location</Button>
+            <Link href="/sites">
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Link>
+          </div>
+        </form>
+      </PortalPanel>
     </AppPage>
   );
 }
