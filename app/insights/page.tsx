@@ -34,6 +34,7 @@ import {
   type ImpactFilterMode,
 } from "@/lib/impactDemo";
 import { downloadImpactExcel, printImpactPdf } from "@/lib/impactReport";
+import { SpecificFoodSavings } from "@/components/insights/SpecificFoodSavings";
 import { cn } from "@/lib/utils";
 
 const TIME_RANGES: { key: ChartPeriod; label: string }[] = [
@@ -312,37 +313,7 @@ export default function InsightsPage() {
         </div>
       </PortalPanel>
 
-      <PortalPanel
-        title="Specific food savings"
-        subtitle="Breakdown by food item for this period — these amounts make up the totals above"
-      >
-        <div className="space-y-3">
-          {foods.map((food) => (
-            <article
-              key={food.rank}
-              className="rounded-2xl border border-gray-100 bg-[#FCFCFA] p-4"
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="font-saveful text-[11px] uppercase tracking-wide text-gray-400">
-                    #{food.rank} · {food.category}
-                  </p>
-                  <h3 className="mt-1 font-saveful-bold text-base text-gray-900">{food.name}</h3>
-                </div>
-                <p className="font-saveful-bold text-lg tabular-nums text-saveful-green">
-                  {formatKg(food.totalKg)}
-                </p>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <MiniStat label="People" value={formatKg(food.peopleKg)} />
-                <MiniStat label="Animals" value={formatKg(food.animalKg)} />
-                <MiniStat label="Meals" value={formatNumber(food.mealsCreated)} />
-                <MiniStat label="CO₂" value={formatKg(food.co2AvoidedKg)} />
-              </div>
-            </article>
-          ))}
-        </div>
-      </PortalPanel>
+      <SpecificFoodSavings key={`${siteId}-${periodLabel}`} foods={foods} />
 
       <PortalPanel title="Recipient organisations" subtitle={`Who collected surplus · ${periodLabel}`}>
         <div className="space-y-3">
