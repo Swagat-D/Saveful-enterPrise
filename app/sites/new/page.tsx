@@ -91,7 +91,7 @@ export default function CreateSitePage() {
             </p>
 
             <div className="mt-6 space-y-5">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <Field label="Site name" htmlFor="siteName" error={errors.siteName}>
                   <input
                     id="siteName"
@@ -101,6 +101,13 @@ export default function CreateSitePage() {
                       clearError("siteName");
                     }}
                     placeholder="Enter site name"
+                    className={creamInput}
+                  />
+                </Field>
+                <Field label="Site ID" htmlFor="siteCode">
+                  <input
+                    id="siteCode"
+                    placeholder="e.g. HK-014"
                     className={creamInput}
                   />
                 </Field>

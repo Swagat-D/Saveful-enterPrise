@@ -334,7 +334,7 @@ export default function AccountPage() {
           {[
             { href: "/plans", label: "Plans" },
             { href: "/plans", label: "Manage billing" },
-            { href: "/sites", label: "Manage access" },
+            { href: "/users", label: "Manage access" },
           ].map((item) => (
             <Link
               key={item.label}

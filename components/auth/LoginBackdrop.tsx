@@ -3,7 +3,7 @@ import Image from "next/image";
 function Ingredient({ src, className }: { src: string; className: string }) {
   return (
     <div className={className}>
-      <Image src={src} alt="" fill className="object-contain" />
+      <Image src={src} alt="" fill sizes="176px" className="object-contain" />
     </div>
   );
 }

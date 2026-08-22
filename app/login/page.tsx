@@ -15,11 +15,11 @@ export default function LoginPage() {
         <AuthLoginForm
           config={{
             title: "Welcome back",
-            subtitle: "Sign in to manage your surplus food listings and sites.",
+            subtitle: "Sign in to manage your organisation, sites and impact.",
             emailPlaceholder: "you@yourbusiness.com",
             onSubmit: async (credentials) => {
               await login(credentials);
-              router.push("/sites");
+              router.push("/dashboard");
             },
           }}
         />

@@ -21,7 +21,7 @@ export default function HomePage() {
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <div className="rounded-2xl border border-saveful-green/10 bg-white p-2 shadow-sm">
               <Image
-                src="/logo@3x.png"
+                src="/logo.png"
                 alt="Saveful logo"
                 width={140}
                 height={52}
@@ -35,19 +35,17 @@ export default function HomePage() {
           </div>
 
           <h1 className="max-w-2xl font-saveful-bold text-4xl leading-tight text-saveful-green md:text-5xl">
-            One workspace for every restaurant site
+            One workspace for your entire organisation
           </h1>
           <p className="mt-4 max-w-xl font-saveful text-base text-gray-600 md:text-lg">
-            Sign in to manage locations, surplus listings, collections, and impact
-            across your multi-site business — the same restaurant multi-site flow
-            as Saveful for Business, built for the web.
+            Manage sites, users, surplus food recovery and impact across your organisation - all in one place
           </p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {[
-              { title: "Sites", copy: "HQ plus branches, managers, and access." },
-              { title: "Listings", copy: "Create surplus, track claims and pickups." },
-              { title: "Insights", copy: "Food saved, meals, CO₂, and collections." },
+              { title: "Network", copy: "Manage sites, organisational structure and access." },
+              { title: "Recovery", copy: "See surplus listings, collections and recovery pathways across your network." },
+              { title: "Insights", copy: "Measure food recovered, value saved and impact across your organisation." },
             ].map((item) => (
               <div
                 key={item.title}
@@ -61,10 +59,10 @@ export default function HomePage() {
 
           <button
             type="button"
-            onClick={() => router.push(session ? "/sites" : "/login")}
+            onClick={() => router.push(session ? "/dashboard" : "/login")}
             className="mt-8 inline-flex items-center rounded-xl bg-saveful-green px-5 py-3 font-saveful-semibold text-white transition hover:bg-green-700"
           >
-            {session ? "Open sites dashboard" : "Sign in to Enterprise"}
+            {session ? "Open dashboard" : "Sign in to Enterprise"}
           </button>
         </section>
       </div>

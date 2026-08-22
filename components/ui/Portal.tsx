@@ -34,8 +34,8 @@ export function PortalPageShell({
   className?: string;
 }) {
   return (
-    <div className="relative h-full overflow-y-auto bg-[#F7F6F2] p-4 md:p-8">
-      <div className={`relative z-10 mx-auto max-w-7xl space-y-6 ${className}`}>
+    <div className="relative h-full overflow-y-auto bg-[#F7F6F2] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+      <div className={`relative z-10 mx-auto max-w-7xl space-y-5 sm:space-y-6 ${className}`}>
         {children}
       </div>
     </div>
@@ -84,16 +84,16 @@ export function PortalPageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-      <div className="min-w-0 space-y-3">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="min-w-0 space-y-2.5">
         {eyebrow ? (
-          <p className="font-saveful text-xs uppercase tracking-[0.2em] text-saveful-green">
+          <p className="font-saveful text-[11px] uppercase tracking-[0.2em] text-saveful-green">
             {eyebrow}
           </p>
         ) : null}
         {brand}
         <div>
-          <h1 className="font-saveful-bold text-3xl leading-tight text-gray-900 md:text-4xl">
+          <h1 className="font-saveful-bold text-[1.75rem] leading-tight text-gray-900 sm:text-3xl lg:text-4xl">
             {title}
           </h1>
           {description ? (
@@ -151,7 +151,7 @@ export function PortalStatCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "h-full w-full rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm transition",
+        "h-full w-full rounded-2xl border border-black/[0.04] bg-white p-4 text-left shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition",
         href && "hover:border-saveful-green/25 hover:shadow-md",
       )}
     >
@@ -160,13 +160,13 @@ export function PortalStatCard({
           <p className="font-saveful text-xs uppercase tracking-[0.14em] text-gray-500">
             {label}
           </p>
-          <p className="mt-2 font-saveful-bold text-2xl tabular-nums text-gray-900">
+          <p className="mt-2 font-saveful-bold text-xl tabular-nums leading-none text-gray-900 sm:text-2xl">
             {value}
           </p>
           {trend ? (
             <p
-              className={`mt-1 inline-flex items-center gap-1 font-saveful text-xs ${
-                trend.value >= 0 ? "text-emerald-600" : "text-red-600"
+              className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-saveful text-[11px] ${
+                trend.value >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
               }`}
             >
               {trend.value >= 0 ? (
@@ -176,7 +176,9 @@ export function PortalStatCard({
               )}
               {trend.value >= 0 ? "+" : ""}
               {trend.value}%
-              {trend.label ? <span className="text-gray-400"> {trend.label}</span> : null}
+              {trend.label ? (
+                <span className="hidden text-current/60 sm:inline"> {trend.label}</span>
+              ) : null}
             </p>
           ) : hint ? (
             <p className="mt-1 truncate font-saveful text-xs text-gray-500">{hint}</p>
@@ -210,18 +212,18 @@ export function PortalPanel({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "rounded-2xl border border-gray-100 bg-white p-5 shadow-sm",
+        "rounded-2xl border border-black/[0.04] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5",
         className,
       )}
     >
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="font-saveful-bold text-lg text-gray-900">{title}</h2>
+          <h2 className="font-saveful-bold text-base text-gray-900 sm:text-lg">{title}</h2>
           {subtitle ? (
-            <p className="mt-0.5 font-saveful text-xs text-gray-500">{subtitle}</p>
+            <p className="mt-0.5 font-saveful text-xs leading-relaxed text-gray-500">{subtitle}</p>
           ) : null}
         </div>
-        {action ? <div className="w-full shrink-0 sm:w-auto">{action}</div> : null}
+        {action ? <div className="shrink-0 self-start">{action}</div> : null}
       </div>
       {children}
     </motion.div>

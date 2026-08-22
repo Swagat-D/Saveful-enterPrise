@@ -20,6 +20,7 @@ interface SidebarContextProps {
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   animate: boolean;
   brandLabel?: string;
+  persistent: boolean;
 }
 
 const SidebarContext = createContext<SidebarContextProps | undefined>(
@@ -40,12 +41,14 @@ export const SidebarProvider = ({
   setOpen: setOpenProp,
   animate = true,
   brandLabel,
+  persistent = false,
 }: {
   children: React.ReactNode;
   open?: boolean;
   setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   animate?: boolean;
   brandLabel?: string;
+  persistent?: boolean;
 }) => {
   const [openState, setOpenState] = useState(false);
 
@@ -53,7 +56,9 @@ export const SidebarProvider = ({
   const setOpen = setOpenProp !== undefined ? setOpenProp : setOpenState;
 
   return (
-    <SidebarContext.Provider value={{ open, setOpen, animate: animate, brandLabel }}>
+    <SidebarContext.Provider
+      value={{ open, setOpen, animate, brandLabel, persistent }}
+    >
       {children}
     </SidebarContext.Provider>
   );
@@ -65,12 +70,14 @@ export const Sidebar = ({
   setOpen,
   animate,
   brandLabel,
+  persistent,
 }: {
   children: React.ReactNode;
   open?: boolean;
   setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   animate?: boolean;
   brandLabel?: string;
+  persistent?: boolean;
 }) => {
   return (
     <SidebarProvider
@@ -78,6 +85,7 @@ export const Sidebar = ({
       setOpen={setOpen}
       animate={animate}
       brandLabel={brandLabel}
+      persistent={persistent}
     >
       {children}
     </SidebarProvider>
@@ -98,25 +106,25 @@ export const DesktopSidebar = ({
   children,
   ...props
 }: React.ComponentProps<typeof motion.div>) => {
-  const { open, setOpen, animate } = useSidebar();
+  const { open, setOpen, animate, persistent } = useSidebar();
+  const expanded = persistent || open;
+
   return (
-    <>
-      <motion.div
-        className={cn(
-          "hidden h-full shrink-0 border-r-2 border-[#E8B4D9]/20 bg-saveful-cream py-4 md:flex md:flex-col md:w-[300px]",
-          open ? "px-2" : "px-4",
-          className
-        )}
-        animate={{
-          width: animate ? (open ? "300px" : "80px") : "300px",
-        }}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        {...props}
-      >
-        {children}
-      </motion.div>
-    </>
+    <motion.div
+      className={cn(
+        "hidden h-full shrink-0 border-r-2 border-[#E8B4D9]/20 bg-saveful-cream py-4 md:flex md:flex-col md:w-[280px]",
+        expanded ? "px-3" : "px-4",
+        className
+      )}
+      animate={{
+        width: persistent || !animate ? "280px" : open ? "280px" : "80px",
+      }}
+      onMouseEnter={persistent ? undefined : () => setOpen(true)}
+      onMouseLeave={persistent ? undefined : () => setOpen(false)}
+      {...props}
+    >
+      {children}
+    </motion.div>
   );
 };
 
@@ -137,9 +145,10 @@ export const MobileSidebar = ({
         <div className="z-20 flex min-w-0 flex-1 items-center gap-2.5">
           <div className="relative h-8 w-[112px] shrink-0">
             <Image
-              src="/logo@2x.png"
+              src="/logo.png"
               alt="Saveful"
               fill
+              sizes="112px"
               className="object-contain object-left"
               priority
             />
@@ -239,8 +248,9 @@ export const SidebarLink = ({
   /** All sidebar hrefs; used so `/recipes` does not stay active on `/recipes/new`. */
   navHrefs?: string[];
 }) => {
-  const { open, animate, setOpen } = useSidebar();
+  const { open, animate, setOpen, persistent } = useSidebar();
   const pathname = usePathname();
+  const expanded = persistent || open;
   const hasChildren = link.children && link.children.length > 0;
   const knownHrefs = navHrefs?.length
     ? navHrefs
@@ -269,7 +279,7 @@ export const SidebarLink = ({
 
   const parentClassName = cn(
     "group/sidebar flex items-center gap-3 rounded-lg py-2.5 transition-all",
-    open ? "justify-start px-3" : "justify-center px-2",
+    expanded ? "justify-start px-3" : "justify-center px-2",
     isActive
       ? "bg-saveful-purple/15 text-saveful-purple"
       : "hover:bg-saveful-purple/10",
@@ -289,15 +299,15 @@ export const SidebarLink = ({
 
           <motion.span
             animate={{
-              display: animate ? (open ? "inline-block" : "none") : "inline-block",
-              opacity: animate ? (open ? 1 : 0) : 1,
+              display: animate && !persistent ? (expanded ? "inline-block" : "none") : "inline-block",
+              opacity: animate && !persistent ? (expanded ? 1 : 0) : 1,
             }}
             className="!m-0 inline-block flex-1 whitespace-pre !p-0 text-left font-saveful text-sm text-saveful-black transition duration-150 group-hover/sidebar:translate-x-1"
           >
             {link.label}
           </motion.span>
 
-          {open && (
+          {expanded && (
             <motion.div
               animate={{
                 rotate: shouldExpand ? 180 : 0,
@@ -323,8 +333,8 @@ export const SidebarLink = ({
 
           <motion.span
             animate={{
-              display: animate ? (open ? "inline-block" : "none") : "inline-block",
-              opacity: animate ? (open ? 1 : 0) : 1,
+              display: animate && !persistent ? (expanded ? "inline-block" : "none") : "inline-block",
+              opacity: animate && !persistent ? (expanded ? 1 : 0) : 1,
             }}
             className="!m-0 inline-block flex-1 whitespace-pre !p-0 text-left font-saveful text-sm text-saveful-black transition duration-150 group-hover/sidebar:translate-x-1"
           >
@@ -342,8 +352,8 @@ export const SidebarLink = ({
 
           <motion.span
             animate={{
-              display: animate ? (open ? "inline-block" : "none") : "inline-block",
-              opacity: animate ? (open ? 1 : 0) : 1,
+              display: animate && !persistent ? (expanded ? "inline-block" : "none") : "inline-block",
+              opacity: animate && !persistent ? (expanded ? 1 : 0) : 1,
             }}
             className="!m-0 inline-block flex-1 whitespace-pre !p-0 text-left font-saveful text-sm text-saveful-black transition duration-150 group-hover/sidebar:translate-x-1"
           >
@@ -354,7 +364,7 @@ export const SidebarLink = ({
 
       {hasChildren && (
         <AnimatePresence>
-          {shouldExpand && open && (
+          {shouldExpand && expanded && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}

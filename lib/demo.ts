@@ -1,50 +1,15 @@
-import type { OrganizationSite, SurplusListing } from "@/types/enterprise";
+import type { SurplusListing } from "@/types/enterprise";
+import { demoNetworkSites } from "@/lib/network";
 
 export const demoOrganization = {
   name: "Harbour Kitchen Group",
   address: "14 Circular Quay, Sydney NSW 2000",
+  registration: "ABN 12 345 678 901",
+  venueType: "Cafe / restaurant group",
+  branding: "Harbour Kitchen",
 };
 
-export const demoSites: OrganizationSite[] = [
-  {
-    id: "hq",
-    siteType: "head_office",
-    name: "Harbour Kitchen HQ",
-    address: "14 Circular Quay, Sydney NSW",
-    postCode: "2000",
-    managerName: "Head office",
-    email: "hq@harbourkitchen.com",
-    mobile: "+61 400 111 222",
-    hasManager: true,
-    isDefault: true,
-  },
-  {
-    id: "2",
-    parentId: "hq",
-    siteType: "branch",
-    name: "Surry Hills Kitchen",
-    address: "88 Crown Street, Surry Hills NSW",
-    postCode: "2010",
-    managerName: "Priya Nair",
-    email: "surryhills@harbourkitchen.com",
-    mobile: "+61 400 333 444",
-    hasManager: true,
-    isDefault: false,
-  },
-  {
-    id: "3",
-    parentId: "hq",
-    siteType: "branch",
-    name: "Parramatta Cafe",
-    address: "21 Church Street, Parramatta NSW",
-    postCode: "2150",
-    managerName: "No manager assigned",
-    email: "-",
-    mobile: "-",
-    hasManager: false,
-    isDefault: false,
-  },
-];
+export const demoSites = demoNetworkSites;
 
 export const demoListings: SurplusListing[] = [
   {
@@ -101,6 +66,157 @@ export const CHART_COLORS = {
   purple: "#7C6BB0",
   orange: "#F7931E",
 };
+
+export const demoUsers = [
+  {
+    id: "u1",
+    name: "Alex Morgan",
+    email: "alex@harbourkitchen.com",
+    role: "Head admin",
+    site: "All sites",
+    siteId: "all",
+    status: "Active" as const,
+  },
+  {
+    id: "u2",
+    name: "Priya Nair",
+    email: "priya@harbourkitchen.com",
+    role: "Site manager",
+    site: "Surry Hills Kitchen",
+    siteId: "2",
+    status: "Active" as const,
+  },
+  {
+    id: "u3",
+    name: "Jamie Chen",
+    email: "jamie@harbourkitchen.com",
+    role: "Staff",
+    site: "Harbour Kitchen HQ",
+    siteId: "hq",
+    status: "Active" as const,
+  },
+  {
+    id: "u4",
+    name: "Sam Reid",
+    email: "sam@harbourkitchen.com",
+    role: "Site manager",
+    site: "Parramatta Cafe",
+    siteId: "3",
+    status: "Invited" as const,
+  },
+  ...demoNetworkSites
+    .filter((site) => site.hasManager && site.id !== "2")
+    .map((site) => ({
+      id: `mgr-${site.id}`,
+      name: site.managerName,
+      email: site.email,
+      role: site.siteType === "head_office" ? "Head admin" : "Site manager",
+      site: site.name,
+      siteId: site.id,
+      status: "Active" as const,
+    })),
+];
+
+export const demoRoles = [
+  {
+    id: "head",
+    name: "Head admin",
+    description: "Organisation-wide control of sites, users, settings, and reports.",
+    users: 1,
+    permissions: ["All sites", "Users", "Settings", "Reports", "Listings"],
+  },
+  {
+    id: "manager",
+    name: "Site manager",
+    description: "Runs one location: listings, collections, and local staff access.",
+    users: 2,
+    permissions: ["Assigned site", "Local users", "Listings", "Site reports"],
+  },
+  {
+    id: "staff",
+    name: "Staff",
+    description: "Creates and manages surplus listings at their assigned site.",
+    users: 1,
+    permissions: ["Assigned site", "Listings"],
+  },
+];
+
+export const demoActivity = [
+  {
+    id: "a1",
+    time: "Today · 10:42 am",
+    title: "Surry Hills listing claimed",
+    body: "A nearby charity claimed 18 kg of prepared meals. Pickup is tonight 9:00–10:00 pm.",
+    site: "Surry Hills Kitchen",
+    siteId: "2",
+    type: "Collection",
+  },
+  {
+    id: "a2",
+    time: "Today · 9:15 am",
+    title: "Sam Reid invited as site manager",
+    body: "Invite sent for Parramatta Cafe. Access is pending until they accept.",
+    site: "Parramatta Cafe",
+    siteId: "3",
+    type: "Users",
+  },
+  {
+    id: "a3",
+    time: "Yesterday · 8:20 pm",
+    title: "HQ collection completed",
+    body: "Evening bread and pastries were collected. Impact will appear in Insights.",
+    site: "Harbour Kitchen HQ",
+    siteId: "hq",
+    type: "Collection",
+  },
+  {
+    id: "a4",
+    time: "Yesterday · 4:05 pm",
+    title: "Parramatta Cafe needs a manager",
+    body: "Assign access so this branch can list surplus without HQ doing it for them.",
+    site: "Parramatta Cafe",
+    siteId: "3",
+    type: "Alert",
+  },
+];
+
+export const demoAuditLog = [
+  {
+    id: "e1",
+    time: "22 Aug 2026 · 09:15",
+    actor: "Alex Morgan",
+    action: "Invited user",
+    detail: "Sam Reid · Site manager · Parramatta Cafe",
+  },
+  {
+    id: "e2",
+    time: "21 Aug 2026 · 16:40",
+    actor: "Alex Morgan",
+    action: "Updated organisation profile",
+    detail: "Changed registered address for Harbour Kitchen Group",
+  },
+  {
+    id: "e3",
+    time: "20 Aug 2026 · 11:02",
+    actor: "Priya Nair",
+    action: "Created listing",
+    detail: "Prepared meals and rice · Surry Hills Kitchen",
+  },
+  {
+    id: "e4",
+    time: "18 Aug 2026 · 14:28",
+    actor: "Alex Morgan",
+    action: "Changed role",
+    detail: "Jamie Chen · Staff · Harbour Kitchen HQ",
+  },
+  {
+    id: "e5",
+    time: "12 Aug 2026 · 10:00",
+    actor: "Alex Morgan",
+    action: "Added site",
+    detail: "Parramatta Cafe · Branch of Harbour Kitchen HQ",
+  },
+];
 
 export const CHART_TOOLTIP = {
   borderRadius: 12,

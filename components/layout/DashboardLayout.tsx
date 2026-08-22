@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { Sidebar, SidebarBody, SidebarLink, collectNavHrefs } from "./sidebar";
+import { AppHeader } from "./AppHeader";
 import { motion } from "motion/react";
 import Image from "next/image";
 import { DashboardLayoutProps } from "@/types/sidebar";
@@ -16,38 +18,37 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
         <Sidebar
           open={open}
           setOpen={setOpen}
+          animate={false}
+          persistent
           brandLabel="Enterprise"
         >
           <SidebarBody className="justify-between gap-0">
             <div className="flex flex-1 flex-col overflow-hidden">
-              <div className={`mb-6 ${open ? "px-2" : "flex justify-center px-0"}`}>
-                {open ? <Logo /> : <LogoIcon />}
+              <div className="mb-6 px-2">
+                <Logo />
               </div>
 
-              <div className={`relative mb-6 ${open ? "px-3" : "px-2"}`}>
+              <div className="relative mb-6 px-3">
                 <div className="h-0.5 bg-gradient-to-r from-transparent via-saveful-purple/40 to-transparent shadow-sm" />
-                {open && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-saveful-cream p-1"
-                  >
-                    <div className="relative h-5 w-5">
-                      <Image
-                        src="/food.png"
-                        alt="Decoration"
-                        fill
-                        className="object-contain"
-                      />
-                    </div>
-                  </motion.div>
-                )}
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-saveful-cream p-1"
+                >
+                  <div className="relative h-5 w-5">
+                    <Image
+                      src="/food.png"
+                      alt="Decoration"
+                      fill
+                      sizes="20px"
+                      className="object-contain"
+                    />
+                  </div>
+                </motion.div>
               </div>
 
               <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2 scrollbar-thin scrollbar-thumb-saveful-purple/30 scrollbar-track-transparent hover:scrollbar-thumb-saveful-purple/50">
-                <div
-                  className={`flex flex-col gap-2 ${open ? "px-2" : "items-center px-0"}`}
-                >
+                <div className="flex flex-col gap-2 px-1">
                   {config.links.map((link, idx) => (
                     <SidebarLink key={idx} link={link} navHrefs={navHrefs} />
                   ))}
@@ -55,27 +56,19 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
               </div>
             </div>
 
-            <div className="border-t border-saveful-purple/10 pt-4">
-              <div className={open ? "px-2" : "flex justify-center px-0"}>
-                <SidebarLink
-                  link={{
-                    label: config.userName,
-                    href: "#",
-                    icon: (
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saveful-purple to-saveful-pink shadow-lg">
-                        <span className="font-saveful-bold text-lg text-white">
-                          {config.userName.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    ),
-                  }}
-                />
-              </div>
-            </div>
           </SidebarBody>
         </Sidebar>
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <div className="h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-saveful-purple/30 scrollbar-track-transparent hover:scrollbar-thumb-saveful-purple/50">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="relative z-40 shrink-0">
+            <AppHeader
+              userName={config.userName}
+              userEmail={config.userEmail}
+              roleLabel={config.roleLabel || "Enterprise admin"}
+              organization={config.organization}
+              onLogout={config.onLogout}
+            />
+          </div>
+          <div className="relative z-0 min-h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-saveful-purple/30 scrollbar-track-transparent hover:scrollbar-thumb-saveful-purple/50">
             {children}
           </div>
         </main>
@@ -86,8 +79,8 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
 
 const Logo = () => {
   return (
-    <a
-      href="#"
+    <Link
+      href="/dashboard"
       className="group relative z-20 flex items-center justify-center rounded-lg py-3 transition-all hover:bg-white/50"
     >
       <motion.div
@@ -98,33 +91,16 @@ const Logo = () => {
       >
         <div className="relative h-14 w-36">
           <Image
-            src="/logo@2x.png"
+            src="/logo.png"
             alt="Saveful Logo"
             fill
+            sizes="144px"
             className="object-contain"
             priority
           />
         </div>
       </motion.div>
-    </a>
+    </Link>
   );
 };
 
-const LogoIcon = () => {
-  return (
-    <a
-      href="#"
-      className="group relative z-20 flex items-center justify-center rounded-lg bg-saveful-cream p-1.5 shadow-sm transition-all hover:bg-saveful-cream/80 hover:shadow-md"
-    >
-      <div className="relative h-8 w-8 shrink-0 transition-transform group-hover:scale-105">
-        <Image
-          src="/notification_icon.png"
-          alt="Saveful Icon"
-          fill
-          className="object-contain drop-shadow-md"
-          priority
-        />
-      </div>
-    </a>
-  );
-};

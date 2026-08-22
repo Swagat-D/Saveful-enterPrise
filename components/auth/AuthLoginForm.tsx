@@ -89,7 +89,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
 
       <div className="mb-8 flex justify-center">
         <div className="relative h-16 w-40">
-          <Image src="/logo@2x.png" alt="Saveful Logo" fill className="object-contain" priority />
+          <Image src="/logo.png" alt="Saveful Logo" fill sizes="160px" className="object-contain" priority />
         </div>
       </div>
       <div className="mb-6 flex justify-center">
@@ -317,9 +317,14 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
 
       <div className="mt-8 text-center">
         <p className="text-xs text-[#6B6B6B]">
-          Protected by Saveful Security ·{" "}
-          <a href="#" className="font-medium text-[#2D5F4F] hover:underline">
-            Privacy Policy
+          As well as protected by Saveful Security ·<br />
+          <a href="https://www.saveful.com/saveful-for-business-terms-conditions" 
+            target="_blank" 
+            className="font-medium text-[#2D5F4F] hover:underline">
+            Terms and Conditions {". "}
+          </a>
+          <a href="https://www.saveful.com/privacy-policy" target="_blank" className="font-medium text-[#2D5F4F] hover:underline">
+            Privacy Policy {" "}
           </a>
         </p>
       </div>

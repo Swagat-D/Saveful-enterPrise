@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { LoginCredentials, UserRole } from "@/types/auth";
+import type { AccessScope } from "@/types/enterprise";
 
 export type SessionUser = {
   id: string;
@@ -8,6 +9,7 @@ export type SessionUser = {
   organization: string;
   role: UserRole;
   isHeadAdmin: boolean;
+  scope?: AccessScope;
 };
 
 const ROLE: UserRole = "restaurant_multi";

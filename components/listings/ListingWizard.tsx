@@ -210,7 +210,7 @@ export function ListingWizard({ kind }: { kind: ListingKind }) {
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div className="relative h-10 w-10 overflow-hidden rounded-full bg-white ring-1 ring-black/5">
-                <Image src="/notification_icon.png" alt="Saveful" fill className="object-contain p-1.5" />
+                <Image src="/notification_icon.png" alt="Saveful" fill sizes="40px" className="object-contain p-1.5" />
               </div>
             </div>
             <Image

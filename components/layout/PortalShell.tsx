@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { getEnterpriseSidebarLinks } from "@/config/sidebar";
 import { logout, useSession } from "@/lib/auth";
+import { demoOrganization } from "@/lib/demo";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
@@ -45,10 +46,13 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         role: "enterprise",
         userName: user.name,
         userEmail: user.email,
-        links: getEnterpriseSidebarLinks(() => {
+        organization: demoOrganization.name,
+        roleLabel: user.isHeadAdmin ? "Head admin" : "Enterprise user",
+        links: getEnterpriseSidebarLinks(),
+        onLogout: () => {
           logout();
           router.push("/login");
-        }),
+        },
       }}
     >
       {children}

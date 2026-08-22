@@ -24,7 +24,7 @@ export function SavefulPageLoader({
     >
       <div className="flex w-full max-w-xs flex-col items-center text-center">
         <Image
-          src="/logo@2x.png"
+          src="/logo.png"
           alt="Saveful"
           width={160}
           height={48}

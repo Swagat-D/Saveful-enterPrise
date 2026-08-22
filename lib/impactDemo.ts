@@ -1,8 +1,19 @@
+import { calculateImpact, IMPACT } from "@/lib/impact";
 import { demoSites } from "@/lib/demo";
+import { impactFromTransactions, scopedTransactions } from "@/lib/networkQuery";
+import { EMPTY_FILTERS } from "@/lib/scope";
+import type { AccessScope, PeriodKey } from "@/types/enterprise";
 
-export const FOOD_VALUE_PER_KG = 14.64;
-export const MEAL_WEIGHT_KG = 0.42;
-export const CO2_PER_KG = 2.1;
+export const FOOD_VALUE_PER_KG = IMPACT.FOOD_VALUE_PER_KG;
+export const MEAL_WEIGHT_KG = IMPACT.MEAL_WEIGHT_KG;
+export const CO2_PER_KG = IMPACT.CO2_PER_KG;
+
+const FULL_SCOPE: AccessScope = {
+  groupIds: null,
+  territoryIds: null,
+  clusterIds: null,
+  siteIds: null,
+};
 
 export type ImpactFilterMode = "all_time" | "custom";
 export type ChartPeriod = "week" | "month" | "year";
@@ -248,9 +259,45 @@ function scaleStats(stats: ImpactStats, factor: number): ImpactStats {
   };
 }
 
-export function getImpactStats(siteId: string, factor: number): ImpactStats {
-  const base = siteId === "all" ? ORG_STATS : SITE_STATS[siteId] ?? ORG_STATS;
-  return scaleStats(base, factor);
+export function getImpactStats(
+  siteId: string,
+  startDate?: string,
+  endDate?: string,
+  scope: AccessScope = FULL_SCOPE,
+  network: { groupId?: string; territoryId?: string; clusterId?: string } = {},
+): ImpactStats {
+  const rows = scopedTransactions(
+    {
+      ...EMPTY_FILTERS,
+      groupId: network.groupId ?? "all",
+      territoryId: network.territoryId ?? "all",
+      clusterId: network.clusterId ?? "all",
+      siteId: siteId === "all" ? "all" : siteId,
+      period: "all",
+    },
+    scope,
+    { startDate, endDate },
+  );
+  const impact = impactFromTransactions(rows);
+  const peopleKg = round1(rows.filter((row) => row.pathway === "people").reduce((sum, row) => sum + row.kg, 0));
+  const animalKg = round1(rows.filter((row) => row.pathway === "livestock").reduce((sum, row) => sum + row.kg, 0));
+  const total = peopleKg + animalKg;
+  const meals = calculateImpact(impact.foodKg).mealsCreated;
+
+  return {
+    redistributedKg: round1(impact.foodKg),
+    mealsCreated: Math.round(meals),
+    co2AvoidedKg: round1(impact.co2AvoidedKg),
+    foodSavedMoney: round2(impact.foodValue),
+    collectionsCompleted: impact.collectionsCompleted,
+    partnersSupported: impact.organisationsSupported,
+    peopleKg,
+    animalKg,
+    peoplePercent: total > 0 ? Math.round((peopleKg / total) * 100) : 0,
+    animalPercent: total > 0 ? Math.round((animalKg / total) * 100) : 0,
+    rating: 4.8,
+    ratingCount: Math.max(1, Math.round(rows.length / 3)),
+  };
 }
 
 export function getFilterFactor(mode: ImpactFilterMode, startDate?: string, endDate?: string) {
@@ -285,11 +332,43 @@ export function getRecipients(factor: number) {
   }));
 }
 
-export function getChartSeries(period: ChartPeriod, metric: ChartMetric, siteId: string) {
+export function getChartSeries(
+  period: ChartPeriod,
+  metric: ChartMetric,
+  siteId: string,
+  scope: AccessScope = FULL_SCOPE,
+  network: { groupId?: string; territoryId?: string; clusterId?: string } = {},
+) {
+  const periodKey: PeriodKey = period === "week" ? "7" : period === "month" ? "30" : "90";
+  const rows = scopedTransactions(
+    {
+      ...EMPTY_FILTERS,
+      groupId: network.groupId ?? "all",
+      territoryId: network.territoryId ?? "all",
+      clusterId: network.clusterId ?? "all",
+      siteId: siteId === "all" ? "all" : siteId,
+      period: periodKey,
+    },
+    scope,
+  );
   const labels = period === "week" ? WEEK_LABELS : period === "year" ? YEAR_LABELS : MONTH_LABELS;
-  const siteFactor = siteId === "all" ? 1 : siteId === "hq" ? 0.56 : siteId === "2" ? 0.25 : 0.19;
-  const values = CHART_VALUES[period][metric].map((value) => round1(value * siteFactor));
-  return labels.map((label, index) => ({ label, value: values[index] ?? 0 }));
+  const bucketSize = Math.max(1, Math.ceil(rows.length / labels.length) || 1);
+  const sorted = [...rows].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+
+  return labels.map((label, index) => {
+    const slice = sorted.slice(index * bucketSize, (index + 1) * bucketSize);
+    const kg = slice.reduce((sum, row) => sum + row.kg, 0);
+    const impact = calculateImpact(kg);
+    const value =
+      metric === "meals"
+        ? impact.mealsCreated
+        : metric === "co2"
+          ? impact.co2AvoidedKg
+          : metric === "collections"
+            ? slice.length
+            : kg;
+    return { label, value: round1(value) };
+  });
 }
 
 export function formatKg(value: number) {

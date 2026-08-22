@@ -10,7 +10,10 @@ export interface SidebarConfig {
   role: "enterprise";
   userName: string;
   userEmail: string;
+  organization?: string;
+  roleLabel?: string;
   links: SidebarLink[];
+  onLogout?: () => void;
 }
 
 export interface DashboardLayoutProps {
