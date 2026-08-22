@@ -52,11 +52,11 @@ export default function RolesPermissionsPage() {
             </thead>
             <tbody className="font-saveful text-sm text-gray-700">
               {[
-                ["View all sites", true, false, false],
-                ["Manage users", true, "Local", false],
-                ["Change settings", true, false, false],
-                ["Create listings", true, true, true],
-                ["View reports", true, "Assigned site", false],
+                ["View all sites", true, "Assigned groups", false, false, false],
+                ["Manage users", true, "Within scope", "Local", false, false],
+                ["Change settings", true, false, false, false, false],
+                ["Create listings", true, true, true, false, true],
+                ["View reports", true, "Assigned scope", "Assigned site", "Assigned scope", false],
               ].map(([capability, ...flags]) => (
                 <tr key={String(capability)} className="border-b border-gray-50 last:border-0">
                   <td className="flex items-center gap-2 py-3 pr-4 font-saveful-semibold">

@@ -2,9 +2,11 @@
 
 import { AppPage } from "@/components/layout/AppPage";
 import { PortalPanel, StatusBadge } from "@/components/ui/Portal";
-import { demoAuditLog } from "@/lib/demo";
+import { listAudit, useAuditVersion } from "@/lib/audit";
 
 export default function AuditLogPage() {
+  useAuditVersion();
+  const entries = listAudit();
   return (
     <AppPage
       eyebrow="Enterprise Settings"
@@ -23,7 +25,7 @@ export default function AuditLogPage() {
               </tr>
             </thead>
             <tbody>
-              {demoAuditLog.map((entry) => (
+              {entries.map((entry) => (
                 <tr key={entry.id} className="border-b border-gray-50 last:border-0">
                   <td className="whitespace-nowrap py-3 pr-4 font-saveful text-xs text-gray-500">
                     {entry.time}

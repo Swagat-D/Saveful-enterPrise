@@ -1,9 +1,10 @@
 import { inDateRange, periodRange } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
+import { formatCollectionHours } from "@/lib/siteForm";
 import { recoveryTransactions } from "@/lib/network";
 import { PATHWAY_LABEL } from "@/lib/networkQuery";
 import { formatLastActivity } from "@/lib/networkRules";
-import { demoActivity, demoUsers } from "@/lib/demo";
+import { demoActivity } from "@/lib/demo";
 import type { OrganizationSite, PeriodKey, RecoveryPathway, RecoveryTransaction } from "@/types/enterprise";
 
 const FOOD_BY_PATHWAY: Record<RecoveryPathway, string[]> = {
@@ -22,12 +23,17 @@ const INSTRUCTIONS: Record<string, string> = {
 };
 
 export function siteOperations(site: OrganizationSite) {
+  const days = site.collectionDays ?? ["mon", "tue", "wed", "thu", "fri"];
+  const from = site.collectionFrom ?? "14:00";
+  const to = site.collectionTo ?? "17:00";
   return {
-    primaryContact: site.hasManager ? site.managerName : "Not assigned",
+    primaryContact: site.primaryContact || (site.hasManager ? site.managerName : "Not assigned"),
     siteAdmin: site.hasManager ? site.managerName : "Harbour Kitchen HQ",
-    collectionHours: "Mon–Fri, 2:00pm–5:00pm",
+    collectionHours: formatCollectionHours(days, from, to),
     collectionInstructions:
-      INSTRUCTIONS[site.id] ?? "Ask for the kitchen manager on arrival. Historical recovery records stay unchanged if this site is reassigned.",
+      site.collectionInstructions ||
+      INSTRUCTIONS[site.id] ||
+      "Ask for the kitchen manager on arrival. Historical recovery records stay unchanged if this site is reassigned.",
   };
 }
 
@@ -61,9 +67,6 @@ export function siteRecoveryRows(siteId: string, period: PeriodKey, limit = 6) {
     });
 }
 
-export function usersForSite(siteId: string, siteName: string) {
-  return demoUsers.filter((user) => user.siteId === siteId || user.siteId === "all" || user.site === siteName);
-}
 
 export function activityForSite(siteId?: string) {
   const events = demoActivity.filter((item) => !siteId || item.siteId === siteId);

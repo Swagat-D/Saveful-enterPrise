@@ -1,5 +1,6 @@
 import type { AccessScope, NetworkFilters, OrganizationSite } from "@/types/enterprise";
 import type { SessionUser } from "@/lib/auth";
+import { resolveSite } from "@/lib/orgStructure";
 
 export const EMPTY_FILTERS: NetworkFilters = {
   groupId: "all",
@@ -31,19 +32,21 @@ function allows(allowed: string[] | null | undefined, value?: string | null) {
 }
 
 export function siteInScope(site: OrganizationSite, scope: AccessScope) {
+  const current = resolveSite(site);
   return (
-    allows(scope.groupIds, site.groupId) &&
-    allows(scope.territoryIds, site.territoryId) &&
-    allows(scope.clusterIds, site.clusterId) &&
-    allows(scope.siteIds, site.id)
+    allows(scope.groupIds, current.groupId) &&
+    allows(scope.territoryIds, current.territoryId) &&
+    allows(scope.clusterIds, current.clusterId) &&
+    allows(scope.siteIds, current.id)
   );
 }
 
 export function siteMatchesFilters(site: OrganizationSite, filters: NetworkFilters) {
-  if (filters.groupId !== "all" && site.groupId !== filters.groupId) return false;
-  if (filters.territoryId !== "all" && site.territoryId !== filters.territoryId) return false;
-  if (filters.clusterId !== "all" && site.clusterId !== filters.clusterId) return false;
-  if (filters.siteId !== "all" && site.id !== filters.siteId) return false;
+  const current = resolveSite(site);
+  if (filters.groupId !== "all" && current.groupId !== filters.groupId) return false;
+  if (filters.territoryId !== "all" && current.territoryId !== filters.territoryId) return false;
+  if (filters.clusterId !== "all" && current.clusterId !== filters.clusterId) return false;
+  if (filters.siteId !== "all" && current.id !== filters.siteId) return false;
   return true;
 }
 

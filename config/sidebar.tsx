@@ -29,7 +29,7 @@ export const getEnterpriseSidebarLinks = (): SidebarLink[] => [
     icon: <Building2 className={iconClass} />,
   },
   {
-    label: "Users",
+    label: "Users & Access",
     href: "/users",
     icon: <Users className={iconClass} />,
   },

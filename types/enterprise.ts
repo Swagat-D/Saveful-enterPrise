@@ -30,9 +30,16 @@ export type SiteSummaryKey = "total" | "active" | "no_recent" | "never_activated
 
 export type PeriodKey = "7" | "30" | "90" | "all";
 
+export type OrgStructureKind = "group" | "territory" | "cluster";
+
+export type OrgUnitStatus = "active" | "deactivated";
+
 export type OrgUnit = {
   id: string;
   name: string;
+  code?: string;
+  description?: string;
+  status?: OrgUnitStatus;
 };
 
 export type OrganizationSnapshot = {
@@ -66,7 +73,14 @@ export type OrganizationSite = {
   activatedAt: string | null;
   lastActivityAt: string | null;
   lastListingAt: string | null;
+  primaryContact?: string | null;
+  collectionDays?: Weekday[];
+  collectionFrom?: string;
+  collectionTo?: string;
+  collectionInstructions?: string;
 };
+
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type SurplusListing = {
   id: string;
@@ -94,6 +108,30 @@ export type AccessScope = {
   territoryIds?: string[] | null;
   clusterIds?: string[] | null;
   siteIds?: string[] | null;
+};
+
+export type EnterpriseRole = "head_admin" | "group_admin" | "site_admin" | "reporting" | "staff";
+
+export type DirectoryUserStatus = "active" | "invited" | "deactivated";
+
+export type UserAccessScope = {
+  enterprise?: boolean;
+  groupIds?: string[];
+  territoryIds?: string[];
+  clusterIds?: string[];
+  siteIds?: string[];
+};
+
+export type DirectoryUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: EnterpriseRole;
+  scope: UserAccessScope;
+  status: DirectoryUserStatus;
+  lastActiveAt: string | null;
+  invitedAt: string | null;
+  inviteToken: string | null;
 };
 
 export type NetworkFilters = {

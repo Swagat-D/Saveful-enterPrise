@@ -16,6 +16,7 @@ import { impactFromTransactions, recoveryPathways, scopedTransactions } from "@/
 import { sitePermissions } from "@/lib/permissions";
 import { setSiteStatus, useSiteStatus } from "@/lib/siteLifecycle";
 import { parseSiteTab, SITE_TABS, siteOperations, siteRecoveryRows, type SiteTab } from "@/lib/siteWorkspace";
+import { resolveSite, useOrgStructureVersion } from "@/lib/orgStructure";
 import { lookupLabel } from "@/lib/sitesDirectory";
 import type { SessionUser } from "@/lib/auth";
 import type { AccessScope, OrganizationSite, PeriodKey } from "@/types/enterprise";
@@ -49,13 +50,15 @@ export function SiteWorkspace({
   const searchParams = useSearchParams();
   const tab = parseSiteTab(searchParams.get("tab"));
   const permissions = sitePermissions(user);
+  useOrgStructureVersion();
+  const current = resolveSite(site);
   const status = useSiteStatus(site);
   const [menuOpen, setMenuOpen] = useState(false);
   const [period, setPeriod] = useState<PeriodKey>("30");
   const ops = siteOperations(site);
-  const group = lookupLabel("group", site.groupId);
-  const territory = lookupLabel("territory", site.territoryId);
-  const cluster = lookupLabel("cluster", site.clusterId);
+  const group = lookupLabel("group", current.groupId);
+  const territory = lookupLabel("territory", current.territoryId);
+  const cluster = lookupLabel("cluster", current.clusterId);
 
   const setTab = (next: SiteTab) => {
     const params = new URLSearchParams(searchParams.toString());

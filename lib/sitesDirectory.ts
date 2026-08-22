@@ -1,6 +1,7 @@
 import { periodRange } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
-import { demoClusters, demoGroups, demoNetworkSites, demoTerritories, recoveryTransactions } from "@/lib/network";
+import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
+import { getUnit, resolveSite, type OrgStructureKind } from "@/lib/orgStructure";
 import {
   activityStatus,
   attentionReasons,
@@ -124,7 +125,7 @@ export function matchesSummary(site: OrganizationSite, summary: SitesTableFilter
 
 export function filterDirectorySites(scope: AccessScope, filters: SitesTableFilters) {
   const query = filters.q.trim().toLowerCase();
-  return demoNetworkSites.filter((site) => {
+  return demoNetworkSites.map(resolveSite).filter((site) => {
     if (!siteInScope(site, scope)) return false;
     if (filters.groupId !== "all" && site.groupId !== filters.groupId) return false;
     if (filters.territoryId !== "all" && site.territoryId !== filters.territoryId) return false;
@@ -166,10 +167,9 @@ export function sitesFilterOptions(scope: AccessScope, filters: SitesTableFilter
   return filterOptions(demoNetworkSites.filter((site) => siteInScope(site, scope)), scope, asNetwork);
 }
 
-export function lookupLabel(kind: "group" | "territory" | "cluster", id?: string | null) {
+export function lookupLabel(kind: OrgStructureKind, id?: string | null) {
   if (!id) return "—";
-  const list = kind === "group" ? demoGroups : kind === "territory" ? demoTerritories : demoClusters;
-  return list.find((item) => item.id === id)?.name ?? "—";
+  return getUnit(kind, id)?.name ?? "—";
 }
 
 export function exportSitesCsv(sites: OrganizationSite[], period: PeriodKey) {

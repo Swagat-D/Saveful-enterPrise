@@ -22,6 +22,8 @@ import { PortalShell } from "@/components/layout/PortalShell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { demoOrganization, demoSites } from "@/lib/demo";
+import { collectionWindowForDate } from "@/lib/siteForm";
+import { siteOperations } from "@/lib/siteWorkspace";
 import {
   ALLERGEN_OPTIONS,
   CONTAMINANT_OPTIONS,
@@ -78,8 +80,12 @@ export function ListingWizard({ kind }: { kind: ListingKind }) {
   );
   const [bestBefore, setBestBefore] = useState<Date | null>(null);
   const [bestBeforeTimeSet, setBestBeforeTimeSet] = useState(false);
-  const [pickupFrom, setPickupFrom] = useState<Date | null>(null);
-  const [pickupTo, setPickupTo] = useState<Date | null>(null);
+  const defaultWindow = collectionWindowForDate(
+    selectedSite?.collectionFrom ?? "14:00",
+    selectedSite?.collectionTo ?? "17:00",
+  );
+  const [pickupFrom, setPickupFrom] = useState<Date | null>(defaultWindow.start);
+  const [pickupTo, setPickupTo] = useState<Date | null>(defaultWindow.end);
 
   const [storage, setStorage] = useState<string | null>(null);
   const [reheating, setReheating] = useState<string | null>(null);
@@ -139,6 +145,9 @@ export function ListingWizard({ kind }: { kind: ListingKind }) {
     const site = demoSites.find((entry) => entry.id === id);
     if (site) {
       setLocation([site.address, site.postCode].filter(Boolean).join(" "));
+      const window = collectionWindowForDate(site.collectionFrom ?? "14:00", site.collectionTo ?? "17:00");
+      setPickupFrom(window.start);
+      setPickupTo(window.end);
     }
   };
 
@@ -389,6 +398,12 @@ export function ListingWizard({ kind }: { kind: ListingKind }) {
                   className={creamInput}
                 />
                 {errors.location ? <ErrorText>{errors.location}</ErrorText> : null}
+                {selectedSite ? (
+                  <p className="mt-2 font-saveful text-xs text-gray-500">
+                    Default from this site: {siteOperations(selectedSite).collectionHours}.{" "}
+                    {siteOperations(selectedSite).collectionInstructions}
+                  </p>
+                ) : null}
               </Section>
 
               <Section title="Food best before">

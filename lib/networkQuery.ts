@@ -1,12 +1,7 @@
 import { calculateImpact, percentChange } from "@/lib/impact";
 import { inDateRange, periodRange, previousPeriodRange } from "@/lib/dates";
-import {
-  demoClusters,
-  demoGroups,
-  demoNetworkSites,
-  demoTerritories,
-  recoveryTransactions,
-} from "@/lib/network";
+import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
+import { listUnits, resolveSite } from "@/lib/orgStructure";
 import {
   ATTENTION_COPY,
   attentionReasons,
@@ -66,10 +61,11 @@ function matchesDimension(
   filters: NetworkFilters,
   skip?: "groupId" | "territoryId" | "clusterId" | "siteId",
 ) {
-  if (skip !== "groupId" && filters.groupId !== "all" && site.groupId !== filters.groupId) return false;
-  if (skip !== "territoryId" && filters.territoryId !== "all" && site.territoryId !== filters.territoryId) return false;
-  if (skip !== "clusterId" && filters.clusterId !== "all" && site.clusterId !== filters.clusterId) return false;
-  if (skip !== "siteId" && filters.siteId !== "all" && site.id !== filters.siteId) return false;
+  const current = resolveSite(site);
+  if (skip !== "groupId" && filters.groupId !== "all" && current.groupId !== filters.groupId) return false;
+  if (skip !== "territoryId" && filters.territoryId !== "all" && current.territoryId !== filters.territoryId) return false;
+  if (skip !== "clusterId" && filters.clusterId !== "all" && current.clusterId !== filters.clusterId) return false;
+  if (skip !== "siteId" && filters.siteId !== "all" && current.id !== filters.siteId) return false;
   return true;
 }
 
@@ -98,9 +94,9 @@ export function filterOptions(sites: OrganizationSite[], scope: AccessScope, fil
   const forSite = scoped.filter((site) => matchesDimension(site, filters, "siteId"));
 
   return {
-    groups: demoGroups.filter((item) => forGroup.some((site) => site.groupId === item.id)),
-    territories: demoTerritories.filter((item) => forTerritory.some((site) => site.territoryId === item.id)),
-    clusters: demoClusters.filter((item) => forCluster.some((site) => site.clusterId === item.id)),
+    groups: listUnits("group").filter((item) => forGroup.some((site) => resolveSite(site).groupId === item.id)),
+    territories: listUnits("territory").filter((item) => forTerritory.some((site) => resolveSite(site).territoryId === item.id)),
+    clusters: listUnits("cluster").filter((item) => forCluster.some((site) => resolveSite(site).clusterId === item.id)),
     sites: forSite.map((site) => ({ id: site.id, name: site.name })),
   };
 }
@@ -180,9 +176,9 @@ export function performanceByGroup(
   previousRows: RecoveryTransaction[],
   period: PeriodKey,
 ) {
-  return demoGroups
+  return listUnits("group")
     .map((group) => {
-      const groupSites = sites.filter((site) => site.groupId === group.id);
+      const groupSites = sites.filter((site) => resolveSite(site).groupId === group.id);
       if (groupSites.length === 0) return null;
       const current = rows.filter((row) => row.snapshot.groupId === group.id);
       const previous = previousRows.filter((row) => row.snapshot.groupId === group.id);

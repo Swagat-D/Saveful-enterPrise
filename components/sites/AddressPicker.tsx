@@ -51,10 +51,12 @@ export function AddressPicker({
   value,
   onChange,
   error,
+  compact,
 }: {
   value: PickedLocation;
   onChange: (next: PickedLocation) => void;
   error?: string;
+  compact?: boolean;
 }) {
   const [query, setQuery] = useState(value.address);
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -157,12 +159,13 @@ export function AddressPicker({
                 void searchAddress(query);
               }
             }}
-            placeholder="Search restaurant address"
-            className="h-11 w-full rounded-xl border-2 border-transparent bg-[#F5F1E8] pl-10 pr-4 font-saveful text-sm outline-none transition focus:border-[#A68FD9] focus:bg-white"
+            placeholder="Search site address"
+            className="h-10 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] pl-10 pr-4 font-saveful text-sm outline-none transition focus:border-saveful-green/40 focus:bg-white"
           />
         </div>
         <Button
           type="button"
+          size={compact ? "sm" : "default"}
           className="w-full sm:w-auto"
           onClick={() => void searchAddress(query)}
           disabled={searching}
@@ -173,6 +176,7 @@ export function AddressPicker({
         <Button
           type="button"
           variant="secondary"
+          size={compact ? "sm" : "default"}
           className="w-full lg:w-auto"
           onClick={useMyLocation}
           disabled={locating}
@@ -239,7 +243,7 @@ export function AddressPicker({
         <iframe
           title="Pickup map"
           src={mapSrc}
-          className="h-56 w-full border-0 md:h-72 lg:h-80"
+          className={cn("w-full border-0", compact ? "h-48 md:h-56" : "h-56 md:h-72 lg:h-80")}
         />
       </div>
       <p className="font-saveful text-[11px] uppercase tracking-wide text-gray-400">
