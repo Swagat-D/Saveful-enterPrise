@@ -3,16 +3,17 @@ import { formatKg } from "@/lib/impact";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import { getUnit, resolveSite, type OrgStructureKind } from "@/lib/orgStructure";
 import {
+  ACTIVITY_LABEL,
   activityStatus,
   attentionReasons,
   formatLastActivity,
-  isActiveSite,
   isDeactivated,
 } from "@/lib/networkRules";
 import { EMPTY_FILTERS } from "@/lib/scope";
 import { filterOptions, type NetworkFilters } from "@/lib/networkQuery";
 import { inDateRange } from "@/lib/dates";
 import { siteInScope } from "@/lib/scope";
+import { getSiteStatus } from "@/lib/siteLifecycle";
 import type {
   AccessScope,
   ActivityStatus,
@@ -54,24 +55,35 @@ const PAGE_SIZES = [25, 50, 100] as const;
 
 export function parseSitesFilters(params: URLSearchParams): SitesTableFilters {
   const attention = params.get("attention");
-  const summaryFromAttention =
-    attention === "never_activated"
-      ? "never_activated"
-      : attention === "no_activity_30d" || attention === "no_listings_in_period"
-        ? "no_recent"
-        : null;
-
+  const summary = params.get("summary") as SiteSummaryKey | null;
   const pageSize = Number(params.get("pageSize"));
   const page = Number(params.get("page"));
+
+  let siteStatus = (params.get("status") as SitesTableFilters["siteStatus"]) || "all";
+  let activity = (params.get("activity") as SitesTableFilters["activity"]) || "all";
+
+  if (siteStatus === "all") {
+    if (summary === "active") siteStatus = "active";
+    if (summary === "deactivated") siteStatus = "deactivated";
+  }
+  if (activity === "all") {
+    if (summary === "never_activated" || attention === "never_activated") activity = "never_activated";
+    if (summary === "no_recent" || attention === "no_activity_30d" || attention === "no_listings_in_period") {
+      activity = "none_in_period";
+    }
+  }
 
   return {
     q: params.get("q") ?? "",
     groupId: params.get("group") || "all",
     territoryId: params.get("territory") || "all",
     clusterId: params.get("cluster") || "all",
-    siteStatus: (params.get("status") as SitesTableFilters["siteStatus"]) || "all",
-    activity: (params.get("activity") as SitesTableFilters["activity"]) || "all",
-    summary: (params.get("summary") as SitesTableFilters["summary"]) || summaryFromAttention || "all",
+    siteStatus: siteStatus === "active" || siteStatus === "deactivated" ? siteStatus : "all",
+    activity:
+      activity === "in_period" || activity === "none_in_period" || activity === "never_used" || activity === "never_activated"
+        ? activity
+        : "all",
+    summary: "all",
     attention: attention === "all" ? "all" : null,
     period: (params.get("period") as PeriodKey) || "30",
     page: page > 0 ? page : 1,
@@ -87,7 +99,6 @@ export function sitesFiltersToQuery(filters: SitesTableFilters) {
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
   if (filters.siteStatus !== "all") params.set("status", filters.siteStatus);
   if (filters.activity !== "all") params.set("activity", filters.activity);
-  if (filters.summary !== "all") params.set("summary", filters.summary);
   if (filters.period !== "30") params.set("period", filters.period);
   if (filters.attention === "all") params.set("attention", "all");
   if (filters.page > 1) params.set("page", String(filters.page));
@@ -103,8 +114,7 @@ export function hasActiveSitesFilters(filters: SitesTableFilters) {
     filters.territoryId !== "all" ||
     filters.clusterId !== "all" ||
     filters.siteStatus !== "all" ||
-    filters.activity !== "all" ||
-    filters.summary !== "all"
+    filters.activity !== "all"
   );
 }
 
@@ -115,25 +125,19 @@ export function foodRecoveredKg(siteId: string, period: PeriodKey) {
     .reduce((sum, row) => sum + row.kg, 0);
 }
 
-export function matchesSummary(site: OrganizationSite, summary: SitesTableFilters["summary"], period: PeriodKey) {
-  if (summary === "all" || summary === "total") return true;
-  if (summary === "active") return isActiveSite(site);
-  if (summary === "deactivated") return isDeactivated(site);
-  if (summary === "never_activated") return activityStatus(site, period) === "never_activated";
-  if (summary === "no_recent") return activityStatus(site, period) === "none_in_period";
-  return true;
+function withLifecycle(site: OrganizationSite): OrganizationSite {
+  return { ...site, status: getSiteStatus(site) };
 }
 
 export function filterDirectorySites(scope: AccessScope, filters: SitesTableFilters) {
   const query = filters.q.trim().toLowerCase();
-  return demoNetworkSites.map(resolveSite).filter((site) => {
+  return demoNetworkSites.map(resolveSite).map(withLifecycle).filter((site) => {
     if (!siteInScope(site, scope)) return false;
     if (filters.groupId !== "all" && site.groupId !== filters.groupId) return false;
     if (filters.territoryId !== "all" && site.territoryId !== filters.territoryId) return false;
     if (filters.clusterId !== "all" && site.clusterId !== filters.clusterId) return false;
     if (filters.siteStatus !== "all" && site.status !== filters.siteStatus) return false;
     if (filters.activity !== "all" && activityStatus(site, filters.period) !== filters.activity) return false;
-    if (!matchesSummary(site, filters.summary, filters.period)) return false;
     if (filters.attention === "all" && attentionReasons(site, { ...EMPTY_FILTERS, period: filters.period }).length === 0) {
       return false;
     }
@@ -150,7 +154,7 @@ export function summaryCounts(scope: AccessScope, filters: SitesTableFilters) {
   const sites = filterDirectorySites(scope, base);
   return {
     total: sites.length,
-    active: sites.filter(isActiveSite).length,
+    active: sites.filter((site) => site.status === "active").length,
     noRecent: sites.filter((site) => activityStatus(site, filters.period) === "none_in_period").length,
     neverActivated: sites.filter((site) => activityStatus(site, filters.period) === "never_activated").length,
     deactivated: sites.filter(isDeactivated).length,
@@ -188,7 +192,7 @@ export function exportSitesCsv(sites: OrganizationSite[], period: PeriodKey) {
         site.status === "deactivated" ? "Deactivated" : "Active",
         formatLastActivity(site.lastActivityAt),
         kg > 0 ? formatKg(kg) : "—",
-        activityStatus(site, period),
+        ACTIVITY_LABEL[activityStatus(site, period)],
       ];
     }),
   ];

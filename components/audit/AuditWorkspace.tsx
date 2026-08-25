@@ -332,15 +332,15 @@ function ChangeDetails({ entry, onClose }: { entry: AuditEntry; onClose: () => v
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[80]">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center p-4 sm:items-center">
       <button type="button" aria-label="Close change details" className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <aside
+      <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="audit-detail-title"
-        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-[-8px_0_40px_rgba(16,24,40,0.12)]"
+        className="relative flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-black/[0.05] bg-white shadow-xl"
       >
-        <header className="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+        <header className="flex items-start justify-between gap-3 px-5 pt-5">
           <div>
             <p className="font-saveful text-[11px] uppercase tracking-[0.14em] text-gray-400">Audit record</p>
             <h2 id="audit-detail-title" className="mt-1 font-saveful-bold text-lg text-gray-900">
@@ -357,7 +357,7 @@ function ChangeDetails({ entry, onClose }: { entry: AuditEntry; onClose: () => v
           </button>
         </header>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+        <div className="space-y-5 overflow-y-auto px-5 py-5">
           <DetailRow label="Changed by">
             <span className="flex items-center gap-2.5">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-saveful-green font-saveful-semibold text-[11px] text-white">
@@ -379,17 +379,19 @@ function ChangeDetails({ entry, onClose }: { entry: AuditEntry; onClose: () => v
           ) : null}
 
           {entry.changes.length ? (
-            <div className="space-y-2">
+            <div className="space-y-4">
               {entry.changes.map((change) => (
                 <div key={`${change.field}-${change.previous}-${change.next}`} className="space-y-2">
                   <p className="font-saveful text-[11px] uppercase tracking-[0.14em] text-gray-400">{change.field}</p>
-                  <div className="rounded-xl border border-gray-100 bg-[#F7F6F2] px-3.5 py-3">
+                  <div className="rounded-xl bg-[#F7F6F2] px-3.5 py-3">
                     <p className="font-saveful text-[11px] uppercase tracking-[0.14em] text-gray-400">Previous</p>
-                    <p className="mt-1 font-saveful text-sm text-gray-700">{change.previous || "—"}</p>
+                    <p className="mt-1 font-saveful text-sm text-gray-800">{change.previous || "—"}</p>
                   </div>
-                  <div className="flex justify-center text-gray-300">↓</div>
-                  <div className="rounded-xl border border-saveful-green/25 bg-saveful-green/[0.04] px-3.5 py-3">
-                    <p className="font-saveful text-[11px] uppercase tracking-[0.14em] text-saveful-green">Changed to</p>
+                  <div className="flex justify-center text-gray-300" aria-hidden>
+                    ↓
+                  </div>
+                  <div className="rounded-xl border border-black/[0.08] bg-white px-3.5 py-3">
+                    <p className="font-saveful text-[11px] uppercase tracking-[0.14em] text-gray-400">Changed to</p>
                     <p className="mt-1 font-saveful text-sm text-gray-900">{change.next || "—"}</p>
                   </div>
                 </div>
@@ -397,7 +399,7 @@ function ChangeDetails({ entry, onClose }: { entry: AuditEntry; onClose: () => v
             </div>
           ) : null}
 
-          <div className="flex items-start gap-2 rounded-xl border border-saveful-green/20 bg-saveful-green/[0.04] px-3.5 py-3">
+          <div className="flex items-start gap-2 rounded-xl bg-[#F7F6F2] px-3.5 py-3">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-saveful-green" />
             <p className="font-saveful text-xs leading-relaxed text-gray-600">
               Audit Log records cannot be edited or deleted. They are retained for {AUDIT_RETENTION_MONTHS} months for
@@ -405,7 +407,7 @@ function ChangeDetails({ entry, onClose }: { entry: AuditEntry; onClose: () => v
             </p>
           </div>
         </div>
-      </aside>
+      </div>
     </div>,
     document.body,
   );
