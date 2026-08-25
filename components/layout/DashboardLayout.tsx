@@ -65,6 +65,7 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
               userEmail={config.userEmail}
               roleLabel={config.roleLabel || "Enterprise admin"}
               organization={config.organization}
+              organizationLogo={config.organizationLogo}
               onLogout={config.onLogout}
             />
           </div>

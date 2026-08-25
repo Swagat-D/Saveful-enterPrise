@@ -70,6 +70,7 @@ export type OrganizationSite = {
   territoryId?: string | null;
   clusterId?: string | null;
   status: SiteLifecycleStatus;
+  createdAt?: string | null;
   activatedAt: string | null;
   lastActivityAt: string | null;
   lastListingAt: string | null;
@@ -93,6 +94,65 @@ export type SurplusListing = {
   pickupWindow: string;
 };
 
+export type ActivityListingStatus =
+  | "published"
+  | "claimed"
+  | "driver_assigned"
+  | "collected"
+  | "completed"
+  | "expired"
+  | "cancelled";
+
+export type ActivityCollectionStatus = "scheduled" | "in_progress" | "completed" | "cancelled";
+
+export type ActivityListing = {
+  id: string;
+  code: string;
+  siteId: string;
+  siteName: string;
+  groupId: string;
+  groupName: string;
+  territoryId: string;
+  territoryName: string;
+  clusterId: string;
+  clusterName: string;
+  food: string;
+  category: string;
+  pathway: RecoveryPathway;
+  quantityKg: number;
+  claimedKg: number;
+  status: ActivityListingStatus;
+  createdAt: string;
+  pickupFrom: string;
+  pickupTo: string;
+  notes: string;
+  collectionIds: string[];
+};
+
+export type ActivityCollection = {
+  id: string;
+  code: string;
+  listingId: string;
+  listingCode: string;
+  siteId: string;
+  siteName: string;
+  groupId: string;
+  groupName: string;
+  territoryId: string;
+  territoryName: string;
+  clusterId: string;
+  clusterName: string;
+  food: string;
+  pathway: RecoveryPathway;
+  quantityKg: number;
+  recipientName: string;
+  driverName: string | null;
+  confirmedBy: string | null;
+  notes: string;
+  status: ActivityCollectionStatus;
+  occurredAt: string;
+};
+
 export type RecoveryTransaction = {
   id: string;
   occurredAt: string;
@@ -110,7 +170,12 @@ export type AccessScope = {
   siteIds?: string[] | null;
 };
 
-export type EnterpriseRole = "head_admin" | "group_admin" | "site_admin" | "reporting" | "staff";
+export type EnterpriseRole =
+  | "enterprise_super_admin"
+  | "enterprise_admin"
+  | "group_admin"
+  | "reporting"
+  | "site_admin";
 
 export type DirectoryUserStatus = "active" | "invited" | "deactivated";
 
@@ -124,8 +189,11 @@ export type UserAccessScope = {
 
 export type DirectoryUser = {
   id: string;
+  firstName: string;
+  lastName: string;
   name: string;
   email: string;
+  mobile: string;
   role: EnterpriseRole;
   scope: UserAccessScope;
   status: DirectoryUserStatus;

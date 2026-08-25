@@ -89,6 +89,7 @@ export function sitesFiltersToQuery(filters: SitesTableFilters) {
   if (filters.activity !== "all") params.set("activity", filters.activity);
   if (filters.summary !== "all") params.set("summary", filters.summary);
   if (filters.period !== "30") params.set("period", filters.period);
+  if (filters.attention === "all") params.set("attention", "all");
   if (filters.page > 1) params.set("page", String(filters.page));
   if (filters.pageSize !== 25) params.set("pageSize", String(filters.pageSize));
   const query = params.toString();

@@ -150,7 +150,7 @@ export function SiteWorkspace({
                           type="button"
                           className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
                           onClick={() => {
-                            setSiteStatus(site.id, status === "deactivated" ? "active" : "deactivated");
+                            setSiteStatus(site.id, status === "deactivated" ? "active" : "deactivated", user?.name || "Enterprise user");
                             setMenuOpen(false);
                           }}
                         >

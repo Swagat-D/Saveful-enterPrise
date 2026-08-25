@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { LoginCredentials, UserRole } from "@/types/auth";
-import type { AccessScope } from "@/types/enterprise";
+import type { AccessScope, EnterpriseRole } from "@/types/enterprise";
+import { accessFromUserScope, listUsers, roleAllowsEnterprise } from "@/lib/users";
 
 export type SessionUser = {
   id: string;
@@ -8,6 +9,7 @@ export type SessionUser = {
   name: string;
   organization: string;
   role: UserRole;
+  enterpriseRole?: EnterpriseRole;
   isHeadAdmin: boolean;
   scope?: AccessScope;
 };
@@ -15,6 +17,7 @@ export type SessionUser = {
 const ROLE: UserRole = "restaurant_multi";
 const TOKEN_KEY = "enterprise_token";
 const USER_KEY = "enterprise_user";
+const PASS_KEY = "enterprise_password";
 
 const displayNameFromEmail = (email: string) => {
   const raw = email.split("@")[0] || "User";
@@ -73,19 +76,27 @@ export async function login(credentials: LoginCredentials) {
     throw new Error("Email and password are required");
   }
 
+  const directory = listUsers().find(
+    (item) => item.email.toLowerCase() === email.toLowerCase() && item.status === "active",
+  );
+
   const user: SessionUser = {
-    id: "enterprise-1",
-    email,
-    name: displayNameFromEmail(email),
+    id: directory?.id ?? "enterprise-1",
+    email: directory?.email ?? email,
+    name: directory?.name ?? displayNameFromEmail(email),
     organization: organizationFromEmail(email),
     role: ROLE,
-    isHeadAdmin: true,
+    enterpriseRole: directory?.role ?? "enterprise_super_admin",
+    isHeadAdmin: directory ? roleAllowsEnterprise(directory.role) : true,
+    scope: directory ? accessFromUserScope(directory.scope) : undefined,
   };
 
   window.localStorage.setItem(TOKEN_KEY, "dev-session");
   window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+  window.localStorage.setItem(PASS_KEY, password);
   sessionCache = user;
   sessionRawCache = JSON.stringify(user);
+  emitSession();
   return user;
 }
 
@@ -93,13 +104,48 @@ export function logout() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(USER_KEY);
+  window.localStorage.removeItem(PASS_KEY);
   sessionCache = null;
   sessionRawCache = null;
+  emitSession();
+}
+
+export function verifyCurrentPassword(current: string) {
+  if (typeof window === "undefined") return false;
+  const stored = window.localStorage.getItem(PASS_KEY);
+  if (!stored) return Boolean(current.trim());
+  return stored === current;
+}
+
+export function setStoredPassword(next: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PASS_KEY, next);
+}
+
+const sessionListeners = new Set<() => void>();
+
+function emitSession() {
+  sessionListeners.forEach((listener) => listener());
+}
+
+export function updateSession(patch: Partial<SessionUser>) {
+  const current = getSession();
+  if (!current || typeof window === "undefined") return current;
+  const next = { ...current, ...patch };
+  window.localStorage.setItem(USER_KEY, JSON.stringify(next));
+  sessionCache = next;
+  sessionRawCache = JSON.stringify(next);
+  emitSession();
+  return next;
 }
 
 const subscribeToStorage = (onStoreChange: () => void) => {
+  sessionListeners.add(onStoreChange);
   window.addEventListener("storage", onStoreChange);
-  return () => window.removeEventListener("storage", onStoreChange);
+  return () => {
+    sessionListeners.delete(onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
 };
 
 export function useSession() {

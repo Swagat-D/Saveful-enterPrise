@@ -2,11 +2,13 @@
 
 import { useSyncExternalStore } from "react";
 import { appendAudit } from "@/lib/audit";
+import { recordNotificationEvent } from "@/lib/notifications";
 import { daysAgoIso } from "@/lib/dates";
 import { demoClusters, demoGroups, demoNetworkSites, demoTerritories } from "@/lib/network";
 import { listUnits } from "@/lib/orgStructure";
 import { formatLastActivity } from "@/lib/networkRules";
 import type {
+  AccessScope,
   DirectoryUser,
   DirectoryUserStatus,
   EnterpriseRole,
@@ -15,19 +17,39 @@ import type {
 } from "@/types/enterprise";
 
 export const ENTERPRISE_ROLES: { id: EnterpriseRole; label: string; description: string }[] = [
-  { id: "head_admin", label: "Head admin", description: "What they can do: manage the whole organisation, users, sites, and settings." },
-  { id: "group_admin", label: "Group admin", description: "What they can do: administer users and sites inside their assigned groups." },
-  { id: "site_admin", label: "Site admin", description: "What they can do: run assigned sites, listings, and local access." },
-  { id: "reporting", label: "Reporting user", description: "What they can do: view reports for their assigned scope." },
-  { id: "staff", label: "Staff", description: "What they can do: create and manage surplus listings at assigned sites." },
+  {
+    id: "enterprise_super_admin",
+    label: "Enterprise Super Admin",
+    description: "Full administration across the Enterprise, including highest-level access and administration.",
+  },
+  {
+    id: "enterprise_admin",
+    label: "Enterprise Admin",
+    description: "Administration across the entire Enterprise, subject to the permissions defined for this role.",
+  },
+  {
+    id: "group_admin",
+    label: "Group Admin",
+    description: "Administration within assigned Scope, which may include one or more Groups, Territories and/or Clusters.",
+  },
+  {
+    id: "reporting",
+    label: "Reporting User",
+    description: "Reporting and visibility within assigned Scope.",
+  },
+  {
+    id: "site_admin",
+    label: "Site Admin",
+    description: "Operational administration for assigned Site(s).",
+  },
 ];
 
 const ROLE_RANK: Record<EnterpriseRole, number> = {
-  head_admin: 4,
+  enterprise_super_admin: 5,
+  enterprise_admin: 4,
   group_admin: 3,
   site_admin: 2,
   reporting: 1,
-  staff: 0,
 };
 
 export const SCOPE_FILTERS = [
@@ -48,139 +70,48 @@ function token() {
   return `inv-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function person(
+  id: string,
+  firstName: string,
+  lastName: string,
+  email: string,
+  role: EnterpriseRole,
+  scope: UserAccessScope,
+  status: DirectoryUser["status"],
+  lastActiveAt: string | null,
+  invitedAt: string | null,
+  mobile = "",
+): DirectoryUser {
+  return {
+    id,
+    firstName,
+    lastName,
+    name: `${firstName} ${lastName}`.trim(),
+    email,
+    mobile,
+    role,
+    scope,
+    status,
+    lastActiveAt,
+    invitedAt,
+    inviteToken: status === "invited" ? token() : null,
+  };
+}
+
 const seed: DirectoryUser[] = [
-  {
-    id: "u1",
-    name: "Alex Morgan",
-    email: "alex@harbourkitchen.com",
-    role: "head_admin",
-    scope: { enterprise: true },
-    status: "active",
-    lastActiveAt: daysAgoIso(0),
-    invitedAt: daysAgoIso(400),
-    inviteToken: null,
-  },
-  {
-    id: "u2",
-    name: "Priya Nair",
-    email: "priya@harbourkitchen.com",
-    role: "site_admin",
-    scope: { siteIds: ["2"] },
-    status: "active",
-    lastActiveAt: daysAgoIso(1),
-    invitedAt: daysAgoIso(280),
-    inviteToken: null,
-  },
-  {
-    id: "u3",
-    name: "Jamie Chen",
-    email: "jamie@harbourkitchen.com",
-    role: "staff",
-    scope: { siteIds: ["hq"] },
-    status: "active",
-    lastActiveAt: daysAgoIso(3),
-    invitedAt: daysAgoIso(120),
-    inviteToken: null,
-  },
-  {
-    id: "u4",
-    name: "Sam Reid",
-    email: "sam@harbourkitchen.com",
-    role: "site_admin",
-    scope: { siteIds: ["3"] },
-    status: "invited",
-    lastActiveAt: null,
-    invitedAt: daysAgoIso(2),
-    inviteToken: token(),
-  },
-  {
-    id: "u5",
-    name: "Morgan Hale",
-    email: "morgan@harbourkitchen.com",
-    role: "group_admin",
-    scope: { groupIds: ["kitchen"] },
-    status: "active",
-    lastActiveAt: daysAgoIso(0),
-    invitedAt: daysAgoIso(90),
-    inviteToken: null,
-  },
-  {
-    id: "u6",
-    name: "Chris Adeyemi",
-    email: "chris@harbourkitchen.com",
-    role: "group_admin",
-    scope: { groupIds: ["cafe"] },
-    status: "active",
-    lastActiveAt: daysAgoIso(4),
-    invitedAt: daysAgoIso(70),
-    inviteToken: null,
-  },
-  {
-    id: "u7",
-    name: "Elena Voss",
-    email: "elena@harbourkitchen.com",
-    role: "reporting",
-    scope: { territoryIds: ["east"] },
-    status: "active",
-    lastActiveAt: daysAgoIso(6),
-    invitedAt: daysAgoIso(40),
-    inviteToken: null,
-  },
-  {
-    id: "u8",
-    name: "Noah Patel",
-    email: "noah@harbourkitchen.com",
-    role: "reporting",
-    scope: { groupIds: ["catering"], clusterIds: ["parra"] },
-    status: "invited",
-    lastActiveAt: null,
-    invitedAt: daysAgoIso(5),
-    inviteToken: token(),
-  },
-  {
-    id: "u9",
-    name: "Riley Brooks",
-    email: "riley@harbourkitchen.com",
-    role: "site_admin",
-    scope: { siteIds: ["events-north"] },
-    status: "deactivated",
-    lastActiveAt: daysAgoIso(21),
-    invitedAt: daysAgoIso(200),
-    inviteToken: null,
-  },
-  {
-    id: "u10",
-    name: "Jordan Blake",
-    email: "jordan@harbourkitchen.com",
-    role: "staff",
-    scope: { siteIds: ["bondi-kitchen"] },
-    status: "deactivated",
-    lastActiveAt: daysAgoIso(45),
-    invitedAt: daysAgoIso(160),
-    inviteToken: null,
-  },
-  {
-    id: "u11",
-    name: "Asha Rahman",
-    email: "asha@harbourkitchen.com",
-    role: "staff",
-    scope: { siteIds: ["quay-cafe"] },
-    status: "invited",
-    lastActiveAt: null,
-    invitedAt: daysAgoIso(1),
-    inviteToken: token(),
-  },
-  {
-    id: "u12",
-    name: "Head office",
-    email: "hq@harbourkitchen.com",
-    role: "site_admin",
-    scope: { siteIds: ["hq"] },
-    status: "active",
-    lastActiveAt: daysAgoIso(0),
-    invitedAt: daysAgoIso(400),
-    inviteToken: null,
-  },
+  person("u1", "Alex", "Morgan", "alex@harbourkitchen.com", "enterprise_super_admin", { enterprise: true }, "active", daysAgoIso(0), daysAgoIso(400), "+61 400 111 222"),
+  person("u13", "Taylor", "Quincy", "taylor@harbourkitchen.com", "enterprise_admin", { enterprise: true }, "active", daysAgoIso(1), daysAgoIso(200), "+61 400 118 200"),
+  person("u2", "Priya", "Nair", "priya@harbourkitchen.com", "site_admin", { siteIds: ["2"] }, "active", daysAgoIso(1), daysAgoIso(280), "+61 400 333 444"),
+  person("u3", "Jamie", "Chen", "jamie@harbourkitchen.com", "site_admin", { siteIds: ["hq"] }, "active", daysAgoIso(3), daysAgoIso(120)),
+  person("u4", "Sam", "Reid", "sam@harbourkitchen.com", "site_admin", { siteIds: ["3"] }, "invited", null, daysAgoIso(2)),
+  person("u5", "Morgan", "Hale", "morgan@harbourkitchen.com", "group_admin", { groupIds: ["kitchen"] }, "active", daysAgoIso(0), daysAgoIso(90)),
+  person("u6", "Chris", "Adeyemi", "chris@harbourkitchen.com", "group_admin", { groupIds: ["cafe"] }, "active", daysAgoIso(4), daysAgoIso(70)),
+  person("u7", "Elena", "Voss", "elena@harbourkitchen.com", "reporting", { territoryIds: ["east"] }, "active", daysAgoIso(6), daysAgoIso(40)),
+  person("u8", "Noah", "Patel", "noah@harbourkitchen.com", "reporting", { groupIds: ["catering"], clusterIds: ["parra"] }, "invited", null, daysAgoIso(5)),
+  person("u9", "Riley", "Brooks", "riley@harbourkitchen.com", "site_admin", { siteIds: ["events-north"] }, "deactivated", daysAgoIso(21), daysAgoIso(200)),
+  person("u10", "Jordan", "Blake", "jordan@harbourkitchen.com", "site_admin", { siteIds: ["bondi-kitchen"] }, "deactivated", daysAgoIso(45), daysAgoIso(160)),
+  person("u11", "Asha", "Rahman", "asha@harbourkitchen.com", "site_admin", { siteIds: ["quay-cafe"] }, "invited", null, daysAgoIso(1)),
+  person("u12", "Harbour", "HQ", "hq@harbourkitchen.com", "site_admin", { siteIds: ["hq"] }, "active", daysAgoIso(0), daysAgoIso(400)),
 ];
 
 let users: DirectoryUser[] = seed.map((user) => ({ ...user, scope: { ...user.scope } }));
@@ -203,6 +134,10 @@ export function listUsers() {
   return users;
 }
 
+export function countUsersByRole(role: EnterpriseRole) {
+  return users.filter((user) => user.role === role && user.status !== "deactivated").length;
+}
+
 export function getUser(id: string) {
   return users.find((user) => user.id === id) ?? null;
 }
@@ -221,13 +156,118 @@ export function statusLabel(status: DirectoryUserStatus) {
   return "Active";
 }
 
-export function assignableRoles(actorRole: EnterpriseRole = "head_admin"): EnterpriseRole[] {
+export function assignableRoles(actorRole: EnterpriseRole = "enterprise_super_admin"): EnterpriseRole[] {
   const rank = ROLE_RANK[actorRole];
   return ENTERPRISE_ROLES.filter((role) => ROLE_RANK[role.id] <= rank).map((role) => role.id);
 }
 
+export function roleAllowsEnterprise(role: EnterpriseRole) {
+  return role === "enterprise_super_admin" || role === "enterprise_admin";
+}
+
+export function canAssignEnterprise(actorRole: EnterpriseRole = "enterprise_super_admin") {
+  return roleAllowsEnterprise(actorRole);
+}
+
+export type ScopeChip = {
+  key: string;
+  kind: "group" | "territory" | "cluster" | "site";
+  id: string;
+  label: string;
+};
+
+export function scopeChips(scope: UserAccessScope): ScopeChip[] {
+  const chips: ScopeChip[] = [];
+  for (const id of scope.groupIds ?? []) {
+    const name = listUnits("group").find((item) => item.id === id)?.name ?? demoGroups.find((item) => item.id === id)?.name;
+    if (name) chips.push({ key: `group:${id}`, kind: "group", id, label: name });
+  }
+  for (const id of scope.territoryIds ?? []) {
+    const name = listUnits("territory").find((item) => item.id === id)?.name ?? demoTerritories.find((item) => item.id === id)?.name;
+    if (name) chips.push({ key: `territory:${id}`, kind: "territory", id, label: `Territory: ${name}` });
+  }
+  for (const id of scope.clusterIds ?? []) {
+    const name = listUnits("cluster").find((item) => item.id === id)?.name ?? demoClusters.find((item) => item.id === id)?.name;
+    if (name) chips.push({ key: `cluster:${id}`, kind: "cluster", id, label: `Cluster: ${name}` });
+  }
+  for (const id of scope.siteIds ?? []) {
+    const name = demoNetworkSites.find((item) => item.id === id)?.name;
+    if (name) chips.push({ key: `site:${id}`, kind: "site", id, label: name });
+  }
+  return chips;
+}
+
+export function accessSummaryText(scope: UserAccessScope) {
+  if (scope.enterprise) return "This user will have access to the entire Enterprise.";
+  const chips = scopeChips(scope);
+  if (!chips.length) return "Select at least one Group, Territory, Cluster or Site.";
+  return `This user will have access to ${chips.map((chip) => chip.label).join(", ").replace(/, ([^,]*)$/, " and $1")}.`;
+}
+
+function scopeKeySet(scope: UserAccessScope) {
+  if (scope.enterprise) return new Set(["enterprise"]);
+  return new Set(scopeChips(scope).map((chip) => chip.key));
+}
+
+export function describeAccessChange(
+  previous: { role: EnterpriseRole; scope: UserAccessScope },
+  next: { role: EnterpriseRole; scope: UserAccessScope },
+) {
+  const roleChanged = previous.role !== next.role;
+  const before = scopeKeySet(previous.scope);
+  const after = scopeKeySet(next.scope);
+  const added = [...after].filter((key) => !before.has(key));
+  const removed = [...before].filter((key) => !after.has(key));
+  const scopeChanged = added.length > 0 || removed.length > 0;
+  if (!roleChanged && !scopeChanged) return null;
+
+  const rankDelta = ROLE_RANK[next.role] - ROLE_RANK[previous.role];
+  const expanded = added.length > 0 && removed.length === 0 && rankDelta >= 0;
+  const reduced = removed.length > 0 && added.length === 0 && rankDelta <= 0;
+  const direction = expanded ? "expand" : reduced ? "reduce" : "change";
+
+  const changes = [
+    roleChanged ? { field: "Role", previous: roleLabel(previous.role), next: roleLabel(next.role) } : null,
+    scopeChanged ? { field: "Scope", previous: formatScope(previous.scope), next: formatScope(next.scope) } : null,
+  ].filter((item): item is { field: string; previous: string; next: string } => Boolean(item));
+
+  return {
+    direction,
+    title: expanded
+      ? "This will expand the user’s access"
+      : reduced
+        ? "This will reduce the user’s access"
+        : "This will change the user’s access",
+    detail: changes.map((item) => `${item.field}: ${item.previous} → ${item.next}`).join(". "),
+    changes,
+  };
+}
+
 export function emptyScope(): UserAccessScope {
   return { enterprise: false, groupIds: [], territoryIds: [], clusterIds: [], siteIds: [] };
+}
+
+export function accessFromUserScope(scope: UserAccessScope): AccessScope | undefined {
+  if (scope.enterprise) return undefined;
+  return {
+    groupIds: scope.groupIds?.length ? scope.groupIds : undefined,
+    territoryIds: scope.territoryIds?.length ? scope.territoryIds : undefined,
+    clusterIds: scope.clusterIds?.length ? scope.clusterIds : undefined,
+    siteIds: scope.siteIds?.length ? scope.siteIds : undefined,
+  };
+}
+
+export function userScopeFromAccess(scope: AccessScope): UserAccessScope {
+  if (scope.groupIds == null && scope.territoryIds == null && scope.clusterIds == null && scope.siteIds == null) {
+    return { enterprise: true };
+  }
+  return {
+    enterprise: false,
+    groupIds: scope.groupIds ?? [],
+    territoryIds: scope.territoryIds ?? [],
+    clusterIds: scope.clusterIds ?? [],
+    siteIds: scope.siteIds ?? [],
+  };
 }
 
 export function formatScope(scope: UserAccessScope) {
@@ -383,34 +423,75 @@ function hasScope(scope: UserAccessScope) {
 }
 
 export function saveUser(
-  draft: { name: string; email: string; role: EnterpriseRole; scope: UserAccessScope },
+  draft: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    mobile?: string;
+    role: EnterpriseRole;
+    scope: UserAccessScope;
+  },
   existingId?: string,
   actor = "Alex Morgan",
 ) {
-  const name = draft.name.trim();
+  const firstName = draft.firstName.trim();
+  const lastName = draft.lastName.trim();
   const email = draft.email.trim();
-  if (!name) return { ok: false as const, error: "Please enter a name." };
+  const mobile = draft.mobile?.trim() ?? "";
+  const name = `${firstName} ${lastName}`.trim();
+  if (!firstName) return { ok: false as const, error: "Please enter a first name." };
+  if (!lastName) return { ok: false as const, error: "Please enter a last name." };
   if (!email) return { ok: false as const, error: "Please enter an email." };
   if (!uniqueEmail(email, existingId)) return { ok: false as const, error: "A user with this email already exists." };
-  const scope = draft.role === "head_admin" ? { enterprise: true } : draft.scope;
+  const scope = draft.role === "enterprise_super_admin" ? { enterprise: true } : draft.scope;
+  if (draft.role === "enterprise_super_admin" && !scope.enterprise) {
+    return { ok: false as const, error: "Enterprise Super Admin must have Entire Enterprise scope." };
+  }
+  if (!roleAllowsEnterprise(draft.role) && scope.enterprise) {
+    return { ok: false as const, error: "This role cannot have Entire Enterprise scope." };
+  }
   if (!hasScope(scope)) return { ok: false as const, error: "Assign at least one Group, Territory, Cluster or Site." };
 
   if (existingId) {
     const previous = getUser(existingId);
-    users = users.map((user) => (user.id === existingId ? { ...user, name, email, role: draft.role, scope } : user));
+    users = users.map((user) =>
+      user.id === existingId ? { ...user, firstName, lastName, name, email, mobile, role: draft.role, scope } : user,
+    );
+    const change = previous ? describeAccessChange(previous, { role: draft.role, scope }) : null;
+    const changes = [
+      previous && previous.name !== name ? { field: "Name", previous: previous.name, next: name } : null,
+      previous && previous.email !== email ? { field: "Email", previous: previous.email, next: email } : null,
+      previous && previous.mobile !== mobile ? { field: "Mobile", previous: previous.mobile || "—", next: mobile || "—" } : null,
+      ...(change?.changes ?? []),
+    ].filter((item): item is { field: string; previous: string; next: string } => Boolean(item));
     appendAudit({
       actor,
-      action: "Updated access",
-      detail: `${name} · ${roleLabel(draft.role)} · ${formatScope(scope)}${previous && previous.role !== draft.role ? ` (was ${roleLabel(previous.role)})` : ""}`,
+      action: change ? "Changed role or scope" : "Updated user",
+      area: "users",
+      entity: name,
+      detail: `${name} · ${roleLabel(draft.role)} · ${formatScope(scope)}${change ? ` · ${change.detail}` : ""}`,
+      changes,
     });
+    if (change) {
+      recordNotificationEvent({
+        kind: "access_changed",
+        title: "User access changed",
+        detail: `${name} · ${change.detail}`,
+        href: `/users/${existingId}`,
+        siteIds: [...(scope.siteIds ?? []), ...(previous?.scope.siteIds ?? [])],
+      });
+    }
     emit();
     return { ok: true as const, id: existingId };
   }
 
   const user: DirectoryUser = {
     id: `u-${Date.now()}`,
+    firstName,
+    lastName,
     name,
     email,
+    mobile,
     role: draft.role,
     scope,
     status: "invited",
@@ -419,7 +500,17 @@ export function saveUser(
     inviteToken: token(),
   };
   users = [user, ...users];
-  appendAudit({ actor, action: "Invited user", detail: `${name} · ${roleLabel(draft.role)} · ${formatScope(scope)}` });
+  appendAudit({
+    actor,
+    action: "User added",
+    area: "users",
+    entity: name,
+    detail: `${name} · ${roleLabel(draft.role)} · ${formatScope(scope)}`,
+    changes: [
+      { field: "Role", previous: "—", next: roleLabel(draft.role) },
+      { field: "Scope", previous: "—", next: formatScope(scope) },
+    ],
+  });
   emit();
   return { ok: true as const, id: user.id };
 }
@@ -431,8 +522,26 @@ export function setUserStatus(id: string, status: "active" | "deactivated", acto
   appendAudit({
     actor,
     action: status === "deactivated" ? "Deactivated user" : "Reactivated user",
+    area: "users",
+    entity: current.name,
     detail: `${current.name} · access ${status === "deactivated" ? "removed" : "restored"}. Historical activity is unchanged.`,
+    changes: [
+      {
+        field: "Status",
+        previous: current.status === "deactivated" ? "Deactivated" : current.status === "invited" ? "Invited" : "Active",
+        next: status === "deactivated" ? "Deactivated" : "Active",
+      },
+    ],
   });
+  if (current.status === "invited" && status === "active") {
+    recordNotificationEvent({
+      kind: "user_activated",
+      title: "New user activated",
+      detail: `${current.name} accepted their invitation and is now active.`,
+      href: `/users/${id}`,
+      siteIds: current.scope.siteIds ?? [],
+    });
+  }
   emit();
 }
 
@@ -445,7 +554,10 @@ export function resendInvitation(id: string, actor = "Alex Morgan") {
   appendAudit({
     actor,
     action: "Resent invitation",
+    area: "users",
+    entity: current.name,
     detail: `${current.name} · previous activation link invalidated`,
+    changes: [{ field: "Invitation", previous: "Outstanding", next: "Resent" }],
   });
   emit();
   return { ok: true as const };

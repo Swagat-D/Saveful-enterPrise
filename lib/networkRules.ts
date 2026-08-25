@@ -1,4 +1,5 @@
-import { inDateRange, periodRange } from "@/lib/dates";
+import { daysBetween, inDateRange, periodRange, rollingRange } from "@/lib/dates";
+import { getNotificationSettings } from "@/lib/notificationSettings";
 import type {
   ActivityStatus,
   AttentionReason,
@@ -39,10 +40,38 @@ export function hasListingInPeriod(
   return inDateRange(site.lastListingAt, startDate, endDate);
 }
 
-export function hasNoActivity30d(site: OrganizationSite, todayEnd: string) {
+export function activityQuietDays() {
+  return getNotificationSettings().noRecentActivity.days;
+}
+
+export function listingQuietDays() {
+  return getNotificationSettings().noListings.days;
+}
+
+export function activationGraceDays() {
+  return getNotificationSettings().neverActivated.days;
+}
+
+export function hasNoRecentActivity(site: OrganizationSite, days: number, todayEnd: string) {
   if (!isActivated(site) || isDeactivated(site)) return false;
-  const window = periodRange("30");
+  const window = rollingRange(days);
   return !inDateRange(site.lastActivityAt, window.startDate, todayEnd);
+}
+
+export function hasNoActivity30d(site: OrganizationSite, todayEnd: string) {
+  return hasNoRecentActivity(site, activityQuietDays(), todayEnd);
+}
+
+export function hasNoListingsForDays(site: OrganizationSite, days: number) {
+  if (!isActivated(site) || isDeactivated(site)) return false;
+  const window = rollingRange(days);
+  return !hasListingInPeriod(site, window.startDate, window.endDate);
+}
+
+export function neverActivatedPastGrace(site: OrganizationSite, days: number) {
+  if (isActivated(site) || isDeactivated(site)) return false;
+  if (!site.createdAt) return true;
+  return daysBetween(site.createdAt) >= days;
 }
 
 export function activityStatus(site: OrganizationSite, period: PeriodKey): ActivityStatus {
@@ -68,7 +97,7 @@ export function attentionReasons(
   const reasons: AttentionReason[] = [];
 
   if (!isActivated(site)) reasons.push("never_activated");
-  if (hasNoActivity30d(site, endDate)) reasons.push("no_activity_30d");
+  if (hasNoRecentActivity(site, activityQuietDays(), endDate)) reasons.push("no_activity_30d");
   if (isActivated(site) && !hasListingInPeriod(site, startDate, endDate)) {
     reasons.push("no_listings_in_period");
   }
@@ -81,27 +110,31 @@ export function matchesAttention(site: OrganizationSite, reason: AttentionReason
   return attentionReasons(site, filters).includes(reason);
 }
 
-export const ATTENTION_COPY: Record<
+export function attentionCopy(quietDays = activityQuietDays()): Record<
   AttentionReason,
   { label: string; detail: string }
-> = {
-  never_activated: {
-    label: "Never activated",
-    detail: "Site created but has not gone live on Saveful",
-  },
-  no_activity_30d: {
-    label: "No activity in 30 days",
-    detail: "No collection or listing activity in the last 30 days",
-  },
-  no_listings_in_period: {
-    label: "No listings in selected period",
-    detail: "Activated, but no surplus listed in the current period",
-  },
-  setup_required: {
-    label: "Require user / admin setup",
-    detail: "No site manager or admin assigned",
-  },
-};
+> {
+  return {
+    never_activated: {
+      label: "Never activated",
+      detail: "Site created but has not gone live on Saveful",
+    },
+    no_activity_30d: {
+      label: `No activity in ${quietDays} days`,
+      detail: `No collection or listing activity in the last ${quietDays} days`,
+    },
+    no_listings_in_period: {
+      label: "No listings in selected period",
+      detail: "Activated, but no surplus listed in the current period",
+    },
+    setup_required: {
+      label: "Require user / admin setup",
+      detail: "No site manager or admin assigned",
+    },
+  };
+}
+
+export const ATTENTION_COPY: Record<AttentionReason, { label: string; detail: string }> = attentionCopy(30);
 
 export function formatLastActivity(iso: string | null) {
   if (!iso) return "Never";

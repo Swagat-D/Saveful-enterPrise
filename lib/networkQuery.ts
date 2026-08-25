@@ -3,7 +3,7 @@ import { inDateRange, periodRange, previousPeriodRange } from "@/lib/dates";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import { listUnits, resolveSite } from "@/lib/orgStructure";
 import {
-  ATTENTION_COPY,
+  attentionCopy,
   attentionReasons,
   hasActivityInPeriod,
   isActivated,
@@ -126,6 +126,37 @@ export const PATHWAY_LABEL: Record<RecoveryPathway, string> = {
   bioenergy: "Bioenergy",
 };
 
+export const PATHWAY_COLORS: Record<RecoveryPathway, string> = {
+  people: "#2D5F4F",
+  livestock: "#4C7C9B",
+  circular: "#C4843C",
+  bioenergy: "#7C6BB0",
+};
+
+export const RECIPIENT_TYPE: Record<RecoveryPathway, string> = {
+  people: "Charity",
+  livestock: "Livestock",
+  circular: "Circular recovery",
+  bioenergy: "Bioenergy",
+};
+
+const FOOD_BY_PATHWAY: Record<RecoveryPathway, string[]> = {
+  people: ["Prepared meals", "Bread and pastries", "Fresh produce", "Dairy surplus"],
+  livestock: ["Vegetable trimmings", "Food scraps", "Bakery leftovers"],
+  circular: ["Used cooking oil", "Coffee grounds"],
+  bioenergy: ["Mixed surplus", "Organic waste"],
+};
+
+export function foodCategoryFor(row: RecoveryTransaction) {
+  const options = FOOD_BY_PATHWAY[row.pathway];
+  const index = row.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % options.length;
+  return options[index];
+}
+
+export function foodCategoryId(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 export function impactFromTransactions(rows: RecoveryTransaction[]) {
   const foodKg = rows.reduce((sum, row) => sum + row.kg, 0);
   const impact = calculateImpact(foodKg);
@@ -163,9 +194,10 @@ export function networkHealth(sites: OrganizationSite[], filters: NetworkFilters
 }
 
 export function needsAttention(sites: OrganizationSite[], filters: NetworkFilters) {
-  return (Object.keys(ATTENTION_COPY) as AttentionReason[]).map((reason) => ({
+  const copy = attentionCopy();
+  return (Object.keys(copy) as AttentionReason[]).map((reason) => ({
     reason,
-    ...ATTENTION_COPY[reason],
+    ...copy[reason],
     count: sites.filter((site) => matchesAttention(site, reason, filters)).length,
   }));
 }
@@ -204,23 +236,25 @@ export function impactOverTime(rows: RecoveryTransaction[], period: PeriodKey) {
   if (!endDate) return [];
 
   if (period === "all") {
-    const months = new Map<string, number>();
+    const months = new Map<string, { kg: number; collections: number }>();
     for (const row of rows) {
       const key = row.occurredAt.slice(0, 7);
-      months.set(key, (months.get(key) ?? 0) + row.kg);
+      const current = months.get(key) ?? { kg: 0, collections: 0 };
+      months.set(key, { kg: current.kg + row.kg, collections: current.collections + 1 });
     }
     return [...months.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-8)
-      .map(([key, kg]) => ({
+      .map(([key, stats]) => ({
         label: new Date(`${key}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "short" }),
-        kg,
+        kg: stats.kg,
+        collections: stats.collections,
       }));
   }
 
   const days = Number(period);
   const bucket = days <= 7 ? 1 : days <= 30 ? 3 : 7;
-  const points: { label: string; kg: number }[] = [];
+  const points: { label: string; kg: number; collections: number }[] = [];
   const end = new Date(`${endDate}T00:00:00Z`);
 
   for (let offset = days - 1; offset >= 0; offset -= bucket) {
@@ -230,12 +264,11 @@ export function impactOverTime(rows: RecoveryTransaction[], period: PeriodKey) {
     bucketStart.setUTCDate(bucketStart.getUTCDate() - (bucket - 1));
     const from = toRangeDate(bucketStart);
     const to = toRangeDate(bucketEnd);
-    const kg = rows
-      .filter((row) => inDateRange(row.occurredAt, from, to))
-      .reduce((sum, row) => sum + row.kg, 0);
+    const bucketRows = rows.filter((row) => inDateRange(row.occurredAt, from, to));
     points.push({
       label: bucketEnd.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-      kg,
+      kg: bucketRows.reduce((sum, row) => sum + row.kg, 0),
+      collections: bucketRows.length,
     });
   }
 

@@ -119,39 +119,39 @@ export const demoUsers = [
 
 export const demoRoles = [
   {
-    id: "head",
-    name: "Head admin",
-    description: "What they can do: organisation-wide control of sites, users, settings, and reports.",
+    id: "super",
+    name: "Enterprise Super Admin",
+    description: "What they can do: full administration and reporting across the Enterprise.",
     users: 1,
     permissions: ["Entire Enterprise", "Users", "Settings", "Reports", "Listings"],
   },
   {
+    id: "enterprise",
+    name: "Enterprise Admin",
+    description: "What they can do: manage sites, users, and settings across the Enterprise or selected areas.",
+    users: 1,
+    permissions: ["Enterprise or selected scope", "Users", "Settings", "Reports"],
+  },
+  {
     id: "group",
-    name: "Group admin",
+    name: "Group Admin",
     description: "What they can do: administer users and sites inside assigned groups.",
     users: 2,
     permissions: ["Assigned groups", "Local users", "Site setup", "Reports"],
   },
   {
-    id: "manager",
-    name: "Site admin",
-    description: "What they can do: run assigned sites, listings, and local staff access.",
-    users: 3,
-    permissions: ["Assigned sites", "Local users", "Listings", "Site reports"],
-  },
-  {
     id: "reporting",
-    name: "Reporting user",
+    name: "Reporting User",
     description: "What they can do: view reports for an assigned Group, Territory, Cluster or Site.",
     users: 2,
     permissions: ["Assigned scope", "Reports"],
   },
   {
-    id: "staff",
-    name: "Staff",
-    description: "What they can do: create and manage surplus listings at assigned sites.",
-    users: 2,
-    permissions: ["Assigned sites", "Listings"],
+    id: "site",
+    name: "Site Admin",
+    description: "What they can do: run assigned sites, listings, and local access.",
+    users: 5,
+    permissions: ["Assigned sites", "Local users", "Listings", "Site reports"],
   },
 ];
 
@@ -191,44 +191,6 @@ export const demoActivity = [
     site: "Parramatta Cafe",
     siteId: "3",
     type: "Alert",
-  },
-];
-
-export const demoAuditLog = [
-  {
-    id: "e1",
-    time: "22 Aug 2026 · 09:15",
-    actor: "Alex Morgan",
-    action: "Invited user",
-    detail: "Sam Reid · Site manager · Parramatta Cafe",
-  },
-  {
-    id: "e2",
-    time: "21 Aug 2026 · 16:40",
-    actor: "Alex Morgan",
-    action: "Updated organisation profile",
-    detail: "Changed registered address for Harbour Kitchen Group",
-  },
-  {
-    id: "e3",
-    time: "20 Aug 2026 · 11:02",
-    actor: "Priya Nair",
-    action: "Created listing",
-    detail: "Prepared meals and rice · Surry Hills Kitchen",
-  },
-  {
-    id: "e4",
-    time: "18 Aug 2026 · 14:28",
-    actor: "Alex Morgan",
-    action: "Changed role",
-    detail: "Jamie Chen · Staff · Harbour Kitchen HQ",
-  },
-  {
-    id: "e5",
-    time: "12 Aug 2026 · 10:00",
-    actor: "Alex Morgan",
-    action: "Added site",
-    detail: "Parramatta Cafe · Branch of Harbour Kitchen HQ",
   },
 ];
 

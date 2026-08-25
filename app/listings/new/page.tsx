@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { ArrowRight } from "lucide-react";
 import { AppPage } from "@/components/layout/AppPage";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import { ListingWizard } from "@/components/listings/ListingWizard";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import type { ListingKind } from "@/lib/listingForm";
@@ -99,8 +100,10 @@ function CreateListingContent() {
 
 export default function CreateListingPage() {
   return (
-    <Suspense fallback={<SavefulPageLoader message="Loading listing form…" />}>
-      <CreateListingContent />
-    </Suspense>
+    <RequireCapability permission="createListings">
+      <Suspense fallback={<SavefulPageLoader message="Loading listing form…" />}>
+        <CreateListingContent />
+      </Suspense>
+    </RequireCapability>
   );
 }

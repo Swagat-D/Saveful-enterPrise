@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { AppPage } from "@/components/layout/AppPage";
+import { useSession } from "@/lib/auth";
+import { roleHas } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { PortalChip, PortalPanel, StatusBadge } from "@/components/ui/Portal";
 import { demoListings } from "@/lib/demo";
@@ -27,6 +29,7 @@ const statusTone: Record<ListingStatus, "green" | "amber" | "blue" | "red" | "sl
 };
 
 export default function ListingsPage() {
+  const user = useSession();
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("ACTIVE");
   const rows =
     filter === "all"
@@ -39,12 +42,14 @@ export default function ListingsPage() {
       title="Listings"
       description="See surplus across every site. Filter by status, then track claims and collections."
       actions={
-        <Link href="/listings/new">
-          <Button>
-            <Plus className="h-4 w-4" />
-            Create listing
-          </Button>
-        </Link>
+        roleHas(user, "createListings") ? (
+          <Link href="/listings/new">
+            <Button>
+              <Plus className="h-4 w-4" />
+              Create listing
+            </Button>
+          </Link>
+        ) : undefined
       }
     >
       <PortalPanel

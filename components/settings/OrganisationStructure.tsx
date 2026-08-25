@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MoreHorizontal, Plus, Search, X } from "lucide-react";
-import { AppPage } from "@/components/layout/AppPage";
+import { SettingsWorkspace } from "@/components/settings/SettingsWorkspace";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
 import {
@@ -107,8 +107,7 @@ export function OrganisationStructure() {
   };
 
   return (
-    <AppPage
-      eyebrow="Enterprise Settings"
+    <SettingsWorkspace
       title="Organisation Structure"
       description="Set up how your sites are organised across your Enterprise."
     >
@@ -234,7 +233,7 @@ export function OrganisationStructure() {
                             }}
                             onReactivate={() => {
                               setMenuId(null);
-                              reactivateUnit(kind, unit.id);
+                              reactivateUnit(kind, unit.id, user?.name || "Enterprise user");
                             }}
                             onDelete={() => {
                               setMenuId(null);
@@ -304,7 +303,7 @@ export function OrganisationStructure() {
       {dialog?.type === "delete" ? (
         <DeleteDialog kind={kind} unit={dialog.unit} onClose={() => setDialog(null)} />
       ) : null}
-    </AppPage>
+    </SettingsWorkspace>
   );
 }
 
@@ -384,6 +383,7 @@ function StructureFormDialog({
   unit?: OrgStructureUnit;
   onClose: () => void;
 }) {
+  const user = useSession();
   const label = structureLabel(kind);
   const [name, setName] = useState(unit?.name ?? "");
   const [code, setCode] = useState(unit?.code ?? "");
@@ -391,7 +391,7 @@ function StructureFormDialog({
   const [error, setError] = useState("");
 
   const submit = () => {
-    const result = saveUnit(kind, { name, code, description }, unit?.id);
+    const result = saveUnit(kind, { name, code, description }, unit?.id, user?.name || "Enterprise user");
     if (!result.ok) {
       setError(result.error);
       return;
@@ -452,6 +452,7 @@ function DeactivateDialog({
   const label = structureLabel(kind);
   const affected = sitesAssignedTo(kind, unit.id);
   const alternatives = listActiveUnits(kind).filter((item) => item.id !== unit.id);
+  const user = useSession();
   const [nextBySite, setNextBySite] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const ready = affected.every((site) => Boolean(nextBySite[site.id]));
@@ -464,6 +465,7 @@ function DeactivateDialog({
         siteId: site.id,
         nextId: nextBySite[site.id] === "unassigned" ? null : nextBySite[site.id] ?? null,
       })),
+      user?.name || "Enterprise user",
     );
     if (!result.ok) {
       setError(result.error);
@@ -544,6 +546,7 @@ function DeleteDialog({
   unit: OrgStructureUnit;
   onClose: () => void;
 }) {
+  const user = useSession();
   const [error, setError] = useState("");
   return (
     <Modal title={`Delete ${structureLabel(kind)}`} onClose={onClose}>
@@ -557,7 +560,7 @@ function DeleteDialog({
         </Button>
         <Button
           onClick={() => {
-            const result = deleteUnit(kind, unit.id);
+            const result = deleteUnit(kind, unit.id, user?.name || "Enterprise user");
             if (!result.ok) {
               setError(result.error);
               return;

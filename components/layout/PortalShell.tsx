@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { getEnterpriseSidebarLinks } from "@/config/sidebar";
 import { logout, useSession } from "@/lib/auth";
-import { demoOrganization } from "@/lib/demo";
+import { getOrganization, useOrganizationVersion } from "@/lib/organization";
+import { accessFromSession } from "@/lib/profile";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
@@ -21,6 +22,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isClient = useIsClient();
   const user = useSession();
+  useOrganizationVersion();
+  const organization = getOrganization();
 
   if (!isClient) {
     return <SavefulPageLoader message="Checking your business session…" />;
@@ -46,9 +49,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         role: "enterprise",
         userName: user.name,
         userEmail: user.email,
-        organization: demoOrganization.name,
-        roleLabel: user.isHeadAdmin ? "Head admin" : "Enterprise user",
-        links: getEnterpriseSidebarLinks(),
+        organization: organization.name,
+        organizationLogo: organization.logoDataUrl,
+        roleLabel: accessFromSession(user).roleName,
+        links: getEnterpriseSidebarLinks(user),
         onLogout: () => {
           logout();
           router.push("/login");

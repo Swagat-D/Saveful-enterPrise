@@ -1,16 +1,16 @@
 "use client";
 
-import { ActivityFeed } from "@/components/activity/ActivityFeed";
-import { AppPage } from "@/components/layout/AppPage";
+import { Suspense } from "react";
+import { ActivityWorkspace } from "@/components/activity/ActivityWorkspace";
+import { RequireCapability } from "@/components/layout/RequireCapability";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
 export default function ActivityPage() {
   return (
-    <AppPage
-      eyebrow="Operations"
-      title="Activity"
-      description="Claims, pickups, invites, and site alerts across the organisation."
-    >
-      <ActivityFeed />
-    </AppPage>
+    <RequireCapability permission="viewActivity">
+      <Suspense fallback={<SavefulPageLoader message="Loading activity…" />}>
+        <ActivityWorkspace />
+      </Suspense>
+    </RequireCapability>
   );
 }

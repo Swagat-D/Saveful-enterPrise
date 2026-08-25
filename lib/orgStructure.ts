@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { appendAudit } from "@/lib/audit";
 import { demoClusters, demoGroups, demoNetworkSites, demoTerritories, recoveryTransactions } from "@/lib/network";
 import type { OrgStructureKind, OrgUnitStatus, OrganizationSite } from "@/types/enterprise";
 
@@ -161,14 +162,19 @@ function uniqueName(kind: OrgStructureKind, name: string, excludeId?: string) {
   return !state[kind].some((unit) => unit.id !== excludeId && unit.name.trim().toLowerCase() === value);
 }
 
-export function saveUnit(kind: OrgStructureKind, draft: StructureDraft, existingId?: string) {
+export function saveUnit(kind: OrgStructureKind, draft: StructureDraft, existingId?: string, actor = "Enterprise user") {
   const name = draft.name.trim();
   if (!name) return { ok: false as const, error: `${structureLabel(kind)} name is required.` };
   if (!uniqueName(kind, name, existingId)) {
     return { ok: false as const, error: `A ${structureLabel(kind).toLowerCase()} with this name already exists.` };
   }
 
+  const label = structureLabel(kind);
+  const code = draft.code.trim().toUpperCase();
+  const description = draft.description.trim().slice(0, 250);
+
   if (existingId) {
+    const previous = getUnit(kind, existingId);
     state = {
       ...state,
       [kind]: state[kind].map((unit) =>
@@ -176,12 +182,26 @@ export function saveUnit(kind: OrgStructureKind, draft: StructureDraft, existing
           ? {
               ...unit,
               name,
-              code: draft.code.trim().toUpperCase(),
-              description: draft.description.trim().slice(0, 250),
+              code,
+              description,
             }
           : unit,
       ),
     };
+    const changes = [
+      previous && previous.name !== name ? { field: "Name", previous: previous.name, next: name } : null,
+      previous && previous.code !== code ? { field: "Code", previous: previous.code || "—", next: code || "—" } : null,
+      previous && previous.description !== description
+        ? { field: "Description", previous: previous.description || "—", next: description || "—" }
+        : null,
+    ].filter((item): item is { field: string; previous: string; next: string } => Boolean(item));
+    appendAudit({
+      actor,
+      action: `Updated ${label.toLowerCase()}`,
+      area: "structure",
+      entity: name,
+      changes,
+    });
     emit();
     return { ok: true as const, id: existingId };
   }
@@ -189,11 +209,21 @@ export function saveUnit(kind: OrgStructureKind, draft: StructureDraft, existing
   const unit: OrgStructureUnit = {
     id: slugId(name, kind),
     name,
-    code: draft.code.trim().toUpperCase(),
-    description: draft.description.trim().slice(0, 250),
+    code,
+    description,
     status: "active",
   };
   state = { ...state, [kind]: [...state[kind], unit] };
+  appendAudit({
+    actor,
+    action: `Added ${label.toLowerCase()}`,
+    area: "structure",
+    entity: name,
+    changes: [
+      { field: "Status", previous: "—", next: "Active" },
+      ...(code ? [{ field: "Code", previous: "—", next: code }] : []),
+    ],
+  });
   emit();
   return { ok: true as const, id: unit.id };
 }
@@ -202,6 +232,7 @@ export function deactivateUnit(
   kind: OrgStructureKind,
   id: string,
   reassignments: { siteId: string; nextId: string | null }[],
+  actor = "Enterprise user",
 ) {
   const unit = getUnit(kind, id);
   if (!unit || unit.status === "deactivated") return { ok: false as const, error: "This structure is already deactivated." };
@@ -237,23 +268,64 @@ export function deactivateUnit(
     assignments,
     [kind]: state[kind].map((item) => (item.id === id ? { ...item, status: "deactivated" as const } : item)),
   };
+  const label = structureLabel(kind);
+  appendAudit({
+    actor,
+    action: `Deactivated ${label.toLowerCase()}`,
+    area: "structure",
+    entity: unit.name,
+    changes: [{ field: "Status", previous: "Active", next: "Deactivated" }],
+  });
+  for (const site of affected) {
+    const nextId = chosen.get(site.id) ?? null;
+    const nextUnit = nextId ? getUnit(kind, nextId) : null;
+    appendAudit({
+      actor,
+      action: "Site reassigned",
+      area: "sites",
+      entity: site.name,
+      detail: `${site.name} was moved after ${unit.name} was deactivated.`,
+      changes: [{ field: label, previous: unit.name, next: nextUnit?.name ?? "Unassigned" }],
+    });
+  }
   emit();
   return { ok: true as const };
 }
 
-export function reactivateUnit(kind: OrgStructureKind, id: string) {
+export function reactivateUnit(kind: OrgStructureKind, id: string, actor = "Enterprise user") {
+  const unit = getUnit(kind, id);
   state = {
     ...state,
     [kind]: state[kind].map((item) => (item.id === id ? { ...item, status: "active" as const } : item)),
   };
+  if (unit) {
+    appendAudit({
+      actor,
+      action: `Reactivated ${structureLabel(kind).toLowerCase()}`,
+      area: "structure",
+      entity: unit.name,
+      changes: [{ field: "Status", previous: "Deactivated", next: "Active" }],
+    });
+  }
   emit();
 }
 
-export function deleteUnit(kind: OrgStructureKind, id: string) {
+export function deleteUnit(kind: OrgStructureKind, id: string, actor = "Enterprise user") {
+  const unit = getUnit(kind, id);
   if (!canDeleteUnit(kind, id)) {
     return { ok: false as const, error: "This structure has history or assigned sites. Deactivate it instead." };
   }
   state = { ...state, [kind]: state[kind].filter((item) => item.id !== id) };
+  if (unit) {
+    appendAudit({
+      actor,
+      action: `Deleted ${structureLabel(kind).toLowerCase()}`,
+      area: "structure",
+      entity: unit.name,
+      detail: `${unit.name} was removed. It had no assigned sites and no historical collections.`,
+      changes: [{ field: "Status", previous: "Active", next: "Deleted" }],
+    });
+  }
   emit();
   return { ok: true as const };
 }

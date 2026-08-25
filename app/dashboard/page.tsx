@@ -28,6 +28,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AppPage } from "@/components/layout/AppPage";
+import { RequireCapability } from "@/components/layout/RequireCapability";
+import { useSession } from "@/lib/auth";
+import { roleHas } from "@/lib/permissions";
 import { FilterBar, useNetworkFilters } from "@/components/network/FilterBar";
 import { Button } from "@/components/ui/button";
 import { PortalPanel } from "@/components/ui/Portal";
@@ -42,17 +45,20 @@ const PATHWAY_TONE = ["#2D5F4F", "#5B8A78", "#A3C4B5", "#D9DDD4"] as const;
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<SavefulPageLoader message="Loading dashboard…" />}>
-      <EnterpriseDashboard />
-    </Suspense>
+    <RequireCapability permission="viewDashboard">
+      <Suspense fallback={<SavefulPageLoader message="Loading dashboard…" />}>
+        <EnterpriseDashboard />
+      </Suspense>
+    </RequireCapability>
   );
 }
 
 function EnterpriseDashboard() {
+  const user = useSession();
   const { filters, scope, setFilters } = useNetworkFilters();
   const model = buildDashboardModel(filters, scope);
   const query = filtersToQuery(filters);
-  const reportHref = `/insights${query}`;
+  const reportHref = `/insights/reports/new${query}`;
 
   const metrics = [
     {
@@ -98,10 +104,12 @@ function EnterpriseDashboard() {
       title="Enterprise Overview"
       description="See what's happening across your Saveful network."
       actions={
-        <Button href={reportHref} className="w-full sm:w-auto">
-          <Download className="h-4 w-4" />
-          Download report
-        </Button>
+        roleHas(user, "createReports") ? (
+          <Button href={reportHref} className="w-full sm:w-auto">
+            <Download className="h-4 w-4" />
+            Create report
+          </Button>
+        ) : undefined
       }
     >
       <FilterBar />

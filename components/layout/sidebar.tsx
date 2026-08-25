@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import React, { useState, createContext, useContext } from "react";
+import React, { useEffect, useState, createContext, useContext } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { IconMenu2, IconX, IconChevronDown } from "@tabler/icons-react";
 import Image from "next/image";
@@ -268,8 +268,12 @@ export const SidebarLink = ({
   const hasActiveChild = Boolean(link.children?.some((child) => isPathActive(child.href)));
   const isActive = isPathActive(link.href) || hasActiveChild;
 
-  const [isExpanded, setIsExpanded] = useState(hasActiveChild);
-  const shouldExpand = hasActiveChild || isExpanded;
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const shouldExpand = manualOpen ?? hasActiveChild;
+
+  useEffect(() => {
+    if (!hasActiveChild) setManualOpen(null);
+  }, [hasActiveChild]);
 
   const handleNavigation = () => {
     if (window.innerWidth < 768) {
@@ -291,7 +295,7 @@ export const SidebarLink = ({
       {hasChildren ? (
         <button
           type="button"
-          onClick={() => setIsExpanded((prev) => !prev)}
+          onClick={() => setManualOpen((current) => !(current ?? hasActiveChild))}
           className={parentClassName}
           {...props}
         >

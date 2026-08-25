@@ -1,3 +1,5 @@
+import { getOrganization, organizationLocale } from "@/lib/organization";
+
 /** Central Saveful impact methodology. Dashboard, Sites, Insights and Reports must use these. */
 
 export const IMPACT = {
@@ -28,16 +30,29 @@ export function roundImpact(value: number, digits = 1) {
   return Math.round(value * factor) / factor;
 }
 
+const KG_TO_LB = 2.2046226218;
+
 export function formatKg(value: number) {
-  return `${roundImpact(value, value >= 100 ? 0 : 1).toLocaleString("en-US")} kg`;
+  const org = getOrganization();
+  const locale = organizationLocale(org);
+  if (org.units === "imperial") {
+    const pounds = value * KG_TO_LB;
+    return `${roundImpact(pounds, pounds >= 100 ? 0 : 1).toLocaleString(locale)} lb`;
+  }
+  return `${roundImpact(value, value >= 100 ? 0 : 1).toLocaleString(locale)} kg`;
 }
 
 export function formatMoney(value: number) {
-  return `$${Math.round(value).toLocaleString("en-US")}`;
+  const org = getOrganization();
+  return new Intl.NumberFormat(organizationLocale(org), {
+    style: "currency",
+    currency: org.currency,
+    maximumFractionDigits: 0,
+  }).format(Math.round(value));
 }
 
 export function formatCount(value: number) {
-  return Math.round(value).toLocaleString("en-US");
+  return Math.round(value).toLocaleString(organizationLocale());
 }
 
 export function percentChange(current: number, previous: number) {

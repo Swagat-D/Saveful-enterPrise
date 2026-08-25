@@ -1,13 +1,16 @@
 "use client";
 
 import { Suspense } from "react";
-import { InsightsView } from "@/components/insights/InsightsView";
+import { InsightsWorkspace } from "@/components/insights/InsightsWorkspace";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
 export default function InsightsPage() {
   return (
-    <Suspense fallback={<SavefulPageLoader message="Loading insights…" />}>
-      <InsightsView />
-    </Suspense>
+    <RequireCapability permission="viewInsights">
+      <Suspense fallback={<SavefulPageLoader message="Loading insights…" />}>
+        <InsightsWorkspace />
+      </Suspense>
+    </RequireCapability>
   );
 }

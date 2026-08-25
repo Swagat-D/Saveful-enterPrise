@@ -467,7 +467,13 @@ function withActivityDates(sites: SiteSeed[], transactions: RecoveryTransaction[
     };
 
     if (!site.activatedAt) {
-      return { ...site, ...identity, lastActivityAt: null, lastListingAt: null };
+      return {
+        ...site,
+        ...identity,
+        createdAt: site.createdAt ?? daysAgoIso(21),
+        lastActivityAt: null,
+        lastListingAt: null,
+      };
     }
 
     if (LISTING_GAP_SITES.has(site.id)) {

@@ -363,6 +363,7 @@ function SitesDirectory() {
                           <td className="py-2.5" onClick={(event) => event.stopPropagation()}>
                             <RowMenu
                               site={site}
+                              actor={user?.name || "Enterprise user"}
                               open={menuId === site.id}
                               onToggle={() => setMenuId((current) => (current === site.id ? null : site.id))}
                               permissions={permissions}
@@ -401,6 +402,7 @@ function SitesDirectory() {
                       <div className="mt-2">
                         <RowMenu
                           site={site}
+                          actor={user?.name || "Enterprise user"}
                           open={menuId === site.id}
                           onToggle={() => setMenuId((current) => (current === site.id ? null : site.id))}
                           permissions={permissions}
@@ -548,11 +550,13 @@ function StatusPill({ active }: { active: boolean }) {
 
 function RowMenu({
   site,
+  actor,
   open,
   onToggle,
   permissions,
 }: {
   site: OrganizationSite;
+  actor: string;
   open: boolean;
   onToggle: () => void;
   permissions: ReturnType<typeof sitePermissions>;
@@ -576,7 +580,7 @@ function RowMenu({
             <button
               type="button"
               className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-              onClick={() => setSiteStatus(site.id, getSiteStatus(site) === "deactivated" ? "active" : "deactivated")}
+              onClick={() => setSiteStatus(site.id, getSiteStatus(site) === "deactivated" ? "active" : "deactivated", actor)}
             >
               {getSiteStatus(site) === "deactivated" ? "Reactivate site" : "Deactivate site"}
             </button>

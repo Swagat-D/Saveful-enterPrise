@@ -83,7 +83,9 @@ export function emptySiteForm(): SiteFormValues {
 export function siteToFormValues(site: OrganizationSite): SiteFormValues {
   const current = resolveSite(site);
   const existing = listUsers().find(
-    (user) => user.email === current.email || (user.scope.siteIds?.includes(current.id) && user.role !== "staff"),
+    (user) =>
+      user.email === current.email ||
+      (user.scope.siteIds?.includes(current.id) && (user.role === "site_admin" || user.role === "group_admin")),
   );
   return {
     siteName: current.name,

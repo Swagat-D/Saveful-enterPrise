@@ -2,14 +2,17 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { RequireCapability } from "@/components/layout/RequireCapability";
 import { UserWorkspace } from "@/components/users/UserWorkspace";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
 export default function NewUserPage() {
   return (
-    <Suspense fallback={<SavefulPageLoader message="Loading user…" />}>
-      <NewUser />
-    </Suspense>
+    <RequireCapability permission="manageUsers">
+      <Suspense fallback={<SavefulPageLoader message="Loading user…" />}>
+        <NewUser />
+      </Suspense>
+    </RequireCapability>
   );
 }
 

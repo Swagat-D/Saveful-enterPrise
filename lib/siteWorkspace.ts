@@ -2,17 +2,10 @@ import { inDateRange, periodRange } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import { formatCollectionHours } from "@/lib/siteForm";
 import { recoveryTransactions } from "@/lib/network";
-import { PATHWAY_LABEL } from "@/lib/networkQuery";
+import { foodCategoryFor, PATHWAY_LABEL } from "@/lib/networkQuery";
 import { formatLastActivity } from "@/lib/networkRules";
 import { demoActivity } from "@/lib/demo";
-import type { OrganizationSite, PeriodKey, RecoveryPathway, RecoveryTransaction } from "@/types/enterprise";
-
-const FOOD_BY_PATHWAY: Record<RecoveryPathway, string[]> = {
-  people: ["Prepared meals", "Bread and pastries", "Fresh produce", "Dairy surplus"],
-  livestock: ["Vegetable trimmings", "Food scraps", "Bakery leftovers"],
-  circular: ["Used cooking oil", "Coffee grounds"],
-  bioenergy: ["Mixed surplus", "Organic waste"],
-};
+import type { OrganizationSite, PeriodKey, RecoveryTransaction } from "@/types/enterprise";
 
 const INSTRUCTIONS: Record<string, string> = {
   hq: "Enter via rear loading dock. Ask for the kitchen manager.",
@@ -37,11 +30,7 @@ export function siteOperations(site: OrganizationSite) {
   };
 }
 
-export function foodLabelFor(row: RecoveryTransaction) {
-  const options = FOOD_BY_PATHWAY[row.pathway];
-  const index = row.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % options.length;
-  return options[index];
-}
+export const foodLabelFor = foodCategoryFor;
 
 export function siteRecoveryRows(siteId: string, period: PeriodKey, limit = 6) {
   const { startDate, endDate } = periodRange(period);

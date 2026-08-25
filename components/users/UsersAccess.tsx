@@ -253,11 +253,12 @@ export function UsersAccess() {
                         <td className="py-2.5" onClick={(event) => event.stopPropagation()}>
                           <RowMenu
                             user={person}
+                            actor={user?.name || "Enterprise user"}
                             open={menuId === person.id}
                             permissions={permissions}
                             onToggle={() => setMenuId((current) => (current === person.id ? null : person.id))}
                             onResend={() => {
-                              const result = resendInvitation(person.id);
+                              const result = resendInvitation(person.id, user?.name || "Enterprise user");
                               setMenuId(null);
                               setNotice(result.ok ? `Invitation resent to ${person.email}. The previous link no longer works.` : result.error);
                             }}
@@ -285,11 +286,12 @@ export function UsersAccess() {
                     <div className="mt-2">
                       <RowMenu
                         user={person}
+                        actor={user?.name || "Enterprise user"}
                         open={menuId === person.id}
                         permissions={permissions}
                         onToggle={() => setMenuId((current) => (current === person.id ? null : person.id))}
                         onResend={() => {
-                          const result = resendInvitation(person.id);
+                          const result = resendInvitation(person.id, user?.name || "Enterprise user");
                           setMenuId(null);
                           setNotice(result.ok ? `Invitation resent to ${person.email}. The previous link no longer works.` : result.error);
                         }}
@@ -374,12 +376,14 @@ function StatusPill({ status }: { status: DirectoryUserStatus }) {
 
 function RowMenu({
   user,
+  actor,
   open,
   permissions,
   onToggle,
   onResend,
 }: {
   user: DirectoryUser;
+  actor: string;
   open: boolean;
   permissions: ReturnType<typeof userPermissions>;
   onToggle: () => void;
@@ -410,7 +414,7 @@ function RowMenu({
               type="button"
               className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
               onClick={() => {
-                setUserStatus(user.id, "deactivated");
+                setUserStatus(user.id, "deactivated", actor);
                 onToggle();
               }}
             >
@@ -422,7 +426,7 @@ function RowMenu({
               type="button"
               className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
               onClick={() => {
-                setUserStatus(user.id, "active");
+                setUserStatus(user.id, "active", actor);
                 onToggle();
               }}
             >

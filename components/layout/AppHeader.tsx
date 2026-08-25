@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
-import { Bell, Building2, ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
-import { demoActivity, demoOrganization } from "@/lib/demo";
+import { Bell, Building2, ChevronDown, LogOut, UserRound } from "lucide-react";
+import { useSession } from "@/lib/auth";
+import { demoOrganization } from "@/lib/demo";
+import { listInbox, useNotificationInboxVersion } from "@/lib/notifications";
+import { profileFromSession } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 
 export function AppHeader({
@@ -11,6 +14,7 @@ export function AppHeader({
   userEmail,
   roleLabel,
   organization = demoOrganization.name,
+  organizationLogo,
   onLogout,
   compact = false,
 }: {
@@ -18,6 +22,7 @@ export function AppHeader({
   userEmail: string;
   roleLabel: string;
   organization?: string;
+  organizationLogo?: string | null;
   onLogout?: () => void;
   compact?: boolean;
 }) {
@@ -36,9 +41,18 @@ export function AppHeader({
       )}
     >
       <div className="flex min-w-0 items-center gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-saveful-green/10 text-saveful-green">
-          <Building2 className="h-4 w-4" />
-        </span>
+        {organizationLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={organizationLogo}
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-black/5"
+          />
+        ) : (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-saveful-green/10 text-saveful-green">
+            <Building2 className="h-4 w-4" />
+          </span>
+        )}
         <div className="min-w-0">
           <p className="truncate font-saveful-semibold text-sm text-gray-900">{organization}</p>
           <p className="hidden truncate font-saveful text-[11px] text-gray-500 sm:block">
@@ -64,7 +78,9 @@ export function AppHeader({
 function NotificationsMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const items = demoActivity.slice(0, 3);
+  useNotificationInboxVersion();
+  const user = useSession();
+  const items = user ? listInbox(user, profileFromSession(user).notifications) : [];
 
   useDismiss(ref, () => setOpen(false));
 
@@ -86,7 +102,7 @@ function NotificationsMenu() {
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <p className="font-saveful-semibold text-sm text-gray-900">Notifications</p>
             <Link
-              href="/activity"
+              href={items.some((item) => item.siteId) ? "/sites?attention=all" : "/account"}
               onClick={() => setOpen(false)}
               className="font-saveful text-xs text-saveful-green hover:underline"
             >
@@ -94,17 +110,22 @@ function NotificationsMenu() {
             </Link>
           </div>
           <div className="max-h-80 overflow-y-auto">
-            {items.map((item) => (
-              <Link
-                key={item.id}
-                href="/activity"
-                onClick={() => setOpen(false)}
-                className="block border-b border-gray-50 px-4 py-3 last:border-0 hover:bg-[#FAF7F0]"
-              >
-                <p className="font-saveful-semibold text-sm text-gray-900">{item.title}</p>
-                <p className="mt-0.5 font-saveful text-xs text-gray-500">{item.time}</p>
-              </Link>
-            ))}
+            {items.length ? (
+              items.map((item) => (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className="block border-b border-gray-50 px-4 py-3 last:border-0 hover:bg-[#FAF7F0]"
+                >
+                  <p className="font-saveful-semibold text-sm text-gray-900">{item.title}</p>
+                  <p className="mt-0.5 font-saveful text-xs text-gray-500">{item.detail}</p>
+                  <p className="mt-0.5 font-saveful text-[11px] text-gray-400">{item.time}</p>
+                </Link>
+              ))
+            ) : (
+              <p className="px-4 py-6 font-saveful text-sm text-gray-500">No notifications in your scope.</p>
+            )}
           </div>
         </div>
       ) : null}
@@ -157,26 +178,10 @@ function UserMenu({
           <Link
             href="/account"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2.5 font-saveful text-sm text-gray-800 hover:bg-[#FAF7F0]"
+            className="flex items-center gap-2 px-3 py-2.5 font-saveful text-sm text-saveful-green hover:bg-[#FAF7F0]"
           >
-            <UserRound className="h-4 w-4 text-saveful-green" />
-            Profile
-          </Link>
-          <Link
-            href="/activity"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2.5 font-saveful text-sm text-gray-800 hover:bg-[#FAF7F0]"
-          >
-            <Bell className="h-4 w-4 text-saveful-green" />
-            Activity
-          </Link>
-          <Link
-            href="/settings"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2.5 font-saveful text-sm text-gray-800 hover:bg-[#FAF7F0]"
-          >
-            <Settings className="h-4 w-4 text-saveful-green" />
-            Enterprise settings
+            <UserRound className="h-4 w-4" />
+            My Profile
           </Link>
           {onLogout ? (
             <button
@@ -188,7 +193,7 @@ function UserMenu({
               className="flex w-full items-center gap-2 border-t border-gray-100 px-3 py-2.5 text-left font-saveful text-sm text-red-600 hover:bg-red-50"
             >
               <LogOut className="h-4 w-4" />
-              Log out
+              Sign out
             </button>
           ) : null}
         </div>

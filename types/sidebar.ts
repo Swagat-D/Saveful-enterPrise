@@ -11,6 +11,7 @@ export interface SidebarConfig {
   userName: string;
   userEmail: string;
   organization?: string;
+  organizationLogo?: string | null;
   roleLabel?: string;
   links: SidebarLink[];
   onLogout?: () => void;

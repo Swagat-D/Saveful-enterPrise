@@ -1,6 +1,8 @@
+import { formatDisplayDateTime } from "@/lib/dates";
 import { calculateImpact, IMPACT } from "@/lib/impact";
 import { demoSites } from "@/lib/demo";
 import { impactFromTransactions, scopedTransactions } from "@/lib/networkQuery";
+import { organizationLocale } from "@/lib/organization";
 import { EMPTY_FILTERS } from "@/lib/scope";
 import type { AccessScope, PeriodKey } from "@/types/enterprise";
 
@@ -371,21 +373,14 @@ export function getChartSeries(
   });
 }
 
-export function formatKg(value: number) {
-  return `${value.toLocaleString("en-US", { maximumFractionDigits: 1 })} kg`;
-}
-
-export function formatMoney(value: number) {
-  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
+export { formatKg, formatMoney } from "@/lib/impact";
 
 export function formatNumber(value: number) {
-  return value.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  return value.toLocaleString(organizationLocale(), { maximumFractionDigits: 1 });
 }
 
 export function formatCollectionDate(iso: string) {
-  const date = new Date(iso);
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return iso.length <= 10 ? formatDisplayDate(iso) : formatDisplayDateTime(iso);
 }
 
 export function toApiDate(date: Date) {
@@ -405,7 +400,7 @@ export function presetRange(days: number) {
 export function formatDisplayDate(iso?: string) {
   if (!iso) return "Select";
   const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString("en-GB", {
+  return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString(organizationLocale(), {
     day: "numeric",
     month: "short",
     year: "numeric",
