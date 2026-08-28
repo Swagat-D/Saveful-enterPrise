@@ -6,11 +6,13 @@ export const ACCESS_TOKEN_KEY = "enterprise_token";
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -117,6 +119,7 @@ export type ApiEnterpriseInvite = {
 export type ApiSiteRow = {
   id: number;
   siteName: string;
+  siteCode?: string | null;
   address: string;
   postcode?: string | null;
   contactName?: string;
@@ -124,7 +127,86 @@ export type ApiSiteRow = {
   phoneNumber?: string;
   isActive?: boolean;
   createdAt?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  collectionDays?: string[];
+  collectionStartTime?: string | null;
+  collectionEndTime?: string | null;
+  collectionInstructions?: string | null;
+  groupId?: number | null;
+  clusterId?: number | null;
+  territoryId?: number | null;
+  managers?: Array<{
+    userId: number;
+    user?: { firstName?: string; lastName?: string; email?: string };
+  }>;
 };
+
+export type CreateOrganisationSiteInput = {
+  siteName: string;
+  address: string;
+  postcode?: string;
+  contactName?: string;
+  contactEmail?: string;
+  phoneNumber?: string;
+  latitude: number;
+  longitude: number;
+  collectionDays?: string[];
+  collectionStartTime?: string;
+  collectionEndTime?: string;
+  collectionInstructions?: string;
+  groupId?: number | null;
+  clusterId?: number | null;
+  territoryId?: number | null;
+};
+
+export type CreatedOrganisationSite = {
+  message: string;
+  site: ApiSiteRow;
+};
+
+export function createOrganisationSite(input: CreateOrganisationSiteInput) {
+  return apiFetch<CreatedOrganisationSite>("/sites", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateOrganisationSite(siteId: number, input: Partial<CreateOrganisationSiteInput>) {
+  return apiFetch<CreatedOrganisationSite>(`/sites/${siteId}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function inviteEnterpriseUser(input: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  mobile?: string;
+  role: string;
+  siteAdminForSiteId?: number;
+  scopes?: Array<{ scopeType: string; scopeId?: number | null }>;
+}) {
+  return apiFetch<{ message: string; invitation: { id: number; email: string; status: string } }>(
+    "/enterprise/users",
+    {
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function assignExistingSiteAdmin(siteId: number, userId: number) {
+  return apiFetch<{ message: string }>(`/sites/${siteId}/assign-admin`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify({ userId }),
+  });
+}
 
 export type OrganisationSitesResponse = {
   sites?: ApiSiteRow[];
@@ -187,7 +269,10 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ApiError(messageFromBody(body, `Request failed (${response.status})`), response.status);
+    const code = body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string"
+      ? (body as { error: string }).error
+      : undefined;
+    throw new ApiError(messageFromBody(body, `Request failed (${response.status})`), response.status, code);
   }
   return body as T;
 }
@@ -256,6 +341,7 @@ export type EnterpriseListItem = {
   currency: string;
   sites: number;
   users: number;
+  lastLoginAt?: string | null;
   contract: {
     organisationId: number;
     status: string;
@@ -305,6 +391,56 @@ export function provisionEnterprise(input: ProvisionEnterpriseInput & { logoFile
 
 export function listEnterprises() {
   return apiFetch<EnterpriseListItem[]>("/admin/enterprise", { auth: true });
+}
+
+export type EnterpriseMember = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  mobile?: string | null;
+  role: string;
+  roleLabel?: string;
+  status: "ACTIVE" | "INVITED" | "DEACTIVATED" | string;
+  lastLoginAt?: string | null;
+  joinedAt?: string | null;
+};
+
+export type EnterpriseInviteRow = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  roleLabel?: string;
+  status: "INVITED" | string;
+  invitationSentAt?: string;
+  expiresAt?: string;
+};
+
+export type EnterpriseDetail = {
+  organisationId: number;
+  enterpriseId: string;
+  name: string;
+  address: string | null;
+  accountStatus: EnterpriseAccountStatus;
+  country: string;
+  timezone: string;
+  currency: string;
+  measurementUnit: MeasurementUnit;
+  primaryContactName: string | null;
+  primaryContactEmail: string | null;
+  primaryContactPhone: string | null;
+  logoUrl: string | null;
+  createdAt?: string;
+  contract: EnterpriseListItem["contract"];
+  pendingInvitations: number;
+  users?: EnterpriseMember[];
+  invitations?: EnterpriseInviteRow[];
+};
+
+export function getEnterprise(organisationId: string | number) {
+  return apiFetch<EnterpriseDetail>(`/admin/enterprise/${organisationId}`, { auth: true });
 }
 
 export function uploadEnterpriseLogo(file: File) {

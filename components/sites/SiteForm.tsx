@@ -10,10 +10,19 @@ import { PortalPageShell } from "@/components/ui/Portal";
 import { listUsers, useUsersVersion } from "@/lib/users";
 import { listActiveUnits, useOrgStructureVersion } from "@/lib/orgStructure";
 import {
+  ApiError,
+  assignExistingSiteAdmin,
+  createOrganisationSite,
+  inviteEnterpriseUser,
+  updateOrganisationSite,
+} from "@/lib/api";
+import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
+import {
   TIME_OPTIONS,
   WEEKDAYS,
+  contactFromSiteAdmin,
   emptySiteForm,
-  isSiteCodeTaken,
+  siteFormToApiInput,
   siteToFormValues,
   type SiteFormValues,
 } from "@/lib/siteForm";
@@ -25,7 +34,6 @@ const inputClass =
 
 type FieldKey =
   | "siteName"
-  | "siteCode"
   | "address"
   | "inviteFirstName"
   | "inviteLastName"
@@ -44,8 +52,14 @@ export function SiteForm({
   const [values, setValues] = useState<SiteFormValues>(site ? siteToFormValues(site) : emptySiteForm());
   useUsersVersion();
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [createdSiteId, setCreatedSiteId] = useState<number | null>(site ? Number(site.id) : null);
+  const [assignedSiteCode, setAssignedSiteCode] = useState(site?.siteCode ?? "");
   const cancelHref = site ? `/sites/${site.id}` : "/sites";
+  const assignableUsers = listUsers().filter(
+    (user) => user.status === "active" && /^\d+$/.test(user.id),
+  );
 
   const update = <K extends keyof SiteFormValues>(key: K, value: SiteFormValues[K]) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -63,32 +77,83 @@ export function SiteForm({
   const validate = () => {
     const next: Partial<Record<FieldKey, string>> = {};
     if (!values.siteName.trim()) next.siteName = "Please enter a site name.";
-    if (!values.place.address.trim()) next.address = "Please search or enter a pickup address.";
-    if (values.siteCode.trim() && isSiteCodeTaken(values.siteCode, site?.id)) {
-      next.siteCode = "This Site ID is already used in your organisation.";
+    if (!values.place.address.trim()) next.address = "Please search or pin a pickup address.";
+    if (!Number.isFinite(values.place.lat) || !Number.isFinite(values.place.lon)) {
+      next.address = "Choose an address from search or use your location so we can save coordinates.";
     }
     if (values.adminMode === "invite") {
       if (!values.inviteFirstName.trim()) next.inviteFirstName = "Please enter a first name.";
       if (!values.inviteLastName.trim()) next.inviteLastName = "Please enter a last name.";
       if (!values.inviteEmail.trim()) next.inviteEmail = "Please enter an email so we can send the invitation.";
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.inviteEmail.trim())) {
+        next.inviteEmail = "Please enter a valid email address.";
+      }
     }
     if (values.adminMode === "existing" && !values.existingUserId) {
-      next.existingUserId = "Select a user or choose another option.";
+      next.existingUserId = "Select a Site Admin so this site can be used.";
     }
     return next;
   };
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const nextErrors = validate();
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
+
     setSaving(true);
-    window.setTimeout(() => router.push(site ? `/sites/${site.id}` : "/sites"), 400);
+    setFormError("");
+    let savedSiteId = createdSiteId;
+    try {
+      const payload = siteFormToApiInput(values, {
+        clearUnassigned: mode === "edit" || Boolean(createdSiteId),
+      });
+      const saved = savedSiteId
+        ? await updateOrganisationSite(savedSiteId, payload)
+        : await createOrganisationSite(payload);
+      savedSiteId = saved.site.id;
+      setCreatedSiteId(savedSiteId);
+      if (saved.site.siteCode) setAssignedSiteCode(saved.site.siteCode);
+
+      if (values.adminMode === "invite") {
+        await inviteEnterpriseUser({
+          firstName: values.inviteFirstName.trim(),
+          lastName: values.inviteLastName.trim(),
+          email: values.inviteEmail.trim().toLowerCase(),
+          mobile: values.inviteMobile.trim() || undefined,
+          role: "SITE_ADMIN",
+          siteAdminForSiteId: savedSiteId,
+          scopes: [{ scopeType: "SITE", scopeId: savedSiteId }],
+        });
+      }
+
+      if (values.adminMode === "existing") {
+        await assignExistingSiteAdmin(savedSiteId, Number(values.existingUserId));
+      }
+
+      await refreshEnterpriseWorkspace();
+      router.push(`/sites/${savedSiteId}`);
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "The site could not be saved. Please try again.";
+      setFormError(
+        savedSiteId && !createdSiteId
+          ? `Site saved. ${message} You can retry the Site Admin step without creating another site.`
+          : message,
+      );
+      await refreshEnterpriseWorkspace().catch(() => undefined);
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const siteContact = contactFromSiteAdmin(values);
   const inviting = values.adminMode === "invite";
   const submitLabel = saving ? "Saving…" : inviting ? "Save site & send invitation" : "Save site";
 
@@ -141,12 +206,21 @@ export function SiteForm({
           </header>
 
           <div className="space-y-4 p-4 sm:p-5">
+            {formError ? (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">
+                {formError}
+              </p>
+            ) : null}
+            <p className="font-saveful text-xs text-gray-500">
+              Fields marked <span className="font-saveful-semibold text-red-500">*</span> are required. Everything else is optional.
+            </p>
             <FormSection title="1. Site details">
               <div className="space-y-4 p-3.5">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <Field label="Site name" htmlFor="siteName" required error={errors.siteName}>
                     <input
                       id="siteName"
+                      maxLength={160}
                       value={values.siteName}
                       onChange={(event) => {
                         update("siteName", event.target.value);
@@ -157,20 +231,16 @@ export function SiteForm({
                     />
                   </Field>
                   <Field
-                    label="Site ID / Code"
+                    label="Site ID"
                     htmlFor="siteCode"
-                    hint="Unique internal identifier for this organisation."
-                    error={errors.siteCode}
+                    hint="Created automatically when the site is saved."
+                    optional
                   >
                     <input
                       id="siteCode"
-                      value={values.siteCode}
-                      onChange={(event) => {
-                        update("siteCode", event.target.value);
-                        clearError("siteCode");
-                      }}
-                      placeholder="e.g. PC001"
-                      className={inputClass}
+                      readOnly
+                      value={assignedSiteCode || "Assigned on save"}
+                      className={cn(inputClass, "text-gray-500")}
                     />
                   </Field>
                 </div>
@@ -188,40 +258,161 @@ export function SiteForm({
                 </Field>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <Field label="Primary contact" htmlFor="contactName">
+                  <Field label="Postcode" htmlFor="postcode" optional>
                     <input
-                      id="contactName"
-                      value={values.contactName}
-                      onChange={(event) => update("contactName", event.target.value)}
-                      placeholder="e.g. Sarah Williams"
+                      id="postcode"
+                      maxLength={20}
+                      value={values.place.postcode}
+                      onChange={(event) =>
+                        update("place", { ...values.place, postcode: event.target.value })
+                      }
+                      placeholder="e.g. 6000"
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="Email" htmlFor="contactEmail">
+                  <Field label="Latitude" htmlFor="latitude" required>
                     <input
-                      id="contactEmail"
-                      type="email"
-                      value={values.contactEmail}
-                      onChange={(event) => update("contactEmail", event.target.value)}
-                      placeholder="name@organisation.com"
-                      className={inputClass}
+                      id="latitude"
+                      readOnly
+                      value={Number.isFinite(values.place.lat) ? values.place.lat.toFixed(6) : ""}
+                      className={cn(inputClass, "text-gray-500")}
                     />
                   </Field>
-                  <Field label="Phone" htmlFor="contactPhone">
+                  <Field label="Longitude" htmlFor="longitude" required>
                     <input
-                      id="contactPhone"
-                      type="tel"
-                      value={values.contactPhone}
-                      onChange={(event) => update("contactPhone", event.target.value)}
-                      placeholder="e.g. 0412 345 678"
-                      className={inputClass}
+                      id="longitude"
+                      readOnly
+                      value={Number.isFinite(values.place.lon) ? values.place.lon.toFixed(6) : ""}
+                      className={cn(inputClass, "text-gray-500")}
                     />
                   </Field>
                 </div>
               </div>
             </FormSection>
 
-            <FormSection title="2. Enterprise structure" hint="Optional · managed in Settings">
+            <FormSection title="2. Site Admin" hint="Required · this person is the site contact">
+              <div className="space-y-3 p-3.5">
+                <p className="font-saveful text-xs text-gray-500">
+                  A Site Admin is required. Without one, nobody can operate this site.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["invite", "Invite new user"],
+                      ["existing", "Existing user"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => update("adminMode", id)}
+                      className={cn(
+                        "h-8 rounded-lg px-3 font-saveful-semibold text-xs transition",
+                        values.adminMode === id
+                          ? "bg-saveful-green text-white"
+                          : "bg-[#F7F6F2] text-gray-600 hover:bg-[#EFEDE6]",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {values.adminMode === "invite" ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="First name" htmlFor="inviteFirstName" required error={errors.inviteFirstName}>
+                      <input
+                        id="inviteFirstName"
+                        maxLength={80}
+                        value={values.inviteFirstName}
+                        onChange={(event) => {
+                          update("inviteFirstName", event.target.value);
+                          clearError("inviteFirstName");
+                        }}
+                        placeholder="e.g. Michael"
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Last name" htmlFor="inviteLastName" required error={errors.inviteLastName}>
+                      <input
+                        id="inviteLastName"
+                        maxLength={80}
+                        value={values.inviteLastName}
+                        onChange={(event) => {
+                          update("inviteLastName", event.target.value);
+                          clearError("inviteLastName");
+                        }}
+                        placeholder="e.g. Jones"
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Email" htmlFor="inviteEmail" required error={errors.inviteEmail}>
+                      <input
+                        id="inviteEmail"
+                        type="email"
+                        value={values.inviteEmail}
+                        onChange={(event) => {
+                          update("inviteEmail", event.target.value);
+                          clearError("inviteEmail");
+                        }}
+                        placeholder="name@organisation.com"
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Mobile" htmlFor="inviteMobile" optional>
+                      <input
+                        id="inviteMobile"
+                        type="tel"
+                        maxLength={30}
+                        value={values.inviteMobile}
+                        onChange={(event) => update("inviteMobile", event.target.value)}
+                        placeholder="e.g. 0412 345 678"
+                        className={inputClass}
+                      />
+                    </Field>
+                    <p className="font-saveful text-xs text-gray-500 sm:col-span-2">
+                      These details are saved as the site contact. They set their own password from the invitation email.
+                    </p>
+                  </div>
+                ) : null}
+
+                {values.adminMode === "existing" ? (
+                  <div className="space-y-3">
+                    <Field label="User" htmlFor="existingUserId" required error={errors.existingUserId}>
+                      <select
+                        id="existingUserId"
+                        value={values.existingUserId}
+                        onChange={(event) => {
+                          update("existingUserId", event.target.value);
+                          clearError("existingUserId");
+                        }}
+                        className={inputClass}
+                      >
+                        <option value="">Select a user</option>
+                        {assignableUsers.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name} · {user.email}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    {siteContact ? (
+                      <div className="grid grid-cols-1 gap-3 rounded-xl bg-[#F7F6F2] px-3.5 py-3 sm:grid-cols-3">
+                        <ContactPreview label="Name" value={siteContact.name} />
+                        <ContactPreview label="Email" value={siteContact.email} />
+                        <ContactPreview label="Mobile" value={siteContact.mobile} />
+                      </div>
+                    ) : (
+                      <p className="font-saveful text-xs text-gray-500">
+                        Their name, email and mobile become the site contact.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </FormSection>
+
+            <FormSection title="3. Enterprise structure" optional hint="Managed in Settings">
               <div className="grid grid-cols-1 gap-3 p-3.5 md:grid-cols-3">
                 <StructureField
                   label="Group"
@@ -247,10 +438,13 @@ export function SiteForm({
               </div>
             </FormSection>
 
-            <FormSection title="3. Collection information" hint="Defaults for new listings">
+            <FormSection title="4. Collection information" optional hint="Defaults for new listings">
               <div className="space-y-4 p-3.5">
                 <div>
-                  <p className="mb-2 font-saveful text-xs text-gray-500">Days available</p>
+                  <p className="mb-2 flex items-center gap-1.5 font-saveful text-xs text-gray-500">
+                    Days available
+                    <span className="font-saveful text-[11px] text-gray-400">Optional</span>
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     {WEEKDAYS.map((day) => {
                       const checked = values.collectionDays.includes(day.id);
@@ -281,7 +475,7 @@ export function SiteForm({
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="From" htmlFor="collectionFrom">
+                  <Field label="Collection start" htmlFor="collectionFrom" optional>
                     <select
                       id="collectionFrom"
                       value={values.collectionFrom}
@@ -295,7 +489,7 @@ export function SiteForm({
                       ))}
                     </select>
                   </Field>
-                  <Field label="To" htmlFor="collectionTo">
+                  <Field label="Collection end" htmlFor="collectionTo" optional>
                     <select
                       id="collectionTo"
                       value={values.collectionTo}
@@ -311,7 +505,7 @@ export function SiteForm({
                   </Field>
                 </div>
 
-                <Field label="Collection instructions" htmlFor="collectionInstructions">
+                <Field label="Collection instructions" htmlFor="collectionInstructions" optional>
                   <div className="relative">
                     <textarea
                       id="collectionInstructions"
@@ -329,120 +523,6 @@ export function SiteForm({
                 </Field>
               </div>
             </FormSection>
-
-            <FormSection title="4. Site Admin" hint="Optional">
-              <div className="space-y-2 p-3.5">
-                <div className="flex flex-wrap gap-1.5">
-                  {(
-                    [
-                      ["invite", "Invite new user"],
-                      ["existing", "Existing user"],
-                      ["later", "Assign later"],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => update("adminMode", id)}
-                      className={cn(
-                        "h-8 rounded-lg px-3 font-saveful-semibold text-xs transition",
-                        values.adminMode === id
-                          ? "bg-saveful-green text-white"
-                          : "bg-[#F7F6F2] text-gray-600 hover:bg-[#EFEDE6]",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {values.adminMode === "invite" ? (
-                  <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
-                    <Field label="First name" htmlFor="inviteFirstName" error={errors.inviteFirstName}>
-                      <input
-                        id="inviteFirstName"
-                        value={values.inviteFirstName}
-                        onChange={(event) => {
-                          update("inviteFirstName", event.target.value);
-                          clearError("inviteFirstName");
-                        }}
-                        placeholder="e.g. Michael"
-                        className={inputClass}
-                      />
-                    </Field>
-                    <Field label="Last name" htmlFor="inviteLastName" error={errors.inviteLastName}>
-                      <input
-                        id="inviteLastName"
-                        value={values.inviteLastName}
-                        onChange={(event) => {
-                          update("inviteLastName", event.target.value);
-                          clearError("inviteLastName");
-                        }}
-                        placeholder="e.g. Jones"
-                        className={inputClass}
-                      />
-                    </Field>
-                    <Field label="Email" htmlFor="inviteEmail" error={errors.inviteEmail}>
-                      <input
-                        id="inviteEmail"
-                        type="email"
-                        value={values.inviteEmail}
-                        onChange={(event) => {
-                          update("inviteEmail", event.target.value);
-                          clearError("inviteEmail");
-                        }}
-                        placeholder="name@organisation.com"
-                        className={inputClass}
-                      />
-                    </Field>
-                    <Field label="Mobile" htmlFor="inviteMobile">
-                      <input
-                        id="inviteMobile"
-                        type="tel"
-                        value={values.inviteMobile}
-                        onChange={(event) => update("inviteMobile", event.target.value)}
-                        placeholder="e.g. 0412 345 678"
-                        className={inputClass}
-                      />
-                    </Field>
-                    <p className="font-saveful text-xs text-gray-500 sm:col-span-2">
-                      They create their own password through the invitation email.
-                    </p>
-                  </div>
-                ) : null}
-
-                {values.adminMode === "existing" ? (
-                  <div className="pt-1">
-                    <select
-                      value={values.existingUserId}
-                      onChange={(event) => {
-                        update("existingUserId", event.target.value);
-                        clearError("existingUserId");
-                      }}
-                      className={inputClass}
-                    >
-                      <option value="">Select a user</option>
-                      {listUsers()
-                        .filter((user) => user.status === "active")
-                        .map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name} · {user.email}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.existingUserId ? (
-                      <p className="mt-1.5 font-saveful text-xs text-red-600">{errors.existingUserId}</p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {values.adminMode === "later" ? (
-                  <p className="font-saveful text-xs text-gray-500">
-                    You can invite a Site Admin from Users & Access after the site is saved.
-                  </p>
-                ) : null}
-              </div>
-            </FormSection>
           </div>
         </form>
       </PortalPageShell>
@@ -453,10 +533,12 @@ export function SiteForm({
 function FormSection({
   title,
   hint,
+  optional,
   children,
 }: {
   title: string;
   hint?: string;
+  optional?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -464,6 +546,15 @@ function FormSection({
       <div className="flex items-center gap-2 border-b border-gray-100 bg-[#F7F6F2] px-3.5 py-2">
         <span className="h-3.5 w-1 rounded-full bg-saveful-green" aria-hidden />
         <h2 className="font-saveful-semibold text-xs uppercase tracking-[0.14em] text-gray-700">{title}</h2>
+        {optional ? (
+          <span className="rounded-full bg-white px-2 py-0.5 font-saveful text-[10px] uppercase tracking-wide text-gray-500">
+            Optional
+          </span>
+        ) : (
+          <span className="rounded-full bg-saveful-green/10 px-2 py-0.5 font-saveful text-[10px] uppercase tracking-wide text-saveful-green">
+            Required
+          </span>
+        )}
         {hint ? <span className="truncate font-saveful text-[11px] text-gray-400">{hint}</span> : null}
       </div>
       {children}
@@ -471,10 +562,20 @@ function FormSection({
   );
 }
 
+function ContactPreview({ label, value }: { label: string; value?: string }) {
+  return (
+    <div>
+      <p className="font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-400">{label}</p>
+      <p className="mt-1 truncate font-saveful text-sm text-gray-800">{value || "—"}</p>
+    </div>
+  );
+}
+
 function Field({
   label,
   htmlFor,
   required,
+  optional,
   hint,
   error,
   children,
@@ -482,6 +583,7 @@ function Field({
   label: string;
   htmlFor: string;
   required?: boolean;
+  optional?: boolean;
   hint?: string;
   error?: string;
   children: ReactNode;
@@ -490,7 +592,8 @@ function Field({
     <div>
       <label htmlFor={htmlFor} className="mb-1 flex items-center gap-1.5 font-saveful text-xs text-gray-500">
         {label}
-        {required ? <span className="text-red-500">*</span> : null}
+        {required ? <span className="font-saveful-semibold text-red-500">*</span> : null}
+        {optional ? <span className="font-saveful text-[11px] text-gray-400">Optional</span> : null}
         {hint ? (
           <span title={hint} className="text-gray-400">
             <CircleHelp className="h-3.5 w-3.5" />
@@ -522,6 +625,7 @@ function StructureField({
       <div className="mb-1 flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 font-saveful text-xs text-gray-500">
           {label}
+          <span className="font-saveful text-[11px] text-gray-400">Optional</span>
           <span title={hint} className="text-gray-400">
             <CircleHelp className="h-3.5 w-3.5" />
           </span>

@@ -16,6 +16,8 @@ export interface LoginFormConfig {
   title: string;
   subtitle: string;
   emailPlaceholder?: string;
+  initialEmail?: string;
+  initialInfo?: string;
   showLogo?: boolean;
   badge?: string;
   onBack?: () => void;

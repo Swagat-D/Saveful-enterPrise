@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { RotateCcw } from "lucide-react";
+import { MoreVertical, RotateCcw } from "lucide-react";
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
 import { PortalPageShell } from "@/components/ui/Portal";
 import {
@@ -85,24 +86,24 @@ export function AdminPage({
         {workspace ? (
           <>
             <section className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
+              <header className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div className="min-w-0">
-                  <h1 className="truncate font-saveful-bold text-xl leading-none text-gray-900">{title}</h1>
-                  {hint ? <p className="mt-1 truncate font-saveful text-xs text-gray-500">{hint}</p> : null}
+                  <h1 className="font-saveful-bold text-xl leading-none text-gray-900">{title}</h1>
+                  {hint ? <p className="mt-1 font-saveful text-xs text-gray-500">{hint}</p> : null}
                 </div>
-                {actions ? <div className="shrink-0">{actions}</div> : null}
+                {actions ? <div className="w-full shrink-0 sm:w-auto">{actions}</div> : null}
               </header>
             </section>
             <div className="space-y-3">{children}</div>
           </>
         ) : (
           <section className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-            <header className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 sm:px-5">
+            <header className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <div className="min-w-0">
-                <h1 className="truncate font-saveful-bold text-xl leading-none text-gray-900">{title}</h1>
-                {hint ? <p className="mt-1 truncate font-saveful text-xs text-gray-500">{hint}</p> : null}
+                <h1 className="font-saveful-bold text-xl leading-none text-gray-900">{title}</h1>
+                {hint ? <p className="mt-1 font-saveful text-xs text-gray-500">{hint}</p> : null}
               </div>
-              {actions ? <div className="shrink-0">{actions}</div> : null}
+              {actions ? <div className="w-full shrink-0 sm:w-auto">{actions}</div> : null}
             </header>
             <div className="space-y-4 p-4 sm:p-5">{children}</div>
           </section>
@@ -351,6 +352,98 @@ export function TablePager({
         </div>
       </div>
     </div>
+  );
+}
+
+export function AdminRowMenu({
+  label,
+  open,
+  onOpenChange,
+  children,
+}: {
+  label: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: ReactNode;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const place = () => {
+    const button = buttonRef.current;
+    const menu = menuRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) {
+      setPos(null);
+      return;
+    }
+    const width = menu?.offsetWidth || 176;
+    const height = menu?.offsetHeight || 132;
+    const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+    const below = rect.bottom + 6;
+    const top = below + height > window.innerHeight - 8 ? Math.max(8, rect.top - height - 6) : below;
+    setPos({ top, left });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    place();
+    const frame = requestAnimationFrame(place);
+    const onDoc = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      onOpenChangeRef.current(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChangeRef.current(false);
+    };
+    document.addEventListener("click", onDoc);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("click", onDoc);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => onOpenChange(!open)}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-[#F7F6F2]"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && pos
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              style={{ top: pos.top, left: pos.left }}
+              className="fixed z-[90] w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg"
+            >
+              {children}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

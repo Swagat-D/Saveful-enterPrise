@@ -79,6 +79,8 @@ export type OrganizationSite = {
   collectionFrom?: string;
   collectionTo?: string;
   collectionInstructions?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";

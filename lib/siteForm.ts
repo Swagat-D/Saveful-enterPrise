@@ -1,3 +1,4 @@
+import type { CreateOrganisationSiteInput } from "@/lib/api";
 import { demoSites } from "@/lib/demo";
 import { resolveSite } from "@/lib/orgStructure";
 import { listUsers } from "@/lib/users";
@@ -32,15 +33,12 @@ export const TIME_OPTIONS = Array.from({ length: 34 }, (_, index) => {
   return { value, label: `${displayHour}:${String(minute).padStart(2, "0")} ${suffix}` };
 });
 
-export type AdminMode = "invite" | "existing" | "later";
+export type AdminMode = "invite" | "existing";
 
 export type SiteFormValues = {
   siteName: string;
   siteCode: string;
   place: PickedLocation;
-  contactName: string;
-  contactEmail: string;
-  contactPhone: string;
   groupId: string;
   territoryId: string;
   clusterId: string;
@@ -61,9 +59,6 @@ export function emptySiteForm(): SiteFormValues {
     siteName: "",
     siteCode: "",
     place: { ...DEFAULT_MAP, address: "", postcode: "" },
-    contactName: "",
-    contactEmail: "",
-    contactPhone: "",
     groupId: "",
     territoryId: "",
     clusterId: "",
@@ -71,7 +66,7 @@ export function emptySiteForm(): SiteFormValues {
     collectionFrom: "14:00",
     collectionTo: "17:00",
     collectionInstructions: "",
-    adminMode: "later",
+    adminMode: "invite",
     inviteFirstName: "",
     inviteLastName: "",
     inviteEmail: "",
@@ -91,14 +86,11 @@ export function siteToFormValues(site: OrganizationSite): SiteFormValues {
     siteName: current.name,
     siteCode: current.siteCode,
     place: {
-      address: [current.address, current.postCode].filter(Boolean).join(", "),
+      address: current.address,
       postcode: current.postCode,
-      lat: DEFAULT_MAP.lat,
-      lon: DEFAULT_MAP.lon,
+      lat: current.latitude ?? DEFAULT_MAP.lat,
+      lon: current.longitude ?? DEFAULT_MAP.lon,
     },
-    contactName: current.primaryContact || (current.hasManager ? current.managerName : ""),
-    contactEmail: current.email !== "-" ? current.email : "",
-    contactPhone: current.mobile !== "-" ? current.mobile : "",
     groupId: current.groupId ?? "",
     territoryId: current.territoryId ?? "",
     clusterId: current.clusterId ?? "",
@@ -106,13 +98,73 @@ export function siteToFormValues(site: OrganizationSite): SiteFormValues {
     collectionFrom: site.collectionFrom ?? "14:00",
     collectionTo: site.collectionTo ?? "17:00",
     collectionInstructions: site.collectionInstructions ?? "",
-    adminMode: site.hasManager ? "existing" : "later",
+    adminMode: site.hasManager && existing ? "existing" : "invite",
     inviteFirstName: "",
     inviteLastName: "",
     inviteEmail: "",
     inviteMobile: "",
     existingUserId: existing?.id ?? "",
   };
+}
+
+export function contactFromSiteAdmin(values: SiteFormValues) {
+  if (values.adminMode === "invite") {
+    return {
+      name: `${values.inviteFirstName} ${values.inviteLastName}`.trim(),
+      email: values.inviteEmail.trim(),
+      mobile: values.inviteMobile.trim(),
+    };
+  }
+  if (values.adminMode === "existing" && values.existingUserId) {
+    const user = listUsers().find((item) => item.id === values.existingUserId);
+    if (user) {
+      return {
+        name: user.name.trim(),
+        email: user.email.trim(),
+        mobile: (user.mobile ?? "").trim(),
+      };
+    }
+  }
+  return null;
+}
+
+export function siteFormToApiInput(
+  values: SiteFormValues,
+  options: { clearUnassigned?: boolean } = {},
+): CreateOrganisationSiteInput {
+  const contact = contactFromSiteAdmin(values);
+  const contactEmail = contact?.email ?? "";
+  const contactName = contact?.name ?? "";
+  const phoneNumber = contact?.mobile ?? "";
+
+  const input: CreateOrganisationSiteInput = {
+    siteName: values.siteName.trim().slice(0, 160),
+    address: values.place.address.trim(),
+    latitude: Number(values.place.lat),
+    longitude: Number(values.place.lon),
+    collectionDays: values.collectionDays,
+    collectionStartTime: values.collectionFrom,
+    collectionEndTime: values.collectionTo,
+  };
+
+  if (values.place.postcode.trim()) input.postcode = values.place.postcode.trim().slice(0, 20);
+  if (contactName) input.contactName = contactName.slice(0, 120);
+  if (contactEmail) input.contactEmail = contactEmail.toLowerCase();
+  if (phoneNumber) input.phoneNumber = phoneNumber.slice(0, 30);
+  if (values.collectionInstructions.trim()) {
+    input.collectionInstructions = values.collectionInstructions.trim().slice(0, 500);
+  }
+
+  if (values.groupId) input.groupId = Number(values.groupId);
+  else if (options.clearUnassigned) input.groupId = null;
+
+  if (values.clusterId) input.clusterId = Number(values.clusterId);
+  else if (options.clearUnassigned) input.clusterId = null;
+
+  if (values.territoryId) input.territoryId = Number(values.territoryId);
+  else if (options.clearUnassigned) input.territoryId = null;
+
+  return input;
 }
 
 export function isSiteCodeTaken(code: string, excludeSiteId?: string) {

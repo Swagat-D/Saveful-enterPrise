@@ -84,7 +84,8 @@ export function roleHasId(role: EnterpriseRole, permission: RolePermissionId) {
 export function sitePermissions(user: SessionUser | null) {
   const manage = roleHas(user, "manageSites");
   const role = sessionRole(user);
-  const add = manage && role !== "site_admin";
+  const add =
+    manage && (role === "enterprise_super_admin" || role === "enterprise_admin");
   return {
     view: roleHas(user, "viewSites"),
     edit: manage,

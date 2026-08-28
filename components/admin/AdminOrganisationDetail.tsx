@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -28,25 +28,21 @@ import {
   YAxis,
 } from "recharts";
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
-import { AdminSection, FilterSelect, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
+import { AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { AdminOrgSitesTable } from "@/components/admin/AdminSites";
 import { PortalPageShell } from "@/components/ui/Portal";
 import {
-  ACCOUNT_STATUSES,
   ORG_DETAIL_TABS,
-  ORG_TYPES,
-  PARTICIPATION_ROLES,
   buildOrgDetail,
   orgTypeLabel,
   parseOrgDetailTab,
   participationLabel,
   planLabel,
+  refreshOrganisationDetail,
   updateOrganisation,
   useAdminVersion,
-  type AdminOrgStatus,
   type OrgDetailTab,
   type OrgTypeId,
-  type ParticipationRoleId,
 } from "@/lib/admin";
 import { listAdminAudit, useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
@@ -75,6 +71,10 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
   const [period, setPeriod] = useState<PeriodKey>("30");
   const [menuOpen, setMenuOpen] = useState(false);
   const model = buildOrgDetail(id, period);
+
+  useEffect(() => {
+    void refreshOrganisationDetail(id).catch(() => undefined);
+  }, [id]);
 
   const setTab = (next: OrgDetailTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -165,7 +165,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
               </div>
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-7">
-              <Meta label="Organisation ID" value={profile.code} />
+              <Meta label="Enterprise ID" value={profile.code} />
               <Meta label="Primary contact" value={profile.contactName} />
               <Meta label="Email" value={profile.contactEmail} />
               <Meta label="Phone" value={profile.contactPhone} />
@@ -234,11 +234,10 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
             {tab === "insights" ? <InsightsTab model={model} /> : null}
             {tab === "account" ? (
               <AccountTab
-                orgId={org.id}
-                type={org.type}
-                roles={org.roles}
+                orgName={org.name}
+                typeLabel={orgTypeLabel(org.type)}
+                roleLabel={participationLabel(org.roles)}
                 status={org.status}
-                actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }}
                 profile={profile}
                 plan={planLabel(org.plan)}
                 activityStatus={model.activityStatus}
@@ -468,85 +467,67 @@ function InsightsTab({ model }: { model: NonNullable<ReturnType<typeof buildOrgD
 }
 
 function AccountTab({
-  orgId,
-  type,
-  roles,
+  orgName,
+  typeLabel,
+  roleLabel,
   status,
-  actor,
   profile,
   plan,
   activityStatus,
 }: {
-  orgId: string;
-  type: OrgTypeId;
-  roles: ParticipationRoleId[];
-  status: AdminOrgStatus;
-  actor: { name: string; email: string };
+  orgName: string;
+  typeLabel: string;
+  roleLabel: string;
+  status: string;
   profile: ReturnType<typeof buildOrgDetail> extends infer T ? T extends { profile: infer P } ? P : never : never;
   plan: string;
   activityStatus: string;
 }) {
-  const [nextType, setNextType] = useState(type);
-  const [nextRoles, setNextRoles] = useState(roles);
-  const [nextStatus, setNextStatus] = useState(status);
-  const [saved, setSaved] = useState(false);
-
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-      <AdminSection title="Organisation profile">
+      <AdminSection title="Organisation">
+        <div className="flex items-start gap-3 border-b border-gray-50 px-3.5 py-3">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F7F6F2]">
+            {profile.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.logoUrl} alt={`${orgName} logo`} className="h-full w-full object-cover" />
+            ) : (
+              <Building2 className="h-5 w-5 text-gray-400" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="font-saveful-semibold text-sm text-gray-900">{orgName}</p>
+            <p className="mt-0.5 font-saveful text-xs text-gray-500">{typeLabel} · {roleLabel}</p>
+          </div>
+        </div>
         <dl className="space-y-2 px-3.5 py-3">
-          <ImpactRow label="Organisation ID" value={profile.code} />
-          <ImpactRow label="Primary contact" value={profile.contactName} />
-          <ImpactRow label="Email" value={profile.contactEmail} />
-          <ImpactRow label="Phone" value={profile.contactPhone} />
-          <ImpactRow label="Plan" value={plan} />
-          <ImpactRow label="Contract start" value={formatDisplayDate(profile.contractStart)} />
-          <ImpactRow label="Next review" value={formatDisplayDate(profile.nextReview)} />
-          <ImpactRow label="Billing" value={profile.billing} />
+          <ImpactRow label="Enterprise ID" value={profile.code} />
+          <ImpactRow label="Address" value={profile.address || "—"} />
+          <ImpactRow label="Country" value={profile.country || "—"} />
+          <ImpactRow label="Timezone" value={profile.timezone || "—"} />
+          <ImpactRow label="Currency" value={profile.currency || "—"} />
+          <ImpactRow label="Measurement unit" value={profile.measurementUnit || "—"} />
+        </dl>
+      </AdminSection>
+      <AdminSection title="Account & contract">
+        <dl className="space-y-2 px-3.5 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="font-saveful text-sm text-gray-500">Account status</dt>
+            <StatusPill status={status} />
+          </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="font-saveful text-sm text-gray-500">Activity status</dt>
             <StatusPill status={activityStatus} />
           </div>
+          <ImpactRow label="Plan" value={plan} />
+          <ImpactRow label="Primary contact" value={profile.contactName} />
+          <ImpactRow label="Email" value={profile.contactEmail} />
+          <ImpactRow label="Phone" value={profile.contactPhone} />
+          <ImpactRow label="Joined" value={formatDisplayDate(profile.joinedAt)} />
+          <ImpactRow label="Contract start" value={formatDisplayDate(profile.contractStart)} />
+          <ImpactRow label="Contract end" value={formatDisplayDate(profile.nextReview)} />
+          <ImpactRow label="Billing" value={profile.billing} />
         </dl>
-      </AdminSection>
-      <AdminSection
-        title="Saveful Admin controls"
-        action={<span className="rounded-full bg-saveful-green/10 px-2 py-0.5 font-saveful text-[10px] uppercase tracking-wide text-saveful-green">Saveful only</span>}
-      >
-        <div className="space-y-3 p-3.5">
-          <p className="font-saveful text-xs text-gray-500">These fields are edited by Saveful Admin, not the customer.</p>
-          <FilterSelect label="Organisation Type" value={nextType} onChange={(value) => { setNextType(value as OrgTypeId); setSaved(false); }} options={ORG_TYPES.map((item) => ({ id: item.id, name: item.label }))} />
-          <FilterSelect label="Account status" value={nextStatus} onChange={(value) => { setNextStatus(value as AdminOrgStatus); setSaved(false); }} options={ACCOUNT_STATUSES.map((item) => ({ id: item.id, name: item.label }))} />
-          <div>
-            <p className="mb-1.5 font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">Participation role</p>
-            <div className="flex flex-wrap gap-2">
-              {PARTICIPATION_ROLES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setNextRoles((current) => (current.includes(item.id) ? current.filter((role) => role !== item.id) : [...current, item.id]));
-                    setSaved(false);
-                  }}
-                  className={cn("rounded-full px-3 py-1 font-saveful text-xs", nextRoles.includes(item.id) ? "bg-saveful-green text-white" : "bg-[#F7F6F2] text-gray-700")}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              updateOrganisation(orgId, { type: nextType, roles: nextRoles, status: nextStatus }, actor);
-              setSaved(true);
-            }}
-            className="h-9 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
-          >
-            Save admin changes
-          </button>
-          {saved ? <p className="font-saveful text-xs text-emerald-700">Saved and written to the admin audit log.</p> : null}
-        </div>
       </AdminSection>
     </div>
   );

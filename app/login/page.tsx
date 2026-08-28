@@ -42,6 +42,12 @@ function LoginScreen() {
               subtitle: "Sign in to manage your organisation, sites and impact.",
               emailPlaceholder: "you@yourbusiness.com",
               badge: "Enterprise",
+              initialEmail: searchParams.get("email") ?? "",
+              initialInfo: searchParams.get("activated")
+                ? "Your account is ready. Sign in with the password you created."
+                : searchParams.get("already")
+                  ? "This account is already active. Sign in to continue."
+                  : "",
               onBack: () => selectPortal(null),
               onSubmit: async (credentials) => {
                 await login(credentials);

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Building2, Check, Eye, EyeOff, Lock, Shield } from "lucide-react";
-import { acceptInvitation, ApiError, describeInvitation, type InvitationPreview } from "@/lib/api";
+import { acceptInvitation, ApiError, type InvitationPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const TERMS_HREF = "https://www.saveful.com/saveful-for-business-terms-conditions";
@@ -32,13 +34,19 @@ function fieldClass(extra?: string) {
   );
 }
 
-export function ActivateAccountScreen() {
-  const [token, setToken] = useState("");
-  const [preview, setPreview] = useState<InvitationPreview | null>(null);
-  const [loading, setLoading] = useState(true);
+export function ActivateAccountScreen({
+  token,
+  preview,
+  error: initialError,
+}: {
+  token: string;
+  preview: InvitationPreview | null;
+  error: string;
+  alreadyActive?: boolean;
+}) {
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [alreadyActive, setAlreadyActive] = useState(false);
+  const [error, setError] = useState(initialError);
   const [done, setDone] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -46,34 +54,19 @@ export function ActivateAccountScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const signInHref = preview?.email
+    ? `/login?portal=enterprise&activated=1&email=${encodeURIComponent(preview.email)}`
+    : "/login?portal=enterprise&activated=1";
+
+  const goToSignIn = () => router.replace(signInHref);
+
   useEffect(() => {
-    const next = new URLSearchParams(window.location.search).get("token")?.trim() ?? "";
-    setToken(next);
-    if (!next) {
-      setError("This activation link is missing its token. Open the link from your invitation email.");
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    describeInvitation(next)
-      .then((data) => {
-        if (!cancelled) setPreview(data);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const message = err instanceof ApiError || err instanceof Error ? err.message : "This invitation is not valid.";
-        if (message.toLowerCase().includes("already active") || message.toLowerCase().includes("already been used")) {
-          setAlreadyActive(true);
-        }
-        setError(message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!done) return;
+    const timer = window.setTimeout(() => {
+      router.replace(signInHref);
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [done, router, signInHref]);
 
   const rules = passwordRules(password);
   const passwordReady = rules.every((rule) => rule.ok);
@@ -107,17 +100,8 @@ export function ActivateAccountScreen() {
   return (
     <div className="min-h-screen bg-[#FAF7F0] px-4 py-10 sm:px-6 sm:py-14">
       <div className="mx-auto w-full max-w-[720px]">
-        {loading ? (
-          <p className="font-saveful text-sm text-gray-500">Checking your invitation…</p>
-        ) : done ? (
-          <StatusBlock
-            title="Account activated"
-            body={`You can now sign in to ${preview?.enterprise ?? "your Enterprise"} with the password you just created.`}
-          />
-        ) : alreadyActive ? (
-          <StatusBlock title="Already activated" body={error || "This account is already active. Please sign in."} />
-        ) : preview ? (
-          <form onSubmit={onSubmit}>
+        {preview ? (
+          <form onSubmit={onSubmit} className={cn(done && "pointer-events-none opacity-60")}>
             <h1 className="font-saveful-bold text-[28px] leading-tight text-saveful-green sm:text-[34px]">
               You&rsquo;ve been invited to Saveful for Business
             </h1>
@@ -208,7 +192,7 @@ export function ActivateAccountScreen() {
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || done}
               className="mt-6 h-12 w-full rounded-lg bg-saveful-green font-saveful-semibold text-white disabled:opacity-50"
             >
               {saving ? "Activating…" : "Activate Account"}
@@ -220,6 +204,38 @@ export function ActivateAccountScreen() {
           <StatusBlock title="Invitation not valid" body={error} />
         )}
       </div>
+      {done && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/40" />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="activation-success-title"
+                className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl sm:p-7"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-saveful-green/10 text-saveful-green">
+                  <Check className="h-5 w-5" strokeWidth={2.5} />
+                </span>
+                <h2 id="activation-success-title" className="mt-4 font-saveful-bold text-xl text-gray-900">
+                  Account activated
+                </h2>
+                <p className="mt-2 font-saveful text-sm leading-relaxed text-gray-600">
+                  You can now sign in to {preview?.enterprise ?? "your Enterprise"} with the password you just created.
+                </p>
+                <button
+                  type="button"
+                  onClick={goToSignIn}
+                  className="mt-6 h-11 w-full rounded-lg bg-saveful-green font-saveful-semibold text-sm text-white"
+                >
+                  Continue to sign in
+                </button>
+                <p className="mt-3 text-center font-saveful text-xs text-gray-400">Taking you to sign in…</p>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -32,21 +32,19 @@ function Banner({
   tone,
   message,
 }: {
-  tone: "error" | "info";
+  tone: "error" | "info" | "success";
   message: string;
 }) {
   if (!message) return null;
-  const isError = tone === "error";
+  const style =
+    tone === "error"
+      ? "border-red-500 bg-red-50 text-red-700"
+      : tone === "success"
+        ? "border-saveful-green bg-saveful-green/[0.08] text-saveful-green"
+        : "border-blue-500 bg-blue-50 text-blue-700";
   return (
-    <div
-      className={cn(
-        "flex items-start gap-3 rounded-xl border-l-4 p-4",
-        isError ? "border-red-500 bg-red-50" : "border-blue-500 bg-blue-50",
-      )}
-    >
-      <p className={cn("text-sm font-medium", isError ? "text-red-700" : "text-blue-700")}>
-        {message}
-      </p>
+    <div className={cn("flex items-start gap-3 rounded-xl border-l-4 p-4", style)}>
+      <p className="text-sm font-medium">{message}</p>
     </div>
   );
 }
@@ -56,7 +54,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
   const badge = config.badge ?? "Enterprise";
   const [view, setView] = useState<View>("login");
   const [credentials, setCredentials] = useState<LoginCredentials>({
-    email: "",
+    email: config.initialEmail ?? "",
     password: "",
   });
   const [forgotEmail, setForgotEmail] = useState("");
@@ -65,7 +63,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
+  const [info, setInfo] = useState(config.initialInfo ?? "");
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -111,6 +109,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
           </div>
           <form className="space-y-6" onSubmit={handleLoginSubmit}>
             <Banner tone="error" message={error} />
+            <Banner tone={config.initialInfo ? "success" : "info"} message={info} />
             <LabelInputContainer>
               <Label htmlFor="email">Email Address</Label>
               <Input

@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   ClipboardList,
   Info,
   Leaf,
   MapPin,
-  MoreVertical,
   ImagePlus,
   Plus,
   RotateCcw,
@@ -17,7 +17,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { AdminPage, AdminSection, FilterSelect, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
+import { AdminPage, AdminRowMenu, AdminSection, FilterSelect, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
+import { MoreFilters } from "@/components/network/FilterBar";
 import {
   ACCOUNT_STATUSES,
   ADMIN_COUNTRIES,
@@ -35,6 +36,7 @@ import {
   planLabel,
   roleShortLabel,
   updateOrganisation,
+  type AdminOrganisation,
 } from "@/lib/admin";
 import type { ApiRegion, MeasurementUnit } from "@/lib/api";
 import { ApiError } from "@/lib/api";
@@ -57,6 +59,7 @@ export function AdminOrganisations() {
 
   useEffect(() => {
     setPage(1);
+    setMenuId(null);
   }, [filters.q, filters.orgType, filters.role, filters.state, filters.accountStatus, filters.activityStatus, filters.plan, filters.country, pageSize]);
 
   const pageCount = Math.max(1, Math.ceil(directory.organisations.length / pageSize));
@@ -81,6 +84,70 @@ export function AdminOrganisations() {
     filters.activityStatus !== "all" ||
     filters.plan !== "all";
 
+  const filterCount = [
+    filters.orgType !== "all",
+    filters.role !== "all",
+    filters.state !== "all",
+    filters.accountStatus !== "all",
+    filters.activityStatus !== "all",
+    filters.plan !== "all",
+  ].filter(Boolean).length;
+
+  const renderFilterFields = () => (
+    <>
+      <FilterSelect
+        compact
+        label="Organisation Type"
+        value={filters.orgType}
+        onChange={(orgType) => update({ orgType: orgType as typeof filters.orgType, organisationId: "all" })}
+        options={[{ id: "all", name: "All" }, ...ORG_TYPES.map((item) => ({ id: item.id, name: item.label }))]}
+      />
+      <FilterSelect
+        compact
+        label="Participation Role"
+        value={filters.role}
+        onChange={(role) => update({ role: role as typeof filters.role, organisationId: "all" })}
+        options={[
+          { id: "all", name: "All" },
+          ...PARTICIPATION_ROLES.map((item) => ({ id: item.id, name: item.label })),
+          { id: "both", name: "Both" },
+        ]}
+      />
+      <FilterSelect
+        compact
+        label="Territory"
+        value={filters.state}
+        onChange={(state) => update({ state, organisationId: "all" })}
+        options={[{ id: "all", name: "All" }, ...directory.territories.map((id) => ({ id, name: id }))]}
+      />
+      <FilterSelect
+        compact
+        label="Account Status"
+        value={filters.accountStatus}
+        onChange={(accountStatus) => update({ accountStatus: accountStatus as typeof filters.accountStatus })}
+        options={[{ id: "all", name: "All" }, ...ACCOUNT_STATUSES.map((item) => ({ id: item.id, name: item.label }))]}
+      />
+      <FilterSelect
+        compact
+        label="Activity Status"
+        value={filters.activityStatus}
+        onChange={(activityStatus) => update({ activityStatus: activityStatus as typeof filters.activityStatus })}
+        options={[
+          { id: "all", name: "All" },
+          { id: "active", name: "Active" },
+          { id: "inactive", name: "Inactive" },
+        ]}
+      />
+      <FilterSelect
+        compact
+        label="Plan"
+        value={filters.plan}
+        onChange={(plan) => update({ plan: plan as typeof filters.plan })}
+        options={[{ id: "all", name: "All" }, ...ORG_PLANS.map((item) => ({ id: item.id, name: item.label }))]}
+      />
+    </>
+  );
+
   return (
     <AdminPage
       crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
@@ -90,16 +157,16 @@ export function AdminOrganisations() {
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
+          className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white sm:w-auto"
         >
           <Plus className="h-3.5 w-3.5" />
           Add Organisation
         </button>
       }
     >
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="flex items-end gap-2 overflow-x-auto px-3 py-2.5">
-          <label className="min-w-[200px] flex-1">
+      <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
+          <label className="min-w-0 flex-1">
             <span className="mb-1 block truncate font-saveful text-[10px] uppercase tracking-[0.12em] text-gray-500">Search</span>
             <span className="relative block">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
@@ -111,64 +178,39 @@ export function AdminOrganisations() {
               />
             </span>
           </label>
-          <div className="grid min-w-[760px] flex-[2] grid-cols-6 gap-2">
-            <FilterSelect
-              compact
-              label="Organisation Type"
-              value={filters.orgType}
-              onChange={(orgType) => update({ orgType: orgType as typeof filters.orgType, organisationId: "all" })}
-              options={[{ id: "all", name: "All" }, ...ORG_TYPES.map((item) => ({ id: item.id, name: item.label }))]}
-            />
-            <FilterSelect
-              compact
-              label="Participation Role"
-              value={filters.role}
-              onChange={(role) => update({ role: role as typeof filters.role, organisationId: "all" })}
-              options={[
-                { id: "all", name: "All" },
-                ...PARTICIPATION_ROLES.map((item) => ({ id: item.id, name: item.label })),
-                { id: "both", name: "Both" },
-              ]}
-            />
-            <FilterSelect
-              compact
-              label="Territory"
-              value={filters.state}
-              onChange={(state) => update({ state, organisationId: "all" })}
-              options={[{ id: "all", name: "All" }, ...directory.territories.map((id) => ({ id, name: id }))]}
-            />
-            <FilterSelect
-              compact
-              label="Account Status"
-              value={filters.accountStatus}
-              onChange={(accountStatus) => update({ accountStatus: accountStatus as typeof filters.accountStatus })}
-              options={[{ id: "all", name: "All" }, ...ACCOUNT_STATUSES.map((item) => ({ id: item.id, name: item.label }))]}
-            />
-            <FilterSelect
-              compact
-              label="Activity Status"
-              value={filters.activityStatus}
-              onChange={(activityStatus) => update({ activityStatus: activityStatus as typeof filters.activityStatus })}
-              options={[
-                { id: "all", name: "All" },
-                { id: "active", name: "Active" },
-                { id: "inactive", name: "Inactive" },
-              ]}
-            />
-            <FilterSelect
-              compact
-              label="Plan"
-              value={filters.plan}
-              onChange={(plan) => update({ plan: plan as typeof filters.plan })}
-              options={[{ id: "all", name: "All" }, ...ORG_PLANS.map((item) => ({ id: item.id, name: item.label }))]}
-            />
+          <div className="lg:hidden">
+            <MoreFilters
+              count={filterCount}
+              summary={
+                [
+                  ORG_TYPES.find((item) => item.id === filters.orgType)?.label,
+                  filters.role !== "all" ? (filters.role === "both" ? "Both" : PARTICIPATION_ROLES.find((item) => item.id === filters.role)?.label) : "",
+                  filters.state !== "all" ? filters.state : "",
+                  ACCOUNT_STATUSES.find((item) => item.id === filters.accountStatus)?.label,
+                  filters.activityStatus !== "all" ? (filters.activityStatus === "active" ? "Active" : "Inactive") : "",
+                  ORG_PLANS.find((item) => item.id === filters.plan)?.label,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "All organisations"
+              }
+              title="Filter organisations"
+              subtitle="Refine the directory without shrinking the list."
+              onReset={() => reset()}
+            >
+              <div className="grid grid-cols-1 gap-3">
+                {renderFilterFields()}
+              </div>
+            </MoreFilters>
+          </div>
+          <div className="hidden min-w-0 flex-[2] grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6 lg:grid">
+            {renderFilterFields()}
           </div>
           <button
             type="button"
             onClick={() => reset()}
             disabled={!directoryActive}
             className={cn(
-              "mb-px inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful-semibold text-xs text-gray-500",
+              "hidden h-8 shrink-0 items-center gap-1 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful-semibold text-xs text-gray-500 lg:inline-flex",
               directoryActive ? "hover:text-saveful-green" : "opacity-40",
             )}
           >
@@ -214,7 +256,7 @@ export function AdminOrganisations() {
       </div>
 
       <AdminSection title={`Organisations (${formatCount(directory.organisations.length)})`}>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="min-w-full text-left">
             <thead>
               <tr className="border-b border-gray-100 font-saveful text-[11px] uppercase tracking-wide text-gray-400">
@@ -253,72 +295,69 @@ export function AdminOrganisations() {
                       <StatusPill status={org.status} />
                     </td>
                     <td className="px-3 py-2.5 font-saveful text-sm text-gray-700">{planLabel(org.plan)}</td>
-                    <td className="relative px-3 py-2.5">
-                      <button
-                        type="button"
-                        aria-label={`Actions for ${org.name}`}
-                        onClick={() => setMenuId(menuId === org.id ? null : org.id)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-[#F7F6F2]"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
-                      {menuId === org.id ? (
-                        <div className="absolute right-3 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-                          <Link
-                            href={`/admin/organisations/${org.id}${query}`}
-                            className="block px-3 py-2 font-saveful text-sm text-gray-700 hover:bg-[#FAF7F0]"
-                            onClick={() => setMenuId(null)}
-                          >
-                            View details
-                          </Link>
-                          <Link
-                            href={`/admin/organisations/${org.id}${query}`}
-                            className="block px-3 py-2 font-saveful text-sm text-gray-700 hover:bg-[#FAF7F0]"
-                            onClick={() => setMenuId(null)}
-                          >
-                            Edit classification
-                          </Link>
-                          <button
-                            type="button"
-                            className="block w-full px-3 py-2 text-left font-saveful text-sm text-gray-700 hover:bg-[#FAF7F0]"
-                            onClick={() => {
-                              updateOrganisation(
-                                org.id,
-                                { status: org.status === "Suspended" ? "Active" : "Suspended" },
-                                { name: user?.name ?? "Saveful Admin", email: user?.email ?? "" },
-                              );
-                              setMenuId(null);
-                            }}
-                          >
-                            {org.status === "Suspended" ? "Reactivate account" : "Suspend account"}
-                          </button>
-                        </div>
-                      ) : null}
+                    <td className="px-3 py-2.5">
+                      <OrgActionsMenu
+                        org={org}
+                        query={query}
+                        open={menuId === org.id}
+                        onOpenChange={(open) => setMenuId(open ? org.id : null)}
+                        actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }}
+                      />
                     </td>
                   </tr>
                 );
               })}
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center font-saveful text-sm text-gray-500">
-                    No organisations match these filters.
-                  </td>
-                </tr>
-              ) : null}
             </tbody>
           </table>
         </div>
-        <TablePager
-          page={current}
-          pageSize={pageSize}
-          total={directory.organisations.length}
-          noun="organisations"
-          onPage={setPage}
-          onPageSize={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
-        />
+        <div className="divide-y divide-gray-100 lg:hidden">
+          {rows.map((org) => {
+            const counts = orgCounts(org.id, filters.period);
+            return (
+              <article key={org.id} className="flex items-start gap-3 px-3.5 py-3">
+                <div className="min-w-0 flex-1">
+                  <Link href={`/admin/organisations/${org.id}${query}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">
+                    {org.name}
+                  </Link>
+                  <p className="font-saveful text-[11px] text-gray-400">{org.enterpriseId ? `${org.enterpriseId} · ${org.country}` : org.country}</p>
+                  <p className="mt-1.5 font-saveful text-xs text-gray-500">
+                    {orgTypeLabel(org.type)} · {roleShortLabel(org.roles)} · {org.state}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <StatusPill status={counts.activityStatus} />
+                    <StatusPill status={org.status} />
+                    <span className="font-saveful text-[11px] text-gray-500">{planLabel(org.plan)}</span>
+                  </div>
+                  <p className="mt-1.5 font-saveful text-[11px] text-gray-400">
+                    {formatCount(counts.sites)} sites · {formatCount(counts.users)} users
+                  </p>
+                </div>
+                <OrgActionsMenu
+                  org={org}
+                  query={query}
+                  open={menuId === org.id}
+                  onOpenChange={(open) => setMenuId(open ? org.id : null)}
+                  actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }}
+                />
+              </article>
+            );
+          })}
+        </div>
+        {rows.length === 0 ? (
+          <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">No organisations match these filters.</p>
+        ) : (
+          <TablePager
+            page={current}
+            pageSize={pageSize}
+            total={directory.organisations.length}
+            noun="organisations"
+            onPage={setPage}
+            onPageSize={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+        )}
       </AdminSection>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -627,6 +666,53 @@ export function AddOrganisationForm({
       </form>
     </div>,
     document.body,
+  );
+}
+
+function OrgActionsMenu({
+  org,
+  query,
+  open,
+  onOpenChange,
+  actor,
+}: {
+  org: AdminOrganisation;
+  query: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  actor: { name: string; email: string };
+}) {
+  const router = useRouter();
+  const detailsHref = `/admin/organisations/${org.id}${query}`;
+  const accountHref = `/admin/organisations/${org.id}${query ? `${query}&tab=account` : "?tab=account"}`;
+  const itemClass = "block w-full px-3 py-2 text-left font-saveful text-sm text-gray-700 hover:bg-[#FAF7F0]";
+  const go = (href: string) => {
+    onOpenChange(false);
+    router.push(href);
+  };
+  return (
+    <AdminRowMenu label={`Actions for ${org.name}`} open={open} onOpenChange={onOpenChange}>
+      <button type="button" role="menuitem" className={itemClass} onClick={() => go(detailsHref)}>
+        View details
+      </button>
+      <button type="button" role="menuitem" className={itemClass} onClick={() => go(accountHref)}>
+        Edit classification
+      </button>
+      <button
+        type="button"
+        className={itemClass}
+        onClick={() => {
+          updateOrganisation(
+            org.id,
+            { status: org.status === "Suspended" ? "Active" : "Suspended" },
+            actor,
+          );
+          onOpenChange(false);
+        }}
+      >
+        {org.status === "Suspended" ? "Reactivate account" : "Suspend account"}
+      </button>
+    </AdminRowMenu>
   );
 }
 

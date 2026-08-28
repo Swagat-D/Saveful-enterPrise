@@ -13,7 +13,14 @@ import { replaceStructure } from "@/lib/orgStructure";
 import { mapEnterpriseRole, scopeFromApi } from "@/lib/enterpriseRole";
 import { replaceNetworkSites, replaceNetworkUnits } from "@/lib/network";
 import { replaceUsers } from "@/lib/users";
-import type { DirectoryUser, DirectoryUserStatus, OrganizationSite } from "@/types/enterprise";
+import type { DirectoryUser, DirectoryUserStatus, OrganizationSite, Weekday } from "@/types/enterprise";
+
+const WEEKDAYS: Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+function toWeekdays(days?: string[]): Weekday[] | undefined {
+  if (!days?.length) return undefined;
+  return days.filter((day): day is Weekday => WEEKDAYS.includes(day as Weekday));
+}
 
 function toStatus(status: string): DirectoryUserStatus {
   const value = status.toUpperCase();
@@ -60,23 +67,36 @@ function inviteToUser(row: ApiEnterpriseInvite): DirectoryUser {
 
 function toSite(row: ApiSiteRow): OrganizationSite {
   const created = row.createdAt ?? null;
+  const contactName = row.contactName && row.contactName !== "not provided" ? row.contactName : "";
+  const manager = row.managers?.[0]?.user;
+  const managerName = manager ? `${manager.firstName ?? ""} ${manager.lastName ?? ""}`.trim() : contactName;
   return {
     id: String(row.id),
-    siteCode: `SITE-${row.id}`,
+    siteCode: row.siteCode || `SITE-${String(row.id).padStart(6, "0")}`,
     siteType: "branch",
     name: row.siteName,
     address: row.address,
     postCode: row.postcode ?? "",
-    managerName: row.contactName ?? "",
-    email: row.contactEmail ?? "",
-    mobile: row.phoneNumber ?? "",
-    hasManager: Boolean(row.contactName),
+    managerName,
+    email: row.contactEmail && row.contactEmail !== "not provided" ? row.contactEmail : manager?.email ?? "",
+    mobile: row.phoneNumber && row.phoneNumber !== "not provided" ? row.phoneNumber : "",
+    hasManager: Boolean(row.managers?.length || contactName),
     isDefault: false,
+    groupId: row.groupId != null ? String(row.groupId) : null,
+    clusterId: row.clusterId != null ? String(row.clusterId) : null,
+    territoryId: row.territoryId != null ? String(row.territoryId) : null,
     status: row.isActive === false ? "deactivated" : "active",
     createdAt: created,
     activatedAt: row.isActive === false ? null : created,
     lastActivityAt: null,
     lastListingAt: null,
+    primaryContact: contactName || null,
+    collectionDays: toWeekdays(row.collectionDays),
+    collectionFrom: row.collectionStartTime ?? undefined,
+    collectionTo: row.collectionEndTime ?? undefined,
+    collectionInstructions: row.collectionInstructions ?? undefined,
+    latitude: row.latitude,
+    longitude: row.longitude,
   };
 }
 

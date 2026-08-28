@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { appendAdminAudit, listAdminAudit } from "@/lib/adminAudit";
-import { ApiError, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
+import { ApiError, getEnterprise, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
 import { inDateRange, periodRange, previousPeriodRange } from "@/lib/dates";
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
@@ -133,6 +133,7 @@ export type AdminOrganisation = {
   users: number;
   source: "platform" | "seeded" | "created";
   enterpriseId?: string;
+  lastLoginAt?: string | null;
 };
 
 export type AdminSite = {
@@ -177,7 +178,7 @@ export type AdminOrgUser = {
   name: string;
   email: string;
   role: string;
-  status: "Active" | "Invited";
+  status: "Active" | "Invited" | "Deactivated";
   lastActiveAt: string | null;
 };
 
@@ -190,6 +191,12 @@ export type AdminOrgProfile = {
   contractStart: string;
   nextReview: string;
   billing: string;
+  address?: string;
+  timezone?: string;
+  currency?: string;
+  measurementUnit?: string;
+  country?: string;
+  logoUrl?: string | null;
 };
 
 export const ORG_DETAIL_TABS = [
@@ -217,6 +224,8 @@ let siteOverlay: Record<string, { status?: SiteLifecycleStatus }> = {};
 let createdOrgs: AdminOrganisation[] = [];
 let createdSites: AdminSite[] = [];
 let remoteOrgs: AdminOrganisation[] = [];
+let remoteOrgUsers: Record<string, AdminOrgUser[]> = {};
+let remoteOrgProfiles: Record<string, AdminOrgProfile> = {};
 let loaded = false;
 
 function site(
@@ -421,6 +430,7 @@ function mapEnterprise(row: EnterpriseListItem): AdminOrganisation {
     users: row.users,
     source: "platform",
     enterpriseId: row.enterpriseId,
+    lastLoginAt: row.lastLoginAt ?? null,
   };
 }
 
@@ -428,6 +438,12 @@ export async function refreshOrganisations() {
   const rows = await listEnterprises();
   remoteOrgs = rows.map(mapEnterprise);
   emit();
+  const needsDetail = remoteOrgs
+    .filter((org) => org.status === "Prospect" || !org.lastLoginAt)
+    .slice(0, 8);
+  if (needsDetail.length) {
+    await Promise.all(needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)));
+  }
   return listOrganisations();
 }
 
@@ -515,7 +531,12 @@ function orgMatches(filters: AdminFilters, org: AdminOrganisation) {
 }
 
 export function orgActivityStatus(orgId: string): OrgActivityStatus {
-  const { startDate, endDate } = periodRange("30");
+  const { startDate, endDate } = periodRange("30", new Date());
+  const org = getOrganisation(orgId);
+  if (org?.lastLoginAt && inDateRange(org.lastLoginAt, startDate, endDate)) return "Active";
+  if (listOrgUsers(orgId).some((row) => row.lastActiveAt && inDateRange(row.lastActiveAt, startDate, endDate))) {
+    return "Active";
+  }
   const recentSite = listSites().some((row) => row.orgId === orgId && inDateRange(row.lastActivityAt, startDate, endDate));
   if (recentSite) return "Active";
   const recentListing = listListings().some((row) => row.orgId === orgId && inDateRange(row.createdAt, startDate, endDate));
@@ -1245,23 +1266,117 @@ const ORG_PROFILES: Record<string, AdminOrgProfile> = {
   },
 };
 
+function isoDay(value?: string | null) {
+  return value ? value.slice(0, 10) : "";
+}
+
+function mapMemberStatus(status: string): AdminOrgUser["status"] {
+  if (status === "DEACTIVATED") return "Deactivated";
+  if (status === "INVITED") return "Invited";
+  return "Active";
+}
+
+function profileFromDetail(detail: EnterpriseDetail): AdminOrgProfile {
+  return {
+    code: detail.enterpriseId,
+    contactName: detail.primaryContactName?.trim() || "—",
+    contactEmail: detail.primaryContactEmail?.trim() || "—",
+    contactPhone: detail.primaryContactPhone?.trim() || "—",
+    joinedAt: isoDay(detail.createdAt),
+    contractStart: isoDay(detail.contract?.startDate),
+    nextReview: isoDay(detail.contract?.endDate),
+    billing: detail.contract?.billingFrequency || "—",
+    address: detail.address?.trim() || "—",
+    timezone: detail.timezone || "—",
+    currency: detail.currency || "—",
+    measurementUnit: detail.measurementUnit || "—",
+    country: countryLabel(detail.country),
+    logoUrl: detail.logoUrl,
+  };
+}
+
+export async function refreshOrganisationDetail(orgId: string) {
+  const detail = await getEnterprise(orgId);
+  remoteOrgProfiles[orgId] = profileFromDetail(detail);
+  const latestLogin = (detail.users ?? [])
+    .map((row) => row.lastLoginAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
+  const onboarded = (detail.users ?? []).some((row) => row.status === "ACTIVE" || row.lastLoginAt || row.joinedAt);
+  if (detail.accountStatus === "ACTIVE" || onboarded) {
+    remoteOrgs = remoteOrgs.map((org) =>
+      org.id === orgId
+        ? {
+            ...org,
+            lastLoginAt: latestLogin ?? org.lastLoginAt,
+            status: org.status === "Suspended" ? org.status : "Active",
+          }
+        : org,
+    );
+  } else if (latestLogin) {
+    remoteOrgs = remoteOrgs.map((org) => (org.id === orgId ? { ...org, lastLoginAt: latestLogin } : org));
+  }
+  const members: AdminOrgUser[] = (detail.users ?? []).map((row) => ({
+    id: String(row.id),
+    orgId,
+    name: `${row.firstName} ${row.lastName}`.trim() || row.email,
+    email: row.email,
+    role: row.roleLabel || row.role,
+    status: mapMemberStatus(row.status),
+    lastActiveAt: row.lastLoginAt ?? null,
+  }));
+  const seen = new Set(members.map((row) => row.email.toLowerCase()));
+  const invited: AdminOrgUser[] = (detail.invitations ?? [])
+    .filter((row) => !seen.has(row.email.toLowerCase()))
+    .map((row) => ({
+      id: `invite-${row.id}`,
+      orgId,
+      name: `${row.firstName} ${row.lastName}`.trim() || row.email,
+      email: row.email,
+      role: row.roleLabel || row.role,
+      status: "Invited" as const,
+      lastActiveAt: null,
+    }));
+  const hasUserPayload = Array.isArray(detail.users) || Array.isArray(detail.invitations);
+  remoteOrgUsers[orgId] =
+    members.length || invited.length
+      ? [...members, ...invited]
+      : !hasUserPayload && detail.primaryContactEmail
+        ? [
+            {
+              id: `contact-${orgId}`,
+              orgId,
+              name: detail.primaryContactName?.trim() || detail.primaryContactEmail,
+              email: detail.primaryContactEmail,
+              role: "Enterprise Super Admin",
+              status: "Active" as const,
+              lastActiveAt: null,
+            },
+          ]
+        : [];
+  emit();
+  return detail;
+}
+
 export function orgProfile(org: AdminOrganisation): AdminOrgProfile {
   return (
+    remoteOrgProfiles[org.id] ??
     ORG_PROFILES[org.id] ?? {
-      code: `ORG-${org.id.slice(0, 6).toUpperCase()}`,
-      contactName: "Primary contact",
-      contactEmail: `admin@${org.id}.org`,
+      code: org.enterpriseId || "—",
+      contactName: "—",
+      contactEmail: "—",
       contactPhone: "—",
-      joinedAt: "2026-08-01",
-      contractStart: "2026-08-01",
-      nextReview: "2027-08-01",
-      billing: "Monthly",
+      joinedAt: "",
+      contractStart: "",
+      nextReview: "",
+      billing: "—",
     }
   );
 }
 
-export function listOrgUsers(_orgId: string): AdminOrgUser[] {
-  return [];
+export function listOrgUsers(orgId: string): AdminOrgUser[] {
+  return remoteOrgUsers[orgId] ?? [];
 }
 
 export function lastOrgActivityAt(orgId: string) {

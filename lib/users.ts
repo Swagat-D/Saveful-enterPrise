@@ -398,7 +398,14 @@ export function userCoversSite(user: DirectoryUser, site: OrganizationSite) {
 }
 
 export function usersForSite(site: OrganizationSite) {
-  return users.filter((user) => userCoversSite(user, site));
+  return users.filter((user) => {
+    if (user.role === "enterprise_super_admin") return true;
+    if (user.scope.siteIds?.includes(site.id)) return true;
+    if (site.groupId && user.scope.groupIds?.includes(site.groupId)) return true;
+    if (site.territoryId && user.scope.territoryIds?.includes(site.territoryId)) return true;
+    if (site.clusterId && user.scope.clusterIds?.includes(site.clusterId)) return true;
+    return false;
+  });
 }
 
 function uniqueEmail(email: string, excludeId?: string) {

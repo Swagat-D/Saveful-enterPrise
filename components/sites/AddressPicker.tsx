@@ -139,7 +139,9 @@ export function AddressPicker({
     );
   };
 
-  const bbox = `${value.lon - 0.012},${value.lat - 0.008},${value.lon + 0.012},${value.lat + 0.008}`;
+  const latDelta = 0.01;
+  const lonDelta = (latDelta * 2.4) / Math.max(0.2, Math.cos((value.lat * Math.PI) / 180));
+  const bbox = `${value.lon - lonDelta},${value.lat - latDelta},${value.lon + lonDelta},${value.lat + latDelta}`;
   const mapSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${value.lat}%2C${value.lon}`;
 
   return (

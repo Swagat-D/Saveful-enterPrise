@@ -3,7 +3,8 @@
 import { Suspense, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download, MoreHorizontal, Plus, Search, Upload } from "lucide-react";
+import { Download, Plus, Search, Upload } from "lucide-react";
+import { AdminRowMenu } from "@/components/admin/AdminChrome";
 import { MoreFilters } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
@@ -356,7 +357,7 @@ function SitesDirectory() {
                           <td className="py-2.5 pr-3 font-saveful text-sm text-gray-700">{lookupLabel("territory", site.territoryId)}</td>
                           <td className="py-2.5 pr-3 font-saveful text-sm text-gray-700">{lookupLabel("cluster", site.clusterId)}</td>
                           <td className="py-2.5 pr-3">
-                            <StatusPill active={site.status === "active"} />
+                            <StatusPill active={getSiteStatus(site) === "active"} />
                           </td>
                           <td className="py-2.5 pr-3 font-saveful text-xs text-gray-600">
                             {ACTIVITY_LABEL[activityStatus(site, filters.period)]}
@@ -372,7 +373,7 @@ function SitesDirectory() {
                               site={site}
                               actor={user?.name || "Enterprise user"}
                               open={menuId === site.id}
-                              onToggle={() => setMenuId((current) => (current === site.id ? null : site.id))}
+                              onOpenChange={(next) => setMenuId(next ? site.id : null)}
                               permissions={permissions}
                             />
                           </td>
@@ -396,7 +397,7 @@ function SitesDirectory() {
                               {site.siteCode} · {site.address}
                             </p>
                           </div>
-                          <StatusPill active={site.status === "active"} />
+                          <StatusPill active={getSiteStatus(site) === "active"} />
                         </div>
                         <p className="mt-1.5 font-saveful text-xs text-gray-500">
                           {lookupLabel("group", site.groupId)} · {lookupLabel("territory", site.territoryId)} ·{" "}
@@ -414,7 +415,7 @@ function SitesDirectory() {
                           site={site}
                           actor={user?.name || "Enterprise user"}
                           open={menuId === site.id}
-                          onToggle={() => setMenuId((current) => (current === site.id ? null : site.id))}
+                          onOpenChange={(next) => setMenuId(next ? site.id : null)}
                           permissions={permissions}
                         />
                       </div>
@@ -476,7 +477,7 @@ function WorkspaceSection({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <section className="overflow-visible rounded-xl border border-gray-200 bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-[#F7F6F2] px-3.5 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="h-3.5 w-1 rounded-full bg-saveful-green" aria-hidden />
@@ -562,42 +563,33 @@ function RowMenu({
   site,
   actor,
   open,
-  onToggle,
+  onOpenChange,
   permissions,
 }: {
   site: OrganizationSite;
   actor: string;
   open: boolean;
-  onToggle: () => void;
+  onOpenChange: (open: boolean) => void;
   permissions: ReturnType<typeof sitePermissions>;
 }) {
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/[0.06] text-gray-600 hover:bg-[#F7F6F2]"
-        aria-label="Site actions"
-      >
-        <MoreHorizontal className="h-4 w-4" />
-      </button>
-      {open ? (
-        <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
-          <MenuLink href={`/sites/${site.id}`}>View site</MenuLink>
-          {permissions.edit ? <MenuLink href={`/sites/${site.id}/edit`}>Edit site</MenuLink> : null}
-          {permissions.manageAccess ? <MenuLink href={`/sites/${site.id}?tab=access`}>Manage access</MenuLink> : null}
-          {permissions.deactivate ? (
-            <button
-              type="button"
-              className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-              onClick={() => setSiteStatus(site.id, getSiteStatus(site) === "deactivated" ? "active" : "deactivated", actor)}
-            >
-              {getSiteStatus(site) === "deactivated" ? "Reactivate site" : "Deactivate site"}
-            </button>
-          ) : null}
-        </div>
+    <AdminRowMenu label={`Actions for ${site.name}`} open={open} onOpenChange={onOpenChange}>
+      <MenuLink href={`/sites/${site.id}`}>View site</MenuLink>
+      {permissions.edit ? <MenuLink href={`/sites/${site.id}/edit`}>Edit site</MenuLink> : null}
+      {permissions.manageAccess ? <MenuLink href={`/sites/${site.id}?tab=access`}>Manage access</MenuLink> : null}
+      {permissions.deactivate ? (
+        <button
+          type="button"
+          className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
+          onClick={() => {
+            setSiteStatus(site.id, getSiteStatus(site) === "deactivated" ? "active" : "deactivated", actor);
+            onOpenChange(false);
+          }}
+        >
+          {getSiteStatus(site) === "deactivated" ? "Reactivate site" : "Deactivate site"}
+        </button>
       ) : null}
-    </div>
+    </AdminRowMenu>
   );
 }
 

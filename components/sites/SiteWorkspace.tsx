@@ -3,7 +3,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MoreHorizontal, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
+import { AdminRowMenu } from "@/components/admin/AdminChrome";
 import { ActivityFeed } from "@/components/activity/ActivityFeed";
 import { InsightsView } from "@/components/insights/InsightsView";
 import { PortalPageShell } from "@/components/ui/Portal";
@@ -122,44 +123,32 @@ export function SiteWorkspace({
                 </Link>
               ) : null}
               {permissions.manageAccess || permissions.deactivate ? (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setMenuOpen((open) => !open)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-black/[0.06] text-gray-600 hover:bg-[#F7F6F2]"
-                    aria-label="Site actions"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </button>
-                  {menuOpen ? (
-                    <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
-                      {permissions.manageAccess ? (
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            setTab("access");
-                          }}
-                        >
-                          Manage access
-                        </button>
-                      ) : null}
-                      {permissions.deactivate ? (
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-                          onClick={() => {
-                            setSiteStatus(site.id, status === "deactivated" ? "active" : "deactivated", user?.name || "Enterprise user");
-                            setMenuOpen(false);
-                          }}
-                        >
-                          {status === "deactivated" ? "Reactivate site" : "Deactivate site"}
-                        </button>
-                      ) : null}
-                    </div>
+                <AdminRowMenu label={`Actions for ${site.name}`} open={menuOpen} onOpenChange={setMenuOpen}>
+                  {permissions.manageAccess ? (
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setTab("access");
+                      }}
+                    >
+                      Manage access
+                    </button>
                   ) : null}
-                </div>
+                  {permissions.deactivate ? (
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
+                      onClick={() => {
+                        setSiteStatus(site.id, status === "deactivated" ? "active" : "deactivated", user?.name || "Enterprise user");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {status === "deactivated" ? "Reactivate site" : "Deactivate site"}
+                    </button>
+                  ) : null}
+                </AdminRowMenu>
               ) : null}
             </div>
           </header>

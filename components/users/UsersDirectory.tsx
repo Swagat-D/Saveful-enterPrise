@@ -52,7 +52,14 @@ export function UsersDirectory({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((user) => (
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-4 font-saveful text-sm text-gray-500">
+                      No users are assigned to this site yet.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((user) => (
                   <tr key={user.id} className="border-b border-gray-50 last:border-0">
                     <td className={cn("pr-4", compact ? "py-2" : "py-3")}>
                       <Link href={`/users/${user.id}`} className="hover:text-saveful-green">
@@ -71,7 +78,8 @@ export function UsersDirectory({
                       <p className="font-saveful text-[11px] text-gray-400">{lastSeenLabel(user)}</p>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
