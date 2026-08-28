@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import { Bell, Building2, ChevronDown, LogOut, UserRound } from "lucide-react";
 import { useSession } from "@/lib/auth";
-import { demoOrganization } from "@/lib/demo";
 import { listInbox, useNotificationInboxVersion } from "@/lib/notifications";
 import { profileFromSession } from "@/lib/profile";
 import { cn } from "@/lib/utils";
@@ -13,8 +12,10 @@ export function AppHeader({
   userName,
   userEmail,
   roleLabel,
-  organization = demoOrganization.name,
+  organization = "",
   organizationLogo,
+  portalCaption = "Enterprise",
+  profileHref = "/account",
   onLogout,
   compact = false,
 }: {
@@ -23,6 +24,8 @@ export function AppHeader({
   roleLabel: string;
   organization?: string;
   organizationLogo?: string | null;
+  portalCaption?: string;
+  profileHref?: string;
   onLogout?: () => void;
   compact?: boolean;
 }) {
@@ -56,18 +59,19 @@ export function AppHeader({
         <div className="min-w-0">
           <p className="truncate font-saveful-semibold text-sm text-gray-900">{organization}</p>
           <p className="hidden truncate font-saveful text-[11px] text-gray-500 sm:block">
-            Enterprise
+            {portalCaption}
           </p>
         </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        <NotificationsMenu />
+        {portalCaption !== "Admin" ? <NotificationsMenu /> : null}
         <UserMenu
           initials={initials}
           userName={userName}
           userEmail={userEmail}
           roleLabel={roleLabel}
+          profileHref={profileHref}
           onLogout={onLogout}
         />
       </div>
@@ -138,12 +142,14 @@ function UserMenu({
   userName,
   userEmail,
   roleLabel,
+  profileHref,
   onLogout,
 }: {
   initials: string;
   userName: string;
   userEmail: string;
   roleLabel: string;
+  profileHref: string;
   onLogout?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -176,7 +182,7 @@ function UserMenu({
             <p className="mt-0.5 font-saveful text-[11px] text-gray-400">{roleLabel}</p>
           </div>
           <Link
-            href="/account"
+            href={profileHref}
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 px-3 py-2.5 font-saveful text-sm text-saveful-green hover:bg-[#FAF7F0]"
           >

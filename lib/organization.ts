@@ -64,26 +64,22 @@ export const ORG_UNITS: { id: OrgUnits; label: string }[] = [
   { id: "imperial", label: "Imperial (lb)" },
 ];
 
-const PROVISIONED = {
-  enterpriseId: "ENT-AU-001284",
-  accountStatus: "Active" as const,
-  contractStart: "2026-07-01",
-  contractEnd: "2028-06-30",
-  billingFrequency: "Annual",
-  plan: "Enterprise",
-};
-
 export const DEFAULT_ORGANIZATION: OrganizationProfile = {
-  name: "Harbour Kitchen Group",
-  contactName: "Alex Morgan",
-  contactEmail: "alex@harbourkitchen.com",
-  contactPhone: "+61 400 111 222",
+  name: "",
+  contactName: "",
+  contactEmail: "",
+  contactPhone: "",
   logoDataUrl: null,
   country: "AU",
   timezone: "Australia/Sydney",
   currency: "AUD",
   units: "metric",
-  ...PROVISIONED,
+  enterpriseId: "",
+  accountStatus: "Active",
+  contractStart: "",
+  contractEnd: "",
+  billingFrequency: "",
+  plan: "Enterprise",
 };
 
 const STORAGE_KEY = "enterprise_organization_profile";
@@ -127,8 +123,22 @@ function normalize(raw: Partial<OrganizationProfile> | null): OrganizationProfil
     timezone,
     currency: raw?.currency && isCurrency(raw.currency) ? raw.currency : DEFAULT_ORGANIZATION.currency,
     units: raw?.units && isUnits(raw.units) ? raw.units : DEFAULT_ORGANIZATION.units,
-    ...PROVISIONED,
+    enterpriseId: raw?.enterpriseId ?? DEFAULT_ORGANIZATION.enterpriseId,
+    accountStatus: raw?.accountStatus ?? DEFAULT_ORGANIZATION.accountStatus,
+    contractStart: raw?.contractStart ?? DEFAULT_ORGANIZATION.contractStart,
+    contractEnd: raw?.contractEnd ?? DEFAULT_ORGANIZATION.contractEnd,
+    billingFrequency: raw?.billingFrequency ?? DEFAULT_ORGANIZATION.billingFrequency,
+    plan: raw?.plan ?? DEFAULT_ORGANIZATION.plan,
   };
+}
+
+export function applyOrganization(next: OrganizationProfile) {
+  cache = normalize(next);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+  }
+  emit();
+  return cache;
 }
 
 export function getOrganization(): OrganizationProfile {
@@ -137,6 +147,9 @@ export function getOrganization(): OrganizationProfile {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     cache = normalize(raw ? (JSON.parse(raw) as Partial<OrganizationProfile>) : null);
+    if (cache.name === "Harbour Kitchen Group") {
+      cache = DEFAULT_ORGANIZATION;
+    }
   } catch {
     cache = DEFAULT_ORGANIZATION;
   }

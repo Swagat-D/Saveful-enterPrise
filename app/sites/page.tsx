@@ -436,12 +436,12 @@ function SitesDirectory() {
                       Rows per page
                       <select
                         value={filters.pageSize}
-                        onChange={(event) => update({ pageSize: Number(event.target.value) as 25 | 50 | 100, page: 1 })}
+                        onChange={(event) => update({ pageSize: Number(event.target.value) as 10 | 25 | 50, page: 1 })}
                         className="h-8 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2"
                       >
+                        <option value={10}>10</option>
                         <option value={25}>25</option>
                         <option value={50}>50</option>
-                        <option value={100}>100</option>
                       </select>
                     </label>
                     <div className="flex items-center gap-1">

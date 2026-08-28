@@ -15,10 +15,10 @@ export type PickedLocation = {
 type SearchHit = PickedLocation & { id: string };
 
 const SYDNEY: PickedLocation = {
-  address: "14 Circular Quay, Sydney NSW",
-  postcode: "2000",
-  lat: -33.861,
-  lon: 151.211,
+  address: "",
+  postcode: "",
+  lat: -33.8688,
+  lon: 151.2093,
 };
 
 function formatPhotonFeature(feature: {

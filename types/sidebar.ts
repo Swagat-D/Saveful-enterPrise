@@ -4,15 +4,19 @@ export interface SidebarLink {
   icon: React.ReactNode;
   onClick?: () => void;
   children?: SidebarLink[];
+  dividerBefore?: boolean;
 }
 
 export interface SidebarConfig {
-  role: "enterprise";
+  role: "enterprise" | "admin";
   userName: string;
   userEmail: string;
   organization?: string;
   organizationLogo?: string | null;
   roleLabel?: string;
+  portalCaption?: string;
+  homeHref?: string;
+  profileHref?: string;
   links: SidebarLink[];
   onLogout?: () => void;
 }

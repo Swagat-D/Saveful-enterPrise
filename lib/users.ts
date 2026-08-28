@@ -98,23 +98,12 @@ function person(
   };
 }
 
-const seed: DirectoryUser[] = [
-  person("u1", "Alex", "Morgan", "alex@harbourkitchen.com", "enterprise_super_admin", { enterprise: true }, "active", daysAgoIso(0), daysAgoIso(400), "+61 400 111 222"),
-  person("u13", "Taylor", "Quincy", "taylor@harbourkitchen.com", "enterprise_admin", { enterprise: true }, "active", daysAgoIso(1), daysAgoIso(200), "+61 400 118 200"),
-  person("u2", "Priya", "Nair", "priya@harbourkitchen.com", "site_admin", { siteIds: ["2"] }, "active", daysAgoIso(1), daysAgoIso(280), "+61 400 333 444"),
-  person("u3", "Jamie", "Chen", "jamie@harbourkitchen.com", "site_admin", { siteIds: ["hq"] }, "active", daysAgoIso(3), daysAgoIso(120)),
-  person("u4", "Sam", "Reid", "sam@harbourkitchen.com", "site_admin", { siteIds: ["3"] }, "invited", null, daysAgoIso(2)),
-  person("u5", "Morgan", "Hale", "morgan@harbourkitchen.com", "group_admin", { groupIds: ["kitchen"] }, "active", daysAgoIso(0), daysAgoIso(90)),
-  person("u6", "Chris", "Adeyemi", "chris@harbourkitchen.com", "group_admin", { groupIds: ["cafe"] }, "active", daysAgoIso(4), daysAgoIso(70)),
-  person("u7", "Elena", "Voss", "elena@harbourkitchen.com", "reporting", { territoryIds: ["east"] }, "active", daysAgoIso(6), daysAgoIso(40)),
-  person("u8", "Noah", "Patel", "noah@harbourkitchen.com", "reporting", { groupIds: ["catering"], clusterIds: ["parra"] }, "invited", null, daysAgoIso(5)),
-  person("u9", "Riley", "Brooks", "riley@harbourkitchen.com", "site_admin", { siteIds: ["events-north"] }, "deactivated", daysAgoIso(21), daysAgoIso(200)),
-  person("u10", "Jordan", "Blake", "jordan@harbourkitchen.com", "site_admin", { siteIds: ["bondi-kitchen"] }, "deactivated", daysAgoIso(45), daysAgoIso(160)),
-  person("u11", "Asha", "Rahman", "asha@harbourkitchen.com", "site_admin", { siteIds: ["quay-cafe"] }, "invited", null, daysAgoIso(1)),
-  person("u12", "Harbour", "HQ", "hq@harbourkitchen.com", "site_admin", { siteIds: ["hq"] }, "active", daysAgoIso(0), daysAgoIso(400)),
-];
+let users: DirectoryUser[] = [];
 
-let users: DirectoryUser[] = seed.map((user) => ({ ...user, scope: { ...user.scope } }));
+export function replaceUsers(next: DirectoryUser[]) {
+  users = next.map((user) => ({ ...user, scope: { ...user.scope } }));
+  emit();
+}
 
 function emit() {
   version += 1;
@@ -432,7 +421,7 @@ export function saveUser(
     scope: UserAccessScope;
   },
   existingId?: string,
-  actor = "Alex Morgan",
+  actor = "Enterprise user",
 ) {
   const firstName = draft.firstName.trim();
   const lastName = draft.lastName.trim();
@@ -515,7 +504,7 @@ export function saveUser(
   return { ok: true as const, id: user.id };
 }
 
-export function setUserStatus(id: string, status: "active" | "deactivated", actor = "Alex Morgan") {
+export function setUserStatus(id: string, status: "active" | "deactivated", actor = "Enterprise user") {
   const current = getUser(id);
   if (!current) return;
   users = users.map((user) => (user.id === id ? { ...user, status, inviteToken: status === "active" ? null : user.inviteToken } : user));
@@ -545,7 +534,7 @@ export function setUserStatus(id: string, status: "active" | "deactivated", acto
   emit();
 }
 
-export function resendInvitation(id: string, actor = "Alex Morgan") {
+export function resendInvitation(id: string, actor = "Enterprise user") {
   const current = getUser(id);
   if (!current || current.status !== "invited") return { ok: false as const, error: "Only invited users can be resent an invitation." };
   users = users.map((user) =>

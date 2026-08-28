@@ -97,25 +97,7 @@ function writeEvents(next: NotificationEvent[]) {
 }
 
 function seedEvents(): NotificationEvent[] {
-  return [
-    {
-      id: "evt-report-1",
-      kind: "report_ready",
-      title: "Enterprise report ready",
-      detail: "Impact and recovery report for the last 30 days is ready to view.",
-      href: "/insights",
-      at: daysAgoIso(0),
-    },
-    {
-      id: "evt-access-1",
-      kind: "access_changed",
-      title: "User access changed",
-      detail: "Jamie Chen · Role: Site Admin · Harbour Kitchen HQ",
-      href: "/users/u3",
-      at: daysAgoIso(2),
-      siteIds: ["hq"],
-    },
-  ];
+  return [];
 }
 
 export function recordNotificationEvent(entry: Omit<NotificationEvent, "id" | "at"> & { at?: string }) {

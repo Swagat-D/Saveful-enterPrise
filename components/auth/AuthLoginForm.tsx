@@ -52,6 +52,8 @@ function Banner({
 }
 
 export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
+  const showLogo = config.showLogo !== false;
+  const badge = config.badge ?? "Enterprise";
   const [view, setView] = useState<View>("login");
   const [credentials, setCredentials] = useState<LoginCredentials>({
     email: "",
@@ -87,15 +89,17 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
       <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-[#A68FD9]/10" />
       <div className="pointer-events-none absolute -bottom-12 -left-12 h-24 w-24 rounded-full bg-[#E8B4D9]/10" />
 
-      <div className="mb-8 flex justify-center">
-        <div className="relative h-16 w-40">
-          <Image src="/logo.png" alt="Saveful Logo" fill sizes="160px" className="object-contain" priority />
+      {showLogo ? (
+        <div className="mb-8 flex justify-center">
+          <div className="relative h-16 w-40">
+            <Image src="/logo.png" alt="Saveful Logo" fill sizes="160px" className="object-contain" priority />
+          </div>
         </div>
-      </div>
+      ) : null}
       <div className="mb-6 flex justify-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-[#2D5F4F]/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#2D5F4F]">
           <div className="h-2 w-2 rounded-full bg-[#2D5F4F]" />
-          Enterprise
+          {badge}
         </div>
       </div>
 
@@ -313,6 +317,16 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
             Back to sign in
           </button>
         </div>
+      ) : null}
+
+      {config.onBack && view === "login" ? (
+        <button
+          type="button"
+          onClick={config.onBack}
+          className="mt-6 mx-auto block text-sm text-[#6B6B6B] hover:text-[#2D5F4F]"
+        >
+          Choose a different portal
+        </button>
       ) : null}
 
       <div className="mt-8 text-center">

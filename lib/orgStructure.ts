@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { appendAudit } from "@/lib/audit";
-import { demoClusters, demoGroups, demoNetworkSites, demoTerritories, recoveryTransactions } from "@/lib/network";
+import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import type { OrgStructureKind, OrgUnitStatus, OrganizationSite } from "@/types/enterprise";
 
 export type { OrgStructureKind };
@@ -71,11 +71,21 @@ type State = {
 const listeners = new Set<() => void>();
 let version = 0;
 let state: State = {
-  group: demoGroups.map(seedUnit),
-  territory: demoTerritories.map(seedUnit),
-  cluster: demoClusters.map(seedUnit),
+  group: [],
+  territory: [],
+  cluster: [],
   assignments: {},
 };
+
+export function replaceStructure(next: Pick<State, "group" | "territory" | "cluster"> & { assignments?: Record<string, SiteOrgPatch> }) {
+  state = {
+    group: next.group,
+    territory: next.territory,
+    cluster: next.cluster,
+    assignments: next.assignments ?? {},
+  };
+  emit();
+}
 
 function emit() {
   version += 1;

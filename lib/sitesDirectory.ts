@@ -34,7 +34,7 @@ export type SitesTableFilters = {
   attention: string | null;
   period: PeriodKey;
   page: number;
-  pageSize: 25 | 50 | 100;
+  pageSize: 10 | 25 | 50;
 };
 
 export const EMPTY_SITES_FILTERS: SitesTableFilters = {
@@ -48,10 +48,10 @@ export const EMPTY_SITES_FILTERS: SitesTableFilters = {
   attention: null,
   period: "30",
   page: 1,
-  pageSize: 25,
+  pageSize: 10,
 };
 
-const PAGE_SIZES = [25, 50, 100] as const;
+const PAGE_SIZES = [10, 25, 50] as const;
 
 export function parseSitesFilters(params: URLSearchParams): SitesTableFilters {
   const attention = params.get("attention");
@@ -87,7 +87,7 @@ export function parseSitesFilters(params: URLSearchParams): SitesTableFilters {
     attention: attention === "all" ? "all" : null,
     period: (params.get("period") as PeriodKey) || "30",
     page: page > 0 ? page : 1,
-    pageSize: PAGE_SIZES.includes(pageSize as 25) ? (pageSize as 25 | 50 | 100) : 25,
+    pageSize: PAGE_SIZES.includes(pageSize as 10) ? (pageSize as 10 | 25 | 50) : 10,
   };
 }
 
@@ -102,7 +102,7 @@ export function sitesFiltersToQuery(filters: SitesTableFilters) {
   if (filters.period !== "30") params.set("period", filters.period);
   if (filters.attention === "all") params.set("attention", "all");
   if (filters.page > 1) params.set("page", String(filters.page));
-  if (filters.pageSize !== 25) params.set("pageSize", String(filters.pageSize));
+  if (filters.pageSize !== 10) params.set("pageSize", String(filters.pageSize));
   const query = params.toString();
   return query ? `?${query}` : "";
 }

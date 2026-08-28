@@ -29,11 +29,31 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
 };
 
 export const RENOTIFY_AFTER_DAYS = 7;
+export const SUPPORTED_NOTIFICATION_CHANNEL = "In-app" as const;
+
+export type PlatformRuleId = keyof NotificationSettings;
+
+export type PlatformRuleConfig = {
+  required: boolean;
+  defaultEnabled: boolean;
+  days?: ThresholdDays;
+};
+
+export const DEFAULT_PLATFORM_RULES: Record<PlatformRuleId, PlatformRuleConfig> = {
+  noRecentActivity: { required: false, defaultEnabled: true, days: 30 },
+  neverActivated: { required: false, defaultEnabled: true, days: 14 },
+  noListings: { required: false, defaultEnabled: true, days: 30 },
+  reportReady: { required: false, defaultEnabled: true },
+  userActivated: { required: false, defaultEnabled: true },
+  accessChanged: { required: true, defaultEnabled: true },
+};
 
 const STORAGE_KEY = "enterprise_notification_settings";
+const PLATFORM_KEY = "saveful_platform_notification_rules";
 const listeners = new Set<() => void>();
 let version = 0;
 let cache: NotificationSettings | null = null;
+let platformCache: Record<PlatformRuleId, PlatformRuleConfig> | null = null;
 
 function emit() {
   version += 1;
@@ -60,15 +80,92 @@ function normalizeAlert(raw: Partial<SiteAlertSetting> | undefined, fallback: Si
   };
 }
 
-function normalize(raw: Partial<NotificationSettings> | null): NotificationSettings {
+function normalizePlatform(raw: Partial<Record<PlatformRuleId, Partial<PlatformRuleConfig>>> | null) {
+  const next = { ...DEFAULT_PLATFORM_RULES };
+  (Object.keys(DEFAULT_PLATFORM_RULES) as PlatformRuleId[]).forEach((id) => {
+    const patch = raw?.[id];
+    if (!patch) return;
+    next[id] = {
+      required: patch.required ?? DEFAULT_PLATFORM_RULES[id].required,
+      defaultEnabled: patch.required ? true : (patch.defaultEnabled ?? DEFAULT_PLATFORM_RULES[id].defaultEnabled),
+      days: isDays(patch.days) ? patch.days : DEFAULT_PLATFORM_RULES[id].days,
+    };
+  });
+  return next;
+}
+
+export function getPlatformNotificationRules() {
+  if (typeof window === "undefined") return DEFAULT_PLATFORM_RULES;
+  if (platformCache) return platformCache;
+  try {
+    const raw = window.localStorage.getItem(PLATFORM_KEY);
+    platformCache = normalizePlatform(raw ? (JSON.parse(raw) as Partial<Record<PlatformRuleId, Partial<PlatformRuleConfig>>>) : null);
+  } catch {
+    platformCache = DEFAULT_PLATFORM_RULES;
+  }
+  return platformCache;
+}
+
+export function persistPlatformNotificationRules(next: Record<PlatformRuleId, PlatformRuleConfig>) {
+  const normalized = normalizePlatform(next);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(PLATFORM_KEY, JSON.stringify(normalized));
+  }
+  platformCache = normalized;
+  cache = null;
+  emit();
+  return normalized;
+}
+
+function applyPlatformLayer(settings: NotificationSettings): NotificationSettings {
+  const platform = getPlatformNotificationRules();
   return {
+    noRecentActivity: {
+      enabled: platform.noRecentActivity.required ? true : settings.noRecentActivity.enabled,
+      days: settings.noRecentActivity.days,
+    },
+    neverActivated: {
+      enabled: platform.neverActivated.required ? true : settings.neverActivated.enabled,
+      days: settings.neverActivated.days,
+    },
+    noListings: {
+      enabled: platform.noListings.required ? true : settings.noListings.enabled,
+      days: settings.noListings.days,
+    },
+    reportReady: platform.reportReady.required ? true : settings.reportReady,
+    userActivated: platform.userActivated.required ? true : settings.userActivated,
+    accessChanged: platform.accessChanged.required ? true : settings.accessChanged,
+  };
+}
+
+function normalize(raw: Partial<NotificationSettings> | null): NotificationSettings {
+  return applyPlatformLayer({
     noRecentActivity: normalizeAlert(raw?.noRecentActivity, DEFAULT_NOTIFICATION_SETTINGS.noRecentActivity),
     neverActivated: normalizeAlert(raw?.neverActivated, DEFAULT_NOTIFICATION_SETTINGS.neverActivated),
     noListings: normalizeAlert(raw?.noListings, DEFAULT_NOTIFICATION_SETTINGS.noListings),
     reportReady: raw?.reportReady ?? DEFAULT_NOTIFICATION_SETTINGS.reportReady,
     userActivated: raw?.userActivated ?? DEFAULT_NOTIFICATION_SETTINGS.userActivated,
     accessChanged: raw?.accessChanged ?? DEFAULT_NOTIFICATION_SETTINGS.accessChanged,
-  };
+  });
+}
+
+export function describePlatformRuleChanges(
+  previous: Record<PlatformRuleId, PlatformRuleConfig>,
+  next: Record<PlatformRuleId, PlatformRuleConfig>,
+  id: PlatformRuleId,
+  label: string,
+) {
+  const parts: NotificationFieldChange[] = [];
+  if (previous[id].required !== next[id].required) {
+    parts.push({ field: `${label} class`, previous: previous[id].required ? "System required" : "Configurable", next: next[id].required ? "System required" : "Configurable" });
+  }
+  if (previous[id].defaultEnabled !== next[id].defaultEnabled) {
+    parts.push({ field: `${label} default`, previous: previous[id].defaultEnabled ? "On" : "Off", next: next[id].defaultEnabled ? "On" : "Off" });
+  }
+  if (previous[id].days !== next[id].days && next[id].days && previous[id].days) {
+    parts.push({ field: `${label} default threshold`, previous: `${previous[id].days} days`, next: `${next[id].days} days` });
+  }
+  return parts;
 }
 
 export function getNotificationSettings(): NotificationSettings {
@@ -123,6 +220,10 @@ export function describeNotificationChanges(previous: NotificationSettings, next
     parts.push({ field: "User access changed", previous: previous.accessChanged ? "On" : "Off", next: next.accessChanged ? "On" : "Off" });
   }
   return parts;
+}
+
+export function platformRuleRequired(id: PlatformRuleId) {
+  return getPlatformNotificationRules()[id].required;
 }
 
 export function enterpriseAlertAvailable(settings: NotificationSettings = getNotificationSettings()) {

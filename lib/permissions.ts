@@ -64,7 +64,7 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
 };
 
 export function sessionRole(user: SessionUser | null): EnterpriseRole | null {
-  if (!user) return null;
+  if (!user || user.portal === "admin") return null;
   return user.enterpriseRole ?? (user.isHeadAdmin ? "enterprise_super_admin" : "enterprise_admin");
 }
 

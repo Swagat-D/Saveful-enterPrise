@@ -129,7 +129,7 @@ export function sitesDirectoryHref(
     attention: extra.attention === "all" ? "all" : null,
     period: filters.period,
     page: 1,
-    pageSize: 25,
+    pageSize: 10,
   };
   const query = sitesFiltersToQuery(next);
   if (extra.attention && extra.attention !== "all") {

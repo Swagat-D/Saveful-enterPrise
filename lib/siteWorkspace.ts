@@ -21,7 +21,7 @@ export function siteOperations(site: OrganizationSite) {
   const to = site.collectionTo ?? "17:00";
   return {
     primaryContact: site.primaryContact || (site.hasManager ? site.managerName : "Not assigned"),
-    siteAdmin: site.hasManager ? site.managerName : "Harbour Kitchen HQ",
+    siteAdmin: site.hasManager ? site.managerName : "Not assigned",
     collectionHours: formatCollectionHours(days, from, to),
     collectionInstructions:
       site.collectionInstructions ||

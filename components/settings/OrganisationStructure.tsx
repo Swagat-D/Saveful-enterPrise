@@ -47,7 +47,7 @@ const TABS: { id: OrgStructureKind; label: string; description: string }[] = [
   },
 ];
 
-const PAGE_SIZES = [25, 50, 100] as const;
+const PAGE_SIZES = [10, 25, 50] as const;
 
 type Dialog =
   | { type: "form"; unit?: OrgStructureUnit }
@@ -74,7 +74,7 @@ export function OrganisationStructure() {
   const [query, setQuery] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(25);
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(10);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
 
@@ -264,7 +264,7 @@ export function OrganisationStructure() {
                 <select
                   value={pageSize}
                   onChange={(event) => {
-                    setPageSize(Number(event.target.value) as 25 | 50 | 100);
+                    setPageSize(Number(event.target.value) as 10 | 25 | 50);
                     setPage(1);
                   }}
                   className="h-8 rounded-lg border border-black/[0.06] bg-white px-2"

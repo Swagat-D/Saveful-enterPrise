@@ -9,6 +9,7 @@ import {
   RENOTIFY_AFTER_DAYS,
   THRESHOLD_DAYS,
   getNotificationSettings,
+  platformRuleRequired,
   useNotificationSettingsVersion,
   type NotificationSettings,
   type SiteAlertSetting,
@@ -78,18 +79,21 @@ function NotificationsSettingsForm() {
             label="No recent activity"
             description="Alert when a site has had no Saveful activity for:"
             setting={draft.noRecentActivity}
+            required={platformRuleRequired("noRecentActivity")}
             onChange={(noRecentActivity) => update({ ...draft, noRecentActivity })}
           />
           <AlertRow
             label="Never activated"
             description="Alert when a new site has not activated within:"
             setting={draft.neverActivated}
+            required={platformRuleRequired("neverActivated")}
             onChange={(neverActivated) => update({ ...draft, neverActivated })}
           />
           <AlertRow
             label="No listings"
             description="Alert when a site has created no listings for:"
             setting={draft.noListings}
+            required={platformRuleRequired("noListings")}
             onChange={(noListings) => update({ ...draft, noListings })}
           />
         </Card>
@@ -103,6 +107,7 @@ function NotificationsSettingsForm() {
             label="Report ready"
             description="Notify the user when a report they generated is ready."
             checked={draft.reportReady}
+            required={platformRuleRequired("reportReady")}
             onChange={(reportReady) => update({ ...draft, reportReady })}
           />
         </Card>
@@ -116,12 +121,14 @@ function NotificationsSettingsForm() {
             label="New user activated"
             description="Notify when an invited Enterprise user activates their account."
             checked={draft.userActivated}
+            required={platformRuleRequired("userActivated")}
             onChange={(userActivated) => update({ ...draft, userActivated })}
           />
           <ToggleRow
             label="User access changed"
             description="Notify when a user's role or scope is changed."
             checked={draft.accessChanged}
+            required={platformRuleRequired("accessChanged")}
             onChange={(accessChanged) => update({ ...draft, accessChanged })}
           />
         </Card>
@@ -184,17 +191,22 @@ function AlertRow({
   label,
   description,
   setting,
+  required,
   onChange,
 }: {
   label: string;
   description: string;
   setting: SiteAlertSetting;
+  required?: boolean;
   onChange: (next: SiteAlertSetting) => void;
 }) {
   return (
     <div className="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        <p className="font-saveful-semibold text-sm text-gray-900">{label}</p>
+        <p className="font-saveful-semibold text-sm text-gray-900">
+          {label}
+          {required ? <span className="ml-1.5 font-saveful text-[10px] uppercase tracking-wide text-amber-700">Required by Saveful</span> : null}
+        </p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <p className="font-saveful text-xs text-gray-500">{description}</p>
           <select
@@ -211,7 +223,7 @@ function AlertRow({
           </select>
         </div>
       </div>
-      <Toggle checked={setting.enabled} onChange={(enabled) => onChange({ ...setting, enabled })} />
+      <Toggle checked={setting.enabled} disabled={required} onChange={(enabled) => onChange({ ...setting, enabled })} />
     </div>
   );
 }
@@ -220,32 +232,41 @@ function ToggleRow({
   label,
   description,
   checked,
+  required,
   onChange,
 }: {
   label: string;
   description: string;
   checked: boolean;
+  required?: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 py-3.5">
       <div className="min-w-0">
-        <p className="font-saveful-semibold text-sm text-gray-900">{label}</p>
+        <p className="font-saveful-semibold text-sm text-gray-900">
+          {label}
+          {required ? <span className="ml-1.5 font-saveful text-[10px] uppercase tracking-wide text-amber-700">Required by Saveful</span> : null}
+        </p>
         <p className="mt-0.5 font-saveful text-xs text-gray-500">{description}</p>
       </div>
-      <Toggle checked={checked} onChange={onChange} />
+      <Toggle checked={checked} disabled={required} onChange={onChange} />
     </div>
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+function Toggle({ checked, disabled, onChange }: { checked: boolean; disabled?: boolean; onChange: (value: boolean) => void }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={cn("relative h-6 w-11 shrink-0 rounded-full transition", checked ? "bg-saveful-green" : "bg-gray-200")}
+      onClick={() => {
+        if (disabled) return;
+        onChange(!checked);
+      }}
+      disabled={disabled}
+      className={cn("relative h-6 w-11 shrink-0 rounded-full transition", checked ? "bg-saveful-green" : "bg-gray-200", disabled && "cursor-not-allowed opacity-60")}
     >
       <span
         className={cn(

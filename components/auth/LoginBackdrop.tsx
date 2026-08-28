@@ -1,9 +1,25 @@
 import Image from "next/image";
 
-function Ingredient({ src, className }: { src: string; className: string }) {
+function Ingredient({
+  src,
+  className,
+  priority = false,
+}: {
+  src: string;
+  className: string;
+  priority?: boolean;
+}) {
   return (
     <div className={className}>
-      <Image src={src} alt="" fill sizes="176px" className="object-contain" />
+      <Image
+        src={src}
+        alt=""
+        fill
+        sizes="176px"
+        className="object-contain"
+        loading={priority ? "eager" : "lazy"}
+        priority={priority}
+      />
     </div>
   );
 }
@@ -22,6 +38,7 @@ export function LoginBackdrop() {
       <Ingredient
         src="/ingredients/hero-orange@2x.png"
         className="absolute right-1/4 top-16 h-44 w-44 -rotate-15 opacity-30"
+        priority
       />
       <Ingredient
         src="/ingredients/hero-yellow@2x.png"

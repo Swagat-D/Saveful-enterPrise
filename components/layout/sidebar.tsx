@@ -13,6 +13,7 @@ interface Links {
   icon: React.JSX.Element | React.ReactNode;
   onClick?: () => void;
   children?: Links[];
+  dividerBefore?: boolean;
 }
 
 interface SidebarContextProps {
@@ -112,7 +113,7 @@ export const DesktopSidebar = ({
   return (
     <motion.div
       className={cn(
-        "hidden h-full shrink-0 border-r-2 border-[#E8B4D9]/20 bg-saveful-cream py-4 md:flex md:flex-col md:w-[280px]",
+        "hidden h-full min-h-0 shrink-0 border-r-2 border-[#E8B4D9]/20 bg-saveful-cream py-4 md:flex md:flex-col md:w-[280px]",
         expanded ? "px-3" : "px-4",
         className
       )}
@@ -281,8 +282,11 @@ export const SidebarLink = ({
     }
   };
 
+  const labelClassName =
+    "!m-0 min-w-0 flex-1 whitespace-normal text-left font-saveful text-sm leading-snug text-saveful-black transition duration-150 group-hover/sidebar:translate-x-0.5";
+
   const parentClassName = cn(
-    "group/sidebar flex items-center gap-3 rounded-lg py-2.5 transition-all",
+    "group/sidebar flex w-full min-w-0 items-center gap-2.5 rounded-lg py-2 transition-colors",
     expanded ? "justify-start px-3" : "justify-center px-2",
     isActive
       ? "bg-saveful-purple/15 text-saveful-purple"
@@ -291,7 +295,8 @@ export const SidebarLink = ({
   );
 
   return (
-    <div>
+    <div className="shrink-0">
+      {link.dividerBefore ? <div className="mx-2 my-2 h-px bg-black/[0.08]" role="separator" /> : null}
       {hasChildren ? (
         <button
           type="button"
@@ -306,7 +311,7 @@ export const SidebarLink = ({
               display: animate && !persistent ? (expanded ? "inline-block" : "none") : "inline-block",
               opacity: animate && !persistent ? (expanded ? 1 : 0) : 1,
             }}
-            className="!m-0 inline-block flex-1 whitespace-pre !p-0 text-left font-saveful text-sm text-saveful-black transition duration-150 group-hover/sidebar:translate-x-1"
+            className={labelClassName}
           >
             {link.label}
           </motion.span>
@@ -340,7 +345,7 @@ export const SidebarLink = ({
               display: animate && !persistent ? (expanded ? "inline-block" : "none") : "inline-block",
               opacity: animate && !persistent ? (expanded ? 1 : 0) : 1,
             }}
-            className="!m-0 inline-block flex-1 whitespace-pre !p-0 text-left font-saveful text-sm text-saveful-black transition duration-150 group-hover/sidebar:translate-x-1"
+            className={labelClassName}
           >
             {link.label}
           </motion.span>
@@ -359,7 +364,7 @@ export const SidebarLink = ({
               display: animate && !persistent ? (expanded ? "inline-block" : "none") : "inline-block",
               opacity: animate && !persistent ? (expanded ? 1 : 0) : 1,
             }}
-            className="!m-0 inline-block flex-1 whitespace-pre !p-0 text-left font-saveful text-sm text-saveful-black transition duration-150 group-hover/sidebar:translate-x-1"
+            className={labelClassName}
           >
             {link.label}
           </motion.span>

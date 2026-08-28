@@ -38,20 +38,20 @@ export type BulkSiteRow = {
 
 const TEMPLATE_ROWS = [
   [
-    "Bondi Pavilion Cafe",
-    "BP-002",
-    "1 Queen Elizabeth Dr, Bondi NSW 2026",
-    "Maya Chen",
-    "bondi.pavilion@harbourkitchen.com",
-    "0412 111 222",
-    "Harbour Cafe",
-    "Eastern Suburbs",
-    "Bondi",
+    "Example site",
+    "SITE-001",
+    "1 Example Street, Sydney NSW 2000",
+    "Site contact",
+    "contact@example.com",
+    "0400 000 000",
+    "",
+    "",
+    "",
     "Mon,Tue,Wed,Thu,Fri",
     "2:00 PM",
     "5:00 PM",
-    "Enter via rear dock. Ask for kitchen manager.",
-    "maya.chen@harbourkitchen.com",
+    "Ask for the site contact on arrival.",
+    "admin@example.com",
   ],
 ];
 
@@ -137,38 +137,18 @@ export function errorReportCsv(rows: BulkSiteRow[]) {
 export function exampleBulkRows(): BulkSiteRow[] {
   return validateBulkRows([
     {
-      site_name: "Bondi Pavilion Cafe",
-      site_id: "BP-002",
-      address: "1 Queen Elizabeth Dr, Bondi NSW 2026",
-      group: "Harbour Cafe",
-      territory: "Eastern Suburbs",
-      cluster: "Bondi",
-      site_admin_email: "priya@harbourkitchen.com",
-    },
-    {
-      site_name: "Adelaide Campus",
-      site_id: "AC-010",
-      address: "12 North Terrace, Adelaide SA 5000",
-      group: "Harbour Kitchen",
-      territory: "South Australia",
+      site_name: "Example site",
+      site_id: "SITE-001",
+      address: "1 Example Street, Sydney NSW 2000",
+      group: "",
+      territory: "",
       cluster: "",
-      site_admin_email: "new.admin@harbourkitchen.com",
+      site_admin_email: "admin@example.com",
     },
     {
       site_name: "",
-      site_id: "HK-HQ",
+      site_id: "",
       address: "",
-      group: "Harbour Kitchen",
-      territory: "Sydney CBD",
-      cluster: "Circular Quay",
-    },
-    {
-      site_name: "Rozelle Kiosk",
-      site_id: "RZ-KSK-1",
-      address: "44 Darling Street, Rozelle NSW 2039",
-      group: "Harbour Kitchen",
-      territory: "Eastern Suburbs",
-      site_admin_email: "kiosk.admin@harbourkitchen.com",
     },
   ]);
 }

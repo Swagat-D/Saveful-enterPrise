@@ -58,7 +58,7 @@ const listeners = new Set<() => void>();
 let version = 0;
 let extras: AuditEntry[] = [];
 let loaded = false;
-const seed = buildDemoAuditLog();
+const seed: AuditEntry[] = [];
 let entries: AuditEntry[] = applyRetention(seed);
 
 function emit() {

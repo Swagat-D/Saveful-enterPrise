@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { PortalPageShell } from "@/components/ui/Portal";
-import { useSession } from "@/lib/auth";
+import { homePath, isAdminSession, useSession } from "@/lib/auth";
 import { roleHas, type RolePermissionId } from "@/lib/permissions";
 
 export function RequireCapability({
@@ -16,6 +16,15 @@ export function RequireCapability({
 }) {
   const user = useSession();
   if (!user) return children;
+  if (isAdminSession(user)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#FAF7F0]">
+        <Link href={homePath(user)} className="font-saveful-semibold text-sm text-saveful-green">
+          Continue to admin portal
+        </Link>
+      </div>
+    );
+  }
   if (roleHas(user, permission)) return children;
 
   return (

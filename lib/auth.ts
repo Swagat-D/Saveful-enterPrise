@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from "react";
-import type { LoginCredentials, UserRole } from "@/types/auth";
+import { ACCESS_TOKEN_KEY, ApiError, getAuthProfile, loginWithPassword } from "@/lib/api";
+import type { AdminLoginCredentials, LoginCredentials, PortalKind, UserRole } from "@/types/auth";
 import type { AccessScope, EnterpriseRole } from "@/types/enterprise";
-import { accessFromUserScope, listUsers, roleAllowsEnterprise } from "@/lib/users";
+import { mapEnterpriseRole } from "@/lib/enterpriseRole";
+import { roleAllowsEnterprise } from "@/lib/users";
 
 export type SessionUser = {
   id: string;
@@ -9,15 +11,18 @@ export type SessionUser = {
   name: string;
   organization: string;
   role: UserRole;
+  portal: PortalKind;
   enterpriseRole?: EnterpriseRole;
+  platformRole?: string;
   isHeadAdmin: boolean;
   scope?: AccessScope;
 };
 
 const ROLE: UserRole = "restaurant_multi";
-const TOKEN_KEY = "enterprise_token";
+const TOKEN_KEY = ACCESS_TOKEN_KEY;
 const USER_KEY = "enterprise_user";
 const PASS_KEY = "enterprise_password";
+const PLATFORM_ADMIN = "PLATFORM_ADMIN";
 
 const displayNameFromEmail = (email: string) => {
   const raw = email.split("@")[0] || "User";
@@ -26,12 +31,6 @@ const displayNameFromEmail = (email: string) => {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-};
-
-const organizationFromEmail = (email: string) => {
-  const domain = email.split("@")[1]?.split(".")[0];
-  if (!domain) return "Your business";
-  return `${domain.charAt(0).toUpperCase()}${domain.slice(1)} Group`;
 };
 
 export function getStoredToken() {
@@ -58,9 +57,23 @@ export function getSession(): SessionUser | null {
 
   try {
     const parsed = JSON.parse(rawUser) as SessionUser;
-    sessionCache = parsed;
+    const user: SessionUser = {
+      ...parsed,
+      portal: parsed.portal === "admin" ? "admin" : "enterprise",
+    };
+    if (!token || token === "dev-session") {
+      sessionCache = null;
+      sessionRawCache = null;
+      return null;
+    }
+    if (user.portal === "admin" && user.platformRole !== PLATFORM_ADMIN) {
+      sessionCache = null;
+      sessionRawCache = null;
+      return null;
+    }
+    sessionCache = user;
     sessionRawCache = rawUser;
-    return parsed;
+    return user;
   } catch {
     sessionCache = null;
     sessionRawCache = rawUser;
@@ -70,34 +83,115 @@ export function getSession(): SessionUser | null {
 
 export async function login(credentials: LoginCredentials) {
   const email = credentials.email.trim();
-  const password = credentials.password.trim();
+  const password = credentials.password;
 
   if (!email || !password) {
     throw new Error("Email and password are required");
   }
 
-  const directory = listUsers().find(
-    (item) => item.email.toLowerCase() === email.toLowerCase() && item.status === "active",
-  );
+  let data;
+  try {
+    data = await loginWithPassword(email, password);
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      throw new Error(
+        "That email and password were not recognised. If you were invited, open the activation link in your email first.",
+      );
+    }
+    throw err;
+  }
+
+  if (data.user.platformRole === PLATFORM_ADMIN) {
+    throw new Error("This is a Saveful admin account. Sign in through the Admin portal.");
+  }
+
+  window.localStorage.setItem(TOKEN_KEY, data.accessToken);
+
+  try {
+    let organisationName = data.organisation?.name;
+    let enterpriseRole = mapEnterpriseRole(data.role?.enterpriseRole, data.role?.orgRole);
+
+    if (!organisationName || !data.role?.enterpriseRole) {
+      const profile = await getAuthProfile();
+      if (profile.user.platformRole === PLATFORM_ADMIN) {
+        throw new Error("This is a Saveful admin account. Sign in through the Admin portal.");
+      }
+      organisationName = profile.organisation?.name ?? organisationName;
+      enterpriseRole = mapEnterpriseRole(profile.role.enterpriseRole, profile.role.orgRole);
+    }
+
+    if (!organisationName) {
+      throw new Error("This account is not linked to an Enterprise organisation yet.");
+    }
+
+    const user: SessionUser = {
+      id: String(data.user.id),
+      email: data.user.email,
+      name: [data.user.firstName, data.user.lastName].filter(Boolean).join(" ") || displayNameFromEmail(data.user.email),
+      organization: organisationName,
+      role: ROLE,
+      portal: "enterprise",
+      enterpriseRole,
+      isHeadAdmin: roleAllowsEnterprise(enterpriseRole),
+    };
+    persistSession(user, { token: data.accessToken });
+    return user;
+  } catch (err) {
+    window.localStorage.removeItem(TOKEN_KEY);
+    throw err;
+  }
+}
+
+export async function loginAdmin(credentials: AdminLoginCredentials) {
+  const email = credentials.email.trim();
+  const password = credentials.password;
+  if (!email || !password) {
+    throw new Error("Email and password are required");
+  }
+
+  const data = await loginWithPassword(email, password);
+  if (data.user.platformRole !== PLATFORM_ADMIN) {
+    throw new Error("Only a Saveful admin account can sign in here.");
+  }
 
   const user: SessionUser = {
-    id: directory?.id ?? "enterprise-1",
-    email: directory?.email ?? email,
-    name: directory?.name ?? displayNameFromEmail(email),
-    organization: organizationFromEmail(email),
+    id: String(data.user.id),
+    email: data.user.email,
+    name: [data.user.firstName, data.user.lastName].filter(Boolean).join(" ") || data.user.email,
+    organization: "Saveful",
     role: ROLE,
-    enterpriseRole: directory?.role ?? "enterprise_super_admin",
-    isHeadAdmin: directory ? roleAllowsEnterprise(directory.role) : true,
-    scope: directory ? accessFromUserScope(directory.scope) : undefined,
+    portal: "admin",
+    platformRole: data.user.platformRole,
+    isHeadAdmin: false,
   };
+  persistSession(user, { token: data.accessToken });
+  return user;
+}
 
-  window.localStorage.setItem(TOKEN_KEY, "dev-session");
+function persistSession(user: SessionUser, options: { token: string; password?: string }) {
+  window.localStorage.setItem(TOKEN_KEY, options.token);
   window.localStorage.setItem(USER_KEY, JSON.stringify(user));
-  window.localStorage.setItem(PASS_KEY, password);
+  if (options.password) {
+    window.localStorage.setItem(PASS_KEY, options.password);
+  } else {
+    window.localStorage.removeItem(PASS_KEY);
+  }
   sessionCache = user;
   sessionRawCache = JSON.stringify(user);
   emitSession();
-  return user;
+}
+
+export function homePath(user: SessionUser | null) {
+  if (!user) return "/login";
+  return user.portal === "admin" ? "/admin/dashboard" : "/dashboard";
+}
+
+export function isAdminSession(user: SessionUser | null) {
+  return user?.portal === "admin" && user.platformRole === PLATFORM_ADMIN;
+}
+
+export function isEnterpriseSession(user: SessionUser | null) {
+  return Boolean(user && user.portal !== "admin");
 }
 
 export function logout() {

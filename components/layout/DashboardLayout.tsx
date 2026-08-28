@@ -20,15 +20,15 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
           setOpen={setOpen}
           animate={false}
           persistent
-          brandLabel="Enterprise"
+          brandLabel={config.role === "admin" ? "Admin" : "Enterprise"}
         >
           <SidebarBody className="justify-between gap-0">
-            <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="mb-6 px-2">
-                <Logo />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="mb-6 shrink-0 px-2">
+                <Logo href={config.homeHref ?? (config.role === "admin" ? "/admin/dashboard" : "/dashboard")} />
               </div>
 
-              <div className="relative mb-6 px-3">
+              <div className="relative mb-6 shrink-0 px-3">
                 <div className="h-0.5 bg-gradient-to-r from-transparent via-saveful-purple/40 to-transparent shadow-sm" />
                 <motion.div
                   initial={{ scale: 0 }}
@@ -47,8 +47,8 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
                 </motion.div>
               </div>
 
-              <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2 scrollbar-thin scrollbar-thumb-saveful-purple/30 scrollbar-track-transparent hover:scrollbar-thumb-saveful-purple/50">
-                <div className="flex flex-col gap-2 px-1">
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-2 scrollbar-thin scrollbar-thumb-saveful-purple/30 scrollbar-track-transparent hover:scrollbar-thumb-saveful-purple/50">
+                <div className="flex flex-col gap-1 px-1 pb-2">
                   {config.links.map((link, idx) => (
                     <SidebarLink key={idx} link={link} navHrefs={navHrefs} />
                   ))}
@@ -63,9 +63,11 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
             <AppHeader
               userName={config.userName}
               userEmail={config.userEmail}
-              roleLabel={config.roleLabel || "Enterprise admin"}
+              roleLabel={config.roleLabel || (config.role === "admin" ? "Platform admin" : "Enterprise admin")}
               organization={config.organization}
               organizationLogo={config.organizationLogo}
+              portalCaption={config.portalCaption ?? (config.role === "admin" ? "Admin" : "Enterprise")}
+              profileHref={config.profileHref ?? (config.role === "admin" ? "/admin/account" : "/account")}
               onLogout={config.onLogout}
             />
           </div>
@@ -78,10 +80,10 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
   );
 }
 
-const Logo = () => {
+const Logo = ({ href }: { href: string }) => {
   return (
     <Link
-      href="/dashboard"
+      href={href}
       className="group relative z-20 flex items-center justify-center rounded-lg py-3 transition-all hover:bg-white/50"
     >
       <motion.div

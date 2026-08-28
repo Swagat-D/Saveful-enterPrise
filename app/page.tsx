@@ -30,7 +30,7 @@ export default function HomePage() {
               />
             </div>
             <span className="rounded-full bg-saveful-green/10 px-3 py-1 font-saveful-semibold text-xs text-saveful-green">
-              Enterprise
+              Saveful for Business
             </span>
           </div>
 
@@ -57,13 +57,32 @@ export default function HomePage() {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push(session ? "/dashboard" : "/login")}
-            className="mt-8 inline-flex items-center rounded-xl bg-saveful-green px-5 py-3 font-saveful-semibold text-white transition hover:bg-green-700"
-          >
-            {session ? "Open dashboard" : "Sign in to Enterprise"}
-          </button>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  session?.portal === "admin"
+                    ? "/admin/dashboard"
+                    : session
+                      ? "/dashboard"
+                      : "/login?portal=enterprise",
+                )
+              }
+              className="inline-flex items-center justify-center rounded-xl bg-saveful-green px-5 py-3 font-saveful-semibold text-white transition hover:bg-green-700"
+            >
+              {session?.portal === "admin" ? "Open admin portal" : session ? "Open Enterprise" : "Sign in to Enterprise"}
+            </button>
+            {!session || session.portal !== "admin" ? (
+              <button
+                type="button"
+                onClick={() => router.push("/login?portal=admin")}
+                className="inline-flex items-center justify-center rounded-xl border border-saveful-green/20 bg-white px-5 py-3 font-saveful-semibold text-saveful-green transition hover:bg-saveful-cream/70"
+              >
+                Admin sign in
+              </button>
+            ) : null}
+          </div>
         </section>
       </div>
     </main>
