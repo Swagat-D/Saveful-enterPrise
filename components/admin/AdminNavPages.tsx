@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AddOrganisationForm } from "@/components/admin/AdminOrganisations";
 import { AdminFiltersBar, AdminPage, AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
@@ -10,10 +10,13 @@ import {
   getOrganisation,
   listListings,
   listCollections,
+  listLiveEnterprises,
   listOrgUsers,
   listOrganisations,
   orgTypeLabel,
   planLabel,
+  refreshEnterpriseUsers,
+  useAdminVersion,
 } from "@/lib/admin";
 import { listAdminAudit, useAdminAuditVersion } from "@/lib/adminAudit";
 import { formatDisplayDate } from "@/lib/dates";
@@ -22,18 +25,36 @@ import { formatLastActivity } from "@/lib/networkRules";
 
 export function AdminUsers() {
   const { filters, update, reset, query } = useAdminFilters();
+  useAdminVersion();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
-  const orgs = listOrganisations().filter((org) => {
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshEnterpriseUsers()
+      .then(() => {
+        if (!cancelled) setLoadError("");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setLoadError(error instanceof Error ? error.message : "Enterprise users could not be loaded.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const orgs = listLiveEnterprises().filter((org) => {
     if (filters.organisationId !== "all" && org.id !== filters.organisationId) return false;
-    if (filters.orgType !== "all" && org.type !== filters.orgType) return false;
+    if (filters.country !== "all" && org.country !== filters.country) return false;
     return true;
   });
   const rows = orgs.flatMap((org) =>
     listOrgUsers(org.id).map((user) => ({
       ...user,
       orgName: org.name,
-      orgType: orgTypeLabel(org.type),
+      orgType: org.enterpriseId ? `Enterprise · ${org.enterpriseId}` : "Enterprise",
     })),
   );
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -45,9 +66,14 @@ export function AdminUsers() {
       workspace
       crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
       title="Users"
-      hint="People with access across the Saveful network. Last login is shown for site and organisation users."
+      hint="People with access across provisioned Enterprises. Last login is shown for members who have signed in."
     >
       <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
+      {loadError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">
+          {loadError} Restart the API with the latest admin users endpoint, then refresh this page.
+        </p>
+      ) : null}
       <AdminSection title="Directory">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">

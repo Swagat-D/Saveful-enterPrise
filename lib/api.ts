@@ -208,6 +208,78 @@ export function assignExistingSiteAdmin(siteId: number, userId: number) {
   });
 }
 
+export function createAdminOrganisationSite(organisationId: string | number, input: CreateOrganisationSiteInput) {
+  return apiFetch<CreatedOrganisationSite>(`/admin/enterprise/${organisationId}/sites`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function inviteAdminEnterpriseUser(
+  organisationId: string | number,
+  input: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    mobile?: string;
+    role: string;
+    siteAdminForSiteId?: number;
+    scopes?: Array<{ scopeType: string; scopeId?: number | null }>;
+  },
+) {
+  return apiFetch<{ message: string; invitation: { id: number; email: string; status: string } }>(
+    `/admin/enterprise/${organisationId}/users`,
+    {
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function assignAdminSiteAdmin(organisationId: string | number, siteId: number, userId: number) {
+  return apiFetch<{ message: string }>(`/admin/enterprise/${organisationId}/sites/${siteId}/assign-admin`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export function getAdminEnterpriseStructure(organisationId: string | number) {
+  return apiFetch<EnterpriseStructureResponse>(`/admin/enterprise/${organisationId}/structure`, { auth: true });
+}
+
+export type AdminApiSiteRow = {
+  id: number;
+  organisationId: number;
+  organisationName: string;
+  enterpriseId?: string | null;
+  siteName: string;
+  siteCode?: string | null;
+  address: string;
+  isActive: boolean;
+  activatedAt?: string | null;
+  lastActivityAt?: string | null;
+  groupId?: number | null;
+  groupName?: string | null;
+  clusterId?: number | null;
+  clusterName?: string | null;
+  territoryId?: number | null;
+  territoryName?: string | null;
+};
+
+export async function listAdminSites() {
+  try {
+    return await apiFetch<{ sites: AdminApiSiteRow[] }>("/admin/sites", { auth: true });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return apiFetch<{ sites: AdminApiSiteRow[] }>("/admin/enterprise/sites", { auth: true });
+    }
+    throw error;
+  }
+}
+
 export type OrganisationSitesResponse = {
   sites?: ApiSiteRow[];
   site?: ApiSiteRow;
@@ -441,6 +513,28 @@ export type EnterpriseDetail = {
 
 export function getEnterprise(organisationId: string | number) {
   return apiFetch<EnterpriseDetail>(`/admin/enterprise/${organisationId}`, { auth: true });
+}
+
+export function listAdminEnterpriseUsers(organisationId: string | number) {
+  return apiFetch<{ users: EnterpriseMember[] }>(`/admin/enterprise/${organisationId}/users`, { auth: true });
+}
+
+export type AdminNetworkUser = EnterpriseMember & {
+  organisationId: number;
+  organisationName: string;
+  enterpriseId?: string | null;
+};
+
+export type AdminNetworkInvite = EnterpriseInviteRow & {
+  organisationId: number;
+  organisationName: string;
+  enterpriseId?: string | null;
+};
+
+export function listAdminNetworkUsers() {
+  return apiFetch<{ users: AdminNetworkUser[]; invitations: AdminNetworkInvite[] }>("/admin/enterprise/users", {
+    auth: true,
+  });
 }
 
 export function uploadEnterpriseLogo(file: File) {

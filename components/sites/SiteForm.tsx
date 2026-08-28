@@ -1,21 +1,38 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CircleHelp } from "lucide-react";
 import { AddressPicker } from "@/components/sites/AddressPicker";
+import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { listUsers, useUsersVersion } from "@/lib/users";
 import { listActiveUnits, useOrgStructureVersion } from "@/lib/orgStructure";
 import {
   ApiError,
+  assignAdminSiteAdmin,
   assignExistingSiteAdmin,
+  createAdminOrganisationSite,
   createOrganisationSite,
+  getAdminEnterpriseStructure,
+  getEnterprise,
+  inviteAdminEnterpriseUser,
+  listAdminEnterpriseUsers,
   inviteEnterpriseUser,
   updateOrganisationSite,
 } from "@/lib/api";
+import {
+  adminFiltersToQuery,
+  lastAdminFilters,
+  listLiveEnterprises,
+  recordCreatedAdminSite,
+  refreshOrganisations,
+  refreshSites,
+  useAdminVersion,
+} from "@/lib/admin";
+import { useSession } from "@/lib/auth";
 import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
 import {
   TIME_OPTIONS,
@@ -33,6 +50,7 @@ const inputClass =
   "h-10 w-full rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-saveful-green/40 focus:bg-white disabled:opacity-50";
 
 type FieldKey =
+  | "organisationId"
   | "siteName"
   | "address"
   | "inviteFirstName"
@@ -40,26 +58,125 @@ type FieldKey =
   | "inviteEmail"
   | "existingUserId";
 
+type AssignableUser = { id: string; name: string; email: string; mobile?: string; role?: string; status?: string };
+type StructureOption = { id: string; name: string };
+
+function initialAdminOrganisationId(preferred?: string) {
+  if (preferred && /^\d+$/.test(preferred)) return preferred;
+  const remembered = lastAdminFilters().organisationId;
+  return remembered !== "all" && /^\d+$/.test(remembered) ? remembered : "";
+}
+
 export function SiteForm({
   mode,
   site,
+  variant = "enterprise",
+  defaultOrganisationId,
 }: {
   mode: "create" | "edit";
   site?: OrganizationSite;
+  variant?: "enterprise" | "admin";
+  defaultOrganisationId?: string;
 }) {
   const router = useRouter();
+  const user = useSession();
+  const isAdmin = variant === "admin";
   useOrgStructureVersion();
-  const [values, setValues] = useState<SiteFormValues>(site ? siteToFormValues(site) : emptySiteForm());
   useUsersVersion();
+  useAdminVersion();
+  const [values, setValues] = useState<SiteFormValues>(site ? siteToFormValues(site) : emptySiteForm());
+  const [organisationId, setOrganisationId] = useState(initialAdminOrganisationId(defaultOrganisationId));
+  const [adminUsers, setAdminUsers] = useState<AssignableUser[]>([]);
+  const [adminUnits, setAdminUnits] = useState<{ group: StructureOption[]; territory: StructureOption[]; cluster: StructureOption[] }>({
+    group: [],
+    territory: [],
+    cluster: [],
+  });
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [createdSiteId, setCreatedSiteId] = useState<number | null>(site ? Number(site.id) : null);
   const [assignedSiteCode, setAssignedSiteCode] = useState(site?.siteCode ?? "");
-  const cancelHref = site ? `/sites/${site.id}` : "/sites";
-  const assignableUsers = listUsers().filter(
-    (user) => user.status === "active" && /^\d+$/.test(user.id),
-  );
+  const adminQuery = adminFiltersToQuery(lastAdminFilters());
+  const cancelHref = isAdmin ? `/admin/sites${adminQuery}` : site ? `/sites/${site.id}` : "/sites";
+  const organisations = isAdmin ? listLiveEnterprises() : [];
+  const enterpriseUsers = listUsers()
+    .filter((item) => item.status === "active" && /^\d+$/.test(item.id))
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      email: item.email,
+      mobile: item.mobile,
+      role: item.role,
+      status: item.status,
+    }));
+  const assignableUsers = isAdmin ? adminUsers : enterpriseUsers;
+  const structureUnits = {
+    group: isAdmin ? adminUnits.group : listActiveUnits("group"),
+    territory: isAdmin ? adminUnits.territory : listActiveUnits("territory"),
+    cluster: isAdmin ? adminUnits.cluster : listActiveUnits("cluster"),
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void refreshOrganisations().catch(() => undefined);
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!organisationId) {
+      setAdminUsers([]);
+      setAdminUnits({ group: [], territory: [], cluster: [] });
+      return;
+    }
+    let cancelled = false;
+    const mapMembers = (members: Array<{ id: number; firstName: string; lastName: string; email: string; mobile?: string | null; roleLabel?: string; role?: string; status?: string }>) =>
+      members.map((member) => ({
+        id: String(member.id),
+        name: `${member.firstName} ${member.lastName}`.trim() || member.email,
+        email: member.email,
+        mobile: member.mobile ?? "",
+        role: member.roleLabel || member.role,
+        status: member.status,
+      }));
+
+    listAdminEnterpriseUsers(organisationId)
+      .then((payload) => {
+        if (cancelled) return;
+        setAdminUsers(mapMembers(payload.users ?? []));
+      })
+      .catch(() =>
+        getEnterprise(organisationId)
+          .then((detail) => {
+            if (cancelled) return;
+            setAdminUsers(mapMembers(detail.users ?? []));
+          })
+          .catch(() => {
+            if (!cancelled) setAdminUsers([]);
+          }),
+      );
+
+    getAdminEnterpriseStructure(organisationId)
+      .then((structure) => {
+        if (cancelled) return;
+        setAdminUnits({
+          group: structure.groups.filter((item) => item.isActive).map((item) => ({ id: String(item.id), name: item.name })),
+          cluster: structure.groups.flatMap((group) =>
+            group.clusters.filter((item) => item.isActive).map((item) => ({ id: String(item.id), name: item.name })),
+          ),
+          territory: structure.territories
+            .filter((item) => item.isActive)
+            .map((item) => ({ id: String(item.id), name: item.name })),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setAdminUnits({ group: [], territory: [], cluster: [] });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, organisationId]);
 
   const update = <K extends keyof SiteFormValues>(key: K, value: SiteFormValues[K]) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -76,6 +193,7 @@ export function SiteForm({
 
   const validate = () => {
     const next: Partial<Record<FieldKey, string>> = {};
+    if (isAdmin && !organisationId) next.organisationId = "Select the Enterprise this site belongs to.";
     if (!values.siteName.trim()) next.siteName = "Please enter a site name.";
     if (!values.place.address.trim()) next.address = "Please search or pin a pickup address.";
     if (!Number.isFinite(values.place.lat) || !Number.isFinite(values.place.lon)) {
@@ -110,15 +228,25 @@ export function SiteForm({
       const payload = siteFormToApiInput(values, {
         clearUnassigned: mode === "edit" || Boolean(createdSiteId),
       });
+      const selectedAdmin = assignableUsers.find((item) => item.id === values.existingUserId);
+      if (values.adminMode === "existing" && selectedAdmin) {
+        payload.contactName = selectedAdmin.name.slice(0, 120);
+        payload.contactEmail = selectedAdmin.email.toLowerCase();
+        if (selectedAdmin.mobile) payload.phoneNumber = selectedAdmin.mobile.slice(0, 30);
+      }
       const saved = savedSiteId
-        ? await updateOrganisationSite(savedSiteId, payload)
-        : await createOrganisationSite(payload);
+        ? isAdmin
+          ? { site: { id: savedSiteId, siteName: values.siteName.trim(), address: values.place.address.trim(), siteCode: assignedSiteCode } }
+          : await updateOrganisationSite(savedSiteId, payload)
+        : isAdmin
+          ? await createAdminOrganisationSite(organisationId, payload)
+          : await createOrganisationSite(payload);
       savedSiteId = saved.site.id;
       setCreatedSiteId(savedSiteId);
       if (saved.site.siteCode) setAssignedSiteCode(saved.site.siteCode);
 
       if (values.adminMode === "invite") {
-        await inviteEnterpriseUser({
+        const invite = {
           firstName: values.inviteFirstName.trim(),
           lastName: values.inviteLastName.trim(),
           email: values.inviteEmail.trim().toLowerCase(),
@@ -126,15 +254,33 @@ export function SiteForm({
           role: "SITE_ADMIN",
           siteAdminForSiteId: savedSiteId,
           scopes: [{ scopeType: "SITE", scopeId: savedSiteId }],
-        });
+        };
+        if (isAdmin) await inviteAdminEnterpriseUser(organisationId, invite);
+        else await inviteEnterpriseUser(invite);
       }
 
       if (values.adminMode === "existing") {
-        await assignExistingSiteAdmin(savedSiteId, Number(values.existingUserId));
+        if (isAdmin) await assignAdminSiteAdmin(organisationId, savedSiteId, Number(values.existingUserId));
+        else await assignExistingSiteAdmin(savedSiteId, Number(values.existingUserId));
       }
 
-      await refreshEnterpriseWorkspace();
-      router.push(`/sites/${savedSiteId}`);
+      if (isAdmin) {
+        recordCreatedAdminSite(
+          {
+            id: String(savedSiteId),
+            orgId: organisationId,
+            name: saved.site.siteName || values.siteName.trim(),
+            address: saved.site.address || values.place.address.trim(),
+            siteCode: saved.site.siteCode ?? undefined,
+          },
+          { name: user?.name ?? "Saveful Admin", email: user?.email ?? "" },
+        );
+        await refreshSites().catch(() => undefined);
+        router.push(`/admin/sites/${savedSiteId}${adminQuery}`);
+      } else {
+        await refreshEnterpriseWorkspace();
+        router.push(`/sites/${savedSiteId}`);
+      }
     } catch (err) {
       const message =
         err instanceof ApiError
@@ -147,21 +293,31 @@ export function SiteForm({
           ? `Site saved. ${message} You can retry the Site Admin step without creating another site.`
           : message,
       );
-      await refreshEnterpriseWorkspace().catch(() => undefined);
+      if (!isAdmin) await refreshEnterpriseWorkspace().catch(() => undefined);
     } finally {
       setSaving(false);
     }
   };
 
-  const siteContact = contactFromSiteAdmin(values);
+  const siteContact =
+    values.adminMode === "existing"
+      ? (() => {
+          const selected = assignableUsers.find((item) => item.id === values.existingUserId);
+          return selected
+            ? { name: selected.name, email: selected.email, mobile: selected.mobile ?? "" }
+            : null;
+        })()
+      : contactFromSiteAdmin(values);
   const inviting = values.adminMode === "invite";
   const submitLabel = saving ? "Saving…" : inviting ? "Save site & send invitation" : "Save site";
+  const Shell = isAdmin ? AdminPortalShell : PortalShell;
+  const selectedEnterprise = organisations.find((org) => org.id === organisationId);
 
   return (
-    <PortalShell>
+    <Shell>
       <PortalPageShell className="!space-y-3 sm:!space-y-3">
         <nav className="font-saveful text-xs text-gray-500">
-          <Link href="/sites" className="hover:text-saveful-green">
+          <Link href={isAdmin ? `/admin/sites${adminQuery}` : "/sites"} className="hover:text-saveful-green">
             Sites
           </Link>
           {site ? (
@@ -184,7 +340,9 @@ export function SiteForm({
               </h1>
               <p className="mt-1.5 font-saveful text-xs text-gray-500">
                 {mode === "create"
-                  ? "Add a location to your Enterprise network."
+                  ? isAdmin
+                    ? "Create a site under a selected Enterprise. The same fields and invitation flow as Super Admin."
+                    : "Add a location to your Enterprise network."
                   : "Group, territory and cluster changes apply going forward only."}
               </p>
             </div>
@@ -216,6 +374,36 @@ export function SiteForm({
             </p>
             <FormSection title="1. Site details">
               <div className="space-y-4 p-3.5">
+                {isAdmin ? (
+                  <Field label="Enterprise" htmlFor="organisationId" required error={errors.organisationId}>
+                    <select
+                      id="organisationId"
+                      value={organisationId}
+                      onChange={(event) => {
+                        setOrganisationId(event.target.value);
+                        update("groupId", "");
+                        update("territoryId", "");
+                        update("clusterId", "");
+                        update("existingUserId", "");
+                        clearError("organisationId");
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="">Select an Enterprise</option>
+                      {organisations.map((org) => (
+                        <option key={org.id} value={org.id}>
+                          {org.name}
+                          {org.enterpriseId ? ` · ${org.enterpriseId}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedEnterprise ? (
+                      <p className="mt-1.5 font-saveful text-xs text-gray-500">
+                        The site will be created under {selectedEnterprise.name}.
+                      </p>
+                    ) : null}
+                  </Field>
+                ) : null}
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <Field label="Site name" htmlFor="siteName" required error={errors.siteName}>
                     <input
@@ -389,12 +577,24 @@ export function SiteForm({
                         className={inputClass}
                       >
                         <option value="">Select a user</option>
-                        {assignableUsers.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.name} · {user.email}
+                        {assignableUsers.map((member) => (
+                          <option key={member.id} value={member.id} disabled={member.status === "DEACTIVATED"}>
+                            {member.name} · {member.email}
+                            {member.role ? ` · ${member.role}` : ""}
+                            {member.status && member.status !== "ACTIVE" ? ` · ${member.status.toLowerCase()}` : ""}
                           </option>
                         ))}
                       </select>
+                      {isAdmin && !organisationId ? (
+                        <p className="mt-1.5 font-saveful text-xs text-gray-500">
+                          Select an Enterprise first to see its users.
+                        </p>
+                      ) : null}
+                      {isAdmin && organisationId && assignableUsers.length === 0 ? (
+                        <p className="mt-1.5 font-saveful text-xs text-gray-500">
+                          No users in this Enterprise yet. Invite a new Site Admin instead.
+                        </p>
+                      ) : null}
                     </Field>
                     {siteContact ? (
                       <div className="grid grid-cols-1 gap-3 rounded-xl bg-[#F7F6F2] px-3.5 py-3 sm:grid-cols-3">
@@ -418,21 +618,21 @@ export function SiteForm({
                   label="Group"
                   hint="Changing this does not rewrite past collections."
                   value={values.groupId}
-                  options={listActiveUnits("group")}
+                  options={structureUnits.group}
                   onChange={(groupId) => update("groupId", groupId)}
                 />
                 <StructureField
                   label="Territory"
                   hint="Independent label. Not a child of Group."
                   value={values.territoryId}
-                  options={listActiveUnits("territory")}
+                  options={structureUnits.territory}
                   onChange={(territoryId) => update("territoryId", territoryId)}
                 />
                 <StructureField
                   label="Cluster"
                   hint="Create new clusters in Structure settings."
                   value={values.clusterId}
-                  options={listActiveUnits("cluster")}
+                  options={structureUnits.cluster}
                   onChange={(clusterId) => update("clusterId", clusterId)}
                 />
               </div>
@@ -526,7 +726,7 @@ export function SiteForm({
           </div>
         </form>
       </PortalPageShell>
-    </PortalShell>
+    </Shell>
   );
 }
 

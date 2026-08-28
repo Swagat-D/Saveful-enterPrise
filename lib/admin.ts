@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { appendAdminAudit, listAdminAudit } from "@/lib/adminAudit";
-import { ApiError, getEnterprise, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
+import { ApiError, getEnterprise, listAdminNetworkUsers, listAdminSites, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminNetworkInvite, type AdminNetworkUser, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
 import { inDateRange, periodRange, previousPeriodRange } from "@/lib/dates";
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
@@ -143,6 +143,15 @@ export type AdminSite = {
   address: string;
   status: string;
   lastActivityAt: string | null;
+  siteCode?: string;
+  orgName?: string;
+  groupId?: string | null;
+  territoryId?: string | null;
+  clusterId?: string | null;
+  groupLabel?: string;
+  territoryLabel?: string;
+  clusterLabel?: string;
+  activatedAt?: string | null;
 };
 
 export type AdminListing = {
@@ -223,6 +232,7 @@ let overlay: Record<string, Overlay> = {};
 let siteOverlay: Record<string, { status?: SiteLifecycleStatus }> = {};
 let createdOrgs: AdminOrganisation[] = [];
 let createdSites: AdminSite[] = [];
+let remoteSites: AdminSite[] = [];
 let remoteOrgs: AdminOrganisation[] = [];
 let remoteOrgUsers: Record<string, AdminOrgUser[]> = {};
 let remoteOrgProfiles: Record<string, AdminOrgProfile> = {};
@@ -235,8 +245,9 @@ function site(
   address: string,
   status: string,
   lastActivityAt: string | null,
+  siteCode?: string,
 ): AdminSite {
-  return { id, orgId, name, address, status, lastActivityAt };
+  return { id, orgId, name, address, status, lastActivityAt, siteCode };
 }
 
 function emit() {
@@ -444,7 +455,111 @@ export async function refreshOrganisations() {
   if (needsDetail.length) {
     await Promise.all(needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)));
   }
+  await Promise.all([refreshSites().catch(() => undefined), refreshEnterpriseUsers().catch(() => undefined)]);
   return listOrganisations();
+}
+
+function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
+  return {
+    id: String(row.id),
+    orgId: String(row.organisationId),
+    orgName: row.organisationName,
+    name: row.siteName,
+    address: row.address,
+    status: row.isActive ? "Active" : "Deactivated",
+    lastActivityAt: row.lastActivityAt ?? null,
+    siteCode: row.siteCode ?? undefined,
+    groupId: row.groupId != null ? String(row.groupId) : null,
+    territoryId: row.territoryId != null ? String(row.territoryId) : null,
+    clusterId: row.clusterId != null ? String(row.clusterId) : null,
+    groupLabel: row.groupName ?? undefined,
+    territoryLabel: row.territoryName ?? undefined,
+    clusterLabel: row.clusterName ?? undefined,
+    activatedAt: row.activatedAt ?? null,
+  };
+}
+
+function ensureOrgFromSite(row: AdminApiSiteRow) {
+  if (!row.enterpriseId) return;
+  const id = String(row.organisationId);
+  if (remoteOrgs.some((org) => org.id === id) || getOrganisation(id)) return;
+  remoteOrgs = [
+    ...remoteOrgs,
+    {
+      id,
+      name: row.organisationName,
+      type: "food_business",
+      roles: ["surplus_provider"],
+      country: "",
+      state: "",
+      status: "Active",
+      plan: "enterprise",
+      users: 0,
+      source: "platform",
+      enterpriseId: row.enterpriseId ?? undefined,
+    },
+  ];
+}
+
+export async function refreshSites() {
+  const payload = await listAdminSites();
+  remoteSites = (payload.sites ?? [])
+    .filter((row) => Boolean(row.enterpriseId))
+    .map((row) => {
+      ensureOrgFromSite(row);
+      return mapAdminApiSite(row);
+    });
+  emit();
+  return listSites();
+}
+
+function storeOrgUsers(orgId: string, members: AdminNetworkUser[], invitations: AdminNetworkInvite[]) {
+  const mapped: AdminOrgUser[] = members.map((row) => ({
+    id: String(row.id),
+    orgId,
+    name: `${row.firstName} ${row.lastName}`.trim() || row.email,
+    email: row.email,
+    role: row.roleLabel || row.role,
+    status: mapMemberStatus(row.status),
+    lastActiveAt: row.lastLoginAt ?? null,
+  }));
+  const seen = new Set(mapped.map((row) => row.email.toLowerCase()));
+  const invited: AdminOrgUser[] = invitations
+    .filter((row) => !seen.has(row.email.toLowerCase()))
+    .map((row) => ({
+      id: `invite-${row.id}`,
+      orgId,
+      name: `${row.firstName} ${row.lastName}`.trim() || row.email,
+      email: row.email,
+      role: row.roleLabel || row.role,
+      status: "Invited" as const,
+      lastActiveAt: null,
+    }));
+  remoteOrgUsers[orgId] = [...mapped, ...invited];
+}
+
+export async function refreshEnterpriseUsers() {
+  const payload = await listAdminNetworkUsers();
+  const membersByOrg = new Map<string, AdminNetworkUser[]>();
+  for (const row of payload.users ?? []) {
+    const orgId = String(row.organisationId);
+    const list = membersByOrg.get(orgId) ?? [];
+    list.push(row);
+    membersByOrg.set(orgId, list);
+  }
+  const invitesByOrg = new Map<string, AdminNetworkInvite[]>();
+  for (const row of payload.invitations ?? []) {
+    const orgId = String(row.organisationId);
+    const list = invitesByOrg.get(orgId) ?? [];
+    list.push(row);
+    invitesByOrg.set(orgId, list);
+  }
+  const orgIds = new Set([...membersByOrg.keys(), ...invitesByOrg.keys()]);
+  for (const orgId of orgIds) {
+    storeOrgUsers(orgId, membersByOrg.get(orgId) ?? [], invitesByOrg.get(orgId) ?? []);
+  }
+  emit();
+  return listLiveEnterprises().flatMap((org) => listOrgUsers(org.id));
 }
 
 export function listOrganisations(): AdminOrganisation[] {
@@ -465,6 +580,10 @@ export function listOrganisations(): AdminOrganisation[] {
 
 export function getOrganisation(id: string) {
   return listOrganisations().find((org) => org.id === id) ?? null;
+}
+
+export function listLiveEnterprises() {
+  return listOrganisations().filter((org) => /^\d+$/.test(org.id));
 }
 
 function matchRecipientOrgId(name: string): string | undefined {
@@ -489,7 +608,10 @@ function matchOwnSite(orgId: string, recipientName: string) {
 
 export function listSites(): AdminSite[] {
   ensureLoaded();
-  return createdSites.map(applySiteOverlay);
+  const remoteIds = new Set(remoteSites.map((row) => row.id));
+  return [...remoteSites, ...createdSites.filter((row) => !remoteIds.has(row.id))]
+    .map(applySiteOverlay)
+    .filter((row) => remoteIds.has(row.id) || Boolean(getOrganisation(row.orgId)?.enterpriseId));
 }
 
 function applySiteOverlay(row: AdminSite): AdminSite {
@@ -560,8 +682,15 @@ export function filteredOrganisations(filters: AdminFilters) {
 }
 
 export function filteredSites(filters: AdminFilters) {
+  const hasOrgScope =
+    filters.organisationId !== "all" ||
+    filters.orgType !== "all" ||
+    filters.country !== "all" ||
+    filters.state !== "all" ||
+    filters.role !== "all";
+  if (!hasOrgScope) return listSites();
   const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
-  return listSites().filter((row) => allowed.has(row.orgId));
+  return listSites().filter((row) => allowed.has(row.orgId) || !getOrganisation(row.orgId));
 }
 
 export function filteredListings(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
@@ -906,13 +1035,27 @@ export function createSite(
   input: { orgId: string; name: string; address: string },
   actor: { name: string; email: string },
 ) {
+  return recordCreatedAdminSite(
+    {
+      id: `site-${Date.now()}`,
+      orgId: input.orgId,
+      name: input.name,
+      address: input.address,
+    },
+    actor,
+  );
+}
+
+export function recordCreatedAdminSite(
+  input: { id: string; orgId: string; name: string; address: string; siteCode?: string },
+  actor: { name: string; email: string },
+) {
   ensureLoaded();
   const org = getOrganisation(input.orgId);
   const name = input.name.trim();
   if (!org || !name) return null;
-  const id = `site-${Date.now()}`;
-  const next = site(org.id, id, name, input.address.trim() || org.state, "Never activated", null);
-  createdSites = [next, ...createdSites];
+  const next = site(org.id, input.id, name, input.address.trim() || org.state, "Never activated", null, input.siteCode);
+  createdSites = [next, ...createdSites.filter((row) => row.id !== next.id)];
   persist();
   appendAdminAudit({
     actor: actor.name,
@@ -920,7 +1063,7 @@ export function createSite(
     action: "Created site",
     organisationId: org.id,
     organisationName: org.name,
-    siteId: id,
+    siteId: next.id,
     siteName: name,
     entityType: "site",
     entity: name,
@@ -1058,12 +1201,18 @@ function toDirectorySite(row: AdminSite, period: PeriodKey): AdminDirectorySite 
   const org = getOrganisation(row.orgId);
   const harbour = row.orgId === "harbour" ? demoNetworkSites.find((item) => item.id === row.id) : undefined;
   const siteStatus = siteLifecycle(row);
-  const activatedAt = harbour?.activatedAt ?? (row.status === "Never activated" ? null : row.lastActivityAt ?? "2026-01-01");
+  const groupId = harbour?.groupId ?? row.groupId ?? null;
+  const territoryId = harbour?.territoryId ?? row.territoryId ?? null;
+  const clusterId = harbour?.clusterId ?? row.clusterId ?? null;
+  const activatedAt =
+    harbour?.activatedAt ??
+    row.activatedAt ??
+    (row.status === "Never activated" ? null : row.lastActivityAt);
   const lastActivityAt = harbour?.lastActivityAt ?? row.lastActivityAt;
   const activity = activityStatus(
     {
       id: row.id,
-      siteCode: harbour?.siteCode ?? (row.id.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || row.id),
+      siteCode: harbour?.siteCode ?? row.siteCode ?? (row.id.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || row.id),
       siteType: "branch",
       name: row.name,
       address: row.address,
@@ -1073,9 +1222,9 @@ function toDirectorySite(row: AdminSite, period: PeriodKey): AdminDirectorySite 
       mobile: "",
       hasManager: true,
       isDefault: false,
-      groupId: harbour?.groupId ?? null,
-      territoryId: harbour?.territoryId ?? null,
-      clusterId: harbour?.clusterId ?? null,
+      groupId,
+      territoryId,
+      clusterId,
       status: siteStatus,
       activatedAt,
       lastActivityAt,
@@ -1092,17 +1241,17 @@ function toDirectorySite(row: AdminSite, period: PeriodKey): AdminDirectorySite 
   return {
     id: row.id,
     orgId: row.orgId,
-    orgName: org?.name ?? row.orgId,
+    orgName: org?.name ?? row.orgName ?? row.orgId,
     orgType: org?.type ?? "food_business",
     name: row.name,
     address: row.address,
-    siteCode: harbour?.siteCode ?? (row.id.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || row.id),
-    groupId: harbour?.groupId ?? null,
-    territoryId: harbour?.territoryId ?? null,
-    clusterId: harbour?.clusterId ?? null,
-    groupLabel: lookupLabel("group", harbour?.groupId),
-    territoryLabel: lookupLabel("territory", harbour?.territoryId),
-    clusterLabel: lookupLabel("cluster", harbour?.clusterId),
+    siteCode: harbour?.siteCode ?? row.siteCode ?? (row.id.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || row.id),
+    groupId,
+    territoryId,
+    clusterId,
+    groupLabel: harbour ? lookupLabel("group", harbour.groupId) : row.groupLabel || lookupLabel("group", groupId) || "—",
+    territoryLabel: harbour ? lookupLabel("territory", harbour.territoryId) : row.territoryLabel || lookupLabel("territory", territoryId) || "—",
+    clusterLabel: harbour ? lookupLabel("cluster", harbour.clusterId) : row.clusterLabel || lookupLabel("cluster", clusterId) || "—",
     siteStatus,
     activity,
     lastActivityAt,
@@ -1135,15 +1284,15 @@ export function buildSitesDirectory(adminFilters: AdminFilters, table: AdminSite
   };
   const groups = unique(mapped.map((row) => row.groupId).filter((id): id is string => Boolean(id))).map((id) => ({
     id,
-    name: lookupLabel("group", id),
+    name: mapped.find((row) => row.groupId === id)?.groupLabel || lookupLabel("group", id),
   }));
   const territories = unique(mapped.map((row) => row.territoryId).filter((id): id is string => Boolean(id))).map((id) => ({
     id,
-    name: lookupLabel("territory", id),
+    name: mapped.find((row) => row.territoryId === id)?.territoryLabel || lookupLabel("territory", id),
   }));
   const clusters = unique(mapped.map((row) => row.clusterId).filter((id): id is string => Boolean(id))).map((id) => ({
     id,
-    name: lookupLabel("cluster", id),
+    name: mapped.find((row) => row.clusterId === id)?.clusterLabel || lookupLabel("cluster", id),
   }));
   return { rows, counts, groups, territories, clusters };
 }

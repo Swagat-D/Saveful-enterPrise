@@ -23,13 +23,13 @@ import {
   adminFiltersToQuery,
   adminSitesTableToQuery,
   buildSitesDirectory,
-  createSite,
   exportAdminSitesCsv,
   getOrganisation,
   hasActiveAdminSitesFilters,
   parseAdminFilters,
   parseAdminSitesTable,
   rememberAdminFilters,
+  refreshSites,
   updateSiteStatus,
   urlHasAdminFilters,
   useAdminVersion,
@@ -58,6 +58,13 @@ const activityOptions = [
   { id: "never_used", name: ACTIVITY_LABEL.never_used },
   { id: "never_activated", name: ACTIVITY_LABEL.never_activated },
 ];
+
+function addAdminSiteHref(query: string, organisationId?: string) {
+  const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+  if (organisationId) params.set("organisationId", organisationId);
+  const next = params.toString();
+  return next ? `/admin/sites/new?${next}` : "/admin/sites/new";
+}
 
 function useAdminSitesState() {
   const router = useRouter();
@@ -104,9 +111,25 @@ export function AdminSites() {
   const page = Math.min(table.page, pageCount);
   const paged = directory.rows.slice((page - 1) * table.pageSize, page * table.pageSize);
   const [menuId, setMenuId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const orgOptions = adminFilterOptions(admin).organisations;
+  const addSiteHref = addAdminSiteHref(query, admin.organisationId !== "all" ? admin.organisationId : undefined);
   const contextOrg = admin.organisationId !== "all" ? getOrganisation(admin.organisationId) : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshSites()
+      .then(() => {
+        if (!cancelled) setLoadError("");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setLoadError(error instanceof Error ? error.message : "Sites could not be loaded from the API.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleSiteStatus = (status: SiteLifecycleStatus) => {
     updateTable({ siteStatus: table.siteStatus === status ? "all" : status });
@@ -173,27 +196,22 @@ export function AdminSites() {
                 <Download className="h-3.5 w-3.5" />
                 Export
               </button>
-              <button
-                type="button"
-                onClick={() => setAdding((value) => !value)}
+              <Link
+                href={addSiteHref}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add site
-              </button>
+              </Link>
             </div>
           </header>
 
           <div className="space-y-4 p-4 sm:p-5">
-            {adding ? (
-              <AddSiteForm
-                organisations={orgOptions}
-                defaultOrgId={admin.organisationId !== "all" ? admin.organisationId : orgOptions[0]?.id ?? ""}
-                actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }}
-                onClose={() => setAdding(false)}
-              />
+            {loadError ? (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">
+                {loadError} Restart the API with the latest admin sites endpoint, then refresh this page.
+              </p>
             ) : null}
-
             <AdminSection title="Network snapshot" action={<span className="font-saveful text-[11px] text-gray-400">{periodLabel(admin.period)} · Site status and activity are separate</span>}>
               <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-3 xl:grid-cols-5">
                 <SummaryCell
@@ -460,6 +478,16 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
   const paged = directory.rows.slice((current - 1) * pageSize, current * pageSize);
 
   return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Link
+          href={addAdminSiteHref(query, orgId)}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add site
+        </Link>
+      </div>
     <div className="overflow-x-auto rounded-xl border border-gray-200">
       <table className="min-w-full text-left">
         <thead>
@@ -523,52 +551,7 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
         }}
       />
     </div>
-  );
-}
-
-function AddSiteForm({
-  organisations,
-  defaultOrgId,
-  actor,
-  onClose,
-}: {
-  organisations: { id: string; name: string }[];
-  defaultOrgId: string;
-  actor: { name: string; email: string };
-  onClose: () => void;
-}) {
-  const [orgId, setOrgId] = useState(defaultOrgId);
-  const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-
-  return (
-    <form
-      className="grid gap-3 rounded-xl border border-dashed border-saveful-green/30 bg-saveful-green/[0.03] p-3.5 sm:grid-cols-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!createSite({ orgId, name, address }, actor)) return;
-        onClose();
-      }}
-    >
-      <p className="sm:col-span-4 font-saveful text-[10px] uppercase tracking-[0.12em] text-saveful-green">Saveful only · Add site</p>
-      <FilterSelect label="Organisation" value={orgId} onChange={setOrgId} options={organisations} />
-      <label className="block min-w-0">
-        <span className="mb-1.5 block font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">Site name</span>
-        <input value={name} onChange={(event) => setName(event.target.value)} required className="h-9 w-full rounded-lg border border-black/[0.06] bg-white px-2.5 font-saveful text-sm outline-none" />
-      </label>
-      <label className="block min-w-0">
-        <span className="mb-1.5 block font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">Address</span>
-        <input value={address} onChange={(event) => setAddress(event.target.value)} className="h-9 w-full rounded-lg border border-black/[0.06] bg-white px-2.5 font-saveful text-sm outline-none" />
-      </label>
-      <div className="flex items-end gap-2">
-        <button type="submit" className="h-9 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white">
-          Create site
-        </button>
-        <button type="button" onClick={onClose} className="h-9 rounded-lg px-3 font-saveful text-sm text-gray-500">
-          Cancel
-        </button>
-      </div>
-    </form>
+    </div>
   );
 }
 
