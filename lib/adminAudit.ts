@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { DEMO_TODAY, addDays, inDateRange, periodRange, toApiDate } from "@/lib/dates";
+import { DEMO_TODAY, addDays, inDateRange, liveToday, periodRange, toApiDate } from "@/lib/dates";
 import type { PeriodKey } from "@/types/enterprise";
 
 export const ADMIN_AUDIT_RETENTION_MONTHS = 24;
@@ -191,7 +191,7 @@ export function appendAdminAudit(
 export function listAdminAudit(filters: Partial<AdminAuditFilters> & Pick<AdminAuditFilters, "period" | "organisationId">) {
   ensureLoaded();
   const merged: AdminAuditFilters = { ...EMPTY_ADMIN_AUDIT_FILTERS, ...filters };
-  const { startDate, endDate } = periodRange(merged.period);
+  const { startDate, endDate } = periodRange(merged.period, liveToday());
   const query = merged.q.trim().toLowerCase();
   return applyRetention([...extras, ...seed()]).filter((row) => {
     if (!inDateRange(row.at, startDate, endDate)) return false;

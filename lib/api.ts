@@ -259,6 +259,7 @@ export type AdminApiSiteRow = {
   siteCode?: string | null;
   address: string;
   isActive: boolean;
+  createdAt?: string | null;
   activatedAt?: string | null;
   lastActivityAt?: string | null;
   groupId?: number | null;
@@ -414,6 +415,7 @@ export type EnterpriseListItem = {
   sites: number;
   users: number;
   lastLoginAt?: string | null;
+  createdAt?: string | null;
   contract: {
     organisationId: number;
     status: string;

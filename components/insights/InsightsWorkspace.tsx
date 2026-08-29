@@ -16,7 +16,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { FileText, Leaf } from "lucide-react";
-import { MoreFilters } from "@/components/network/FilterBar";
+import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { NetworkPerformance } from "@/components/insights/NetworkPerformance";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
@@ -177,7 +177,8 @@ export function InsightsWorkspace() {
                     </div>
                   </MoreFilters>
                 </div>
-                <div className={cn("hidden gap-2 lg:grid", filters.tab === "impact" ? "grid-cols-2 xl:grid-cols-3" : "grid-cols-2 xl:grid-cols-5")}>
+                <div className="hidden items-end gap-2 lg:flex">
+                  <div className={cn("grid min-w-0 flex-1 gap-2", filters.tab === "impact" ? "grid-cols-2 xl:grid-cols-3" : "grid-cols-2 xl:grid-cols-5")}>
                   <FilterSelect value={filters.period} onChange={(period) => update({ period: period as PeriodKey })} options={PERIODS.map((item) => ({ id: item.id, name: `Period: ${item.label}` }))} />
                   <FilterSelect value={filters.groupId} onChange={(groupId) => update({ groupId })} options={[{ id: "all", name: "Group: All" }, ...options.groups.map((item) => ({ id: item.id, name: `Group: ${item.name}` }))]} />
                   <FilterSelect value={filters.territoryId} onChange={(territoryId) => update({ territoryId })} options={[{ id: "all", name: "Territory: All" }, ...options.territories.map((item) => ({ id: item.id, name: `Territory: ${item.name}` }))]} />
@@ -186,6 +187,11 @@ export function InsightsWorkspace() {
                   {filters.tab === "impact" ? (
                     <FilterSelect value={filters.pathway} onChange={(pathway) => update({ pathway: pathway as InsightsFilters["pathway"] })} options={[{ id: "all", name: "Pathway: All" }, ...INSIGHTS_PATHWAYS.map((item) => ({ id: item.id, name: `Pathway: ${item.label}` }))]} />
                   ) : null}
+                  </div>
+                  <FilterResetButton
+                    onReset={() => setFilters({ ...EMPTY_INSIGHTS_FILTERS, tab: filters.tab, viewBy: filters.viewBy })}
+                    active={hasActiveInsightsFilters(filters)}
+                  />
                 </div>
               </div>
             </WorkspaceSection>

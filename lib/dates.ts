@@ -4,6 +4,12 @@ import type { PeriodKey } from "@/types/enterprise";
 /** Fixed demo “today” so generated history and filters stay aligned. */
 export const DEMO_TODAY = new Date("2026-08-22T12:00:00.000Z");
 
+/** Latest of demo today and the real clock, so live admin events are not dropped. */
+export function liveToday() {
+  const now = new Date();
+  return now > DEMO_TODAY ? now : DEMO_TODAY;
+}
+
 export function toApiDate(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");

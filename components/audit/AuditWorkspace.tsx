@@ -22,7 +22,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { MoreFilters } from "@/components/network/FilterBar";
+import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
 import {
@@ -172,7 +172,8 @@ export function AuditWorkspace() {
                     </MoreFilters>
                   </div>
                 </div>
-                <div className="hidden grid-cols-2 gap-2 lg:grid xl:grid-cols-4">
+                <div className="hidden items-end gap-2 lg:flex">
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 xl:grid-cols-4">
                   <FilterSelect
                     value={filters.period}
                     onChange={(period) => update({ period: period as PeriodKey })}
@@ -193,6 +194,8 @@ export function AuditWorkspace() {
                     onChange={(area) => update({ area })}
                     options={[{ id: "all", name: "Area: All" }, ...AUDIT_AREAS.map((item) => ({ id: item.id, name: `Area: ${item.label}` }))]}
                   />
+                  </div>
+                  <FilterResetButton onReset={() => setFilters(EMPTY_AUDIT_FILTERS)} active={hasActiveAuditFilters(filters)} />
                 </div>
               </div>
 

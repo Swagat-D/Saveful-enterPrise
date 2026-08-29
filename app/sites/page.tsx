@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download, Plus, Search, Upload } from "lucide-react";
 import { AdminRowMenu } from "@/components/admin/AdminChrome";
-import { MoreFilters } from "@/components/network/FilterBar";
+import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
@@ -201,7 +201,7 @@ function SitesDirectory() {
                 hasActiveSitesFilters(filters) ? (
                   <button
                     type="button"
-                    onClick={() => setFilters({ ...EMPTY_SITES_FILTERS, period: filters.period })}
+                    onClick={() => setFilters({ ...EMPTY_SITES_FILTERS })}
                     className="font-saveful-semibold text-xs text-saveful-green hover:underline"
                   >
                     Clear filters
@@ -236,17 +236,7 @@ function SitesDirectory() {
                       }
                       title="Filter sites"
                       subtitle="Refine the list without shrinking the table."
-                      onReset={() =>
-                        setFilters({
-                          ...filters,
-                          groupId: "all",
-                          territoryId: "all",
-                          clusterId: "all",
-                          siteStatus: "all",
-                          activity: "all",
-                          page: 1,
-                        })
-                      }
+                      onReset={() => setFilters({ ...EMPTY_SITES_FILTERS })}
                     >
                       <div className="grid grid-cols-1 gap-3">
                         <FilterSelect
@@ -286,7 +276,8 @@ function SitesDirectory() {
                       </div>
                     </MoreFilters>
                   </div>
-                  <div className="hidden grid-cols-5 gap-2 lg:grid lg:w-auto">
+                  <div className="hidden items-end gap-2 lg:flex lg:w-auto">
+                    <div className="grid min-w-0 grid-cols-5 gap-2">
                     <FilterSelect
                       value={filters.groupId}
                       onChange={(groupId) => update({ groupId })}
@@ -319,6 +310,8 @@ function SitesDirectory() {
                         name: item.id === "all" ? "Activity status: All" : item.name,
                       }))}
                     />
+                    </div>
+                    <FilterResetButton onReset={() => setFilters({ ...EMPTY_SITES_FILTERS })} active={hasActiveSitesFilters(filters)} />
                   </div>
                 </div>
               </div>

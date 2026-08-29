@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { appendAdminAudit, listAdminAudit } from "@/lib/adminAudit";
 import { ApiError, getEnterprise, listAdminNetworkUsers, listAdminSites, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminNetworkInvite, type AdminNetworkUser, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
-import { inDateRange, periodRange, previousPeriodRange } from "@/lib/dates";
+import { inDateRange, liveToday, periodRange, previousPeriodRange } from "@/lib/dates";
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
@@ -134,6 +134,7 @@ export type AdminOrganisation = {
   source: "platform" | "seeded" | "created";
   enterpriseId?: string;
   lastLoginAt?: string | null;
+  createdAt?: string | null;
 };
 
 export type AdminSite = {
@@ -143,6 +144,7 @@ export type AdminSite = {
   address: string;
   status: string;
   lastActivityAt: string | null;
+  createdAt?: string | null;
   siteCode?: string;
   orgName?: string;
   groupId?: string | null;
@@ -189,6 +191,7 @@ export type AdminOrgUser = {
   role: string;
   status: "Active" | "Invited" | "Deactivated";
   lastActiveAt: string | null;
+  joinedAt?: string | null;
 };
 
 export type AdminOrgProfile = {
@@ -246,8 +249,9 @@ function site(
   status: string,
   lastActivityAt: string | null,
   siteCode?: string,
+  createdAt?: string | null,
 ): AdminSite {
-  return { id, orgId, name, address, status, lastActivityAt, siteCode };
+  return { id, orgId, name, address, status, lastActivityAt, siteCode, createdAt: createdAt ?? null };
 }
 
 function emit() {
@@ -289,6 +293,11 @@ function persist() {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overlay));
   window.localStorage.setItem(CREATED_KEY, JSON.stringify({ orgs: createdOrgs, sites: createdSites }));
   window.localStorage.setItem(SITE_OVERLAY_KEY, JSON.stringify(siteOverlay));
+}
+
+export function formatEnterpriseId(id?: string | null) {
+  if (!id?.trim()) return "";
+  return id.replace(/-0+(\d+)\s*$/i, "-$1");
 }
 
 export function orgTypeLabel(id: OrgTypeId) {
@@ -347,7 +356,7 @@ export function parseAdminFilters(params: URLSearchParams): AdminFilters {
   const accountStatus = params.get("accountStatus");
   const activityStatus = params.get("activityStatus");
   const plan = params.get("plan");
-  const next = cascadeAdminFilters({
+  return cascadeAdminFilters({
     period: (["7", "30", "90", "all"].includes(period ?? "") ? period : "30") as PeriodKey,
     country: params.get("country") || "all",
     state: params.get("state") || "all",
@@ -360,8 +369,6 @@ export function parseAdminFilters(params: URLSearchParams): AdminFilters {
     activityStatus: activityStatus === "active" || activityStatus === "inactive" ? activityStatus : "all",
     plan: plan === "enterprise" || plan === "standard" ? plan : "all",
   });
-  rememberAdminFilters(next);
-  return next;
 }
 
 function cascadeAdminFilters(filters: AdminFilters): AdminFilters {
@@ -442,6 +449,7 @@ function mapEnterprise(row: EnterpriseListItem): AdminOrganisation {
     source: "platform",
     enterpriseId: row.enterpriseId,
     lastLoginAt: row.lastLoginAt ?? null,
+    createdAt: row.createdAt ?? null,
   };
 }
 
@@ -468,6 +476,7 @@ function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
     address: row.address,
     status: row.isActive ? "Active" : "Deactivated",
     lastActivityAt: row.lastActivityAt ?? null,
+    createdAt: row.createdAt ?? row.activatedAt ?? null,
     siteCode: row.siteCode ?? undefined,
     groupId: row.groupId != null ? String(row.groupId) : null,
     territoryId: row.territoryId != null ? String(row.territoryId) : null,
@@ -522,6 +531,7 @@ function storeOrgUsers(orgId: string, members: AdminNetworkUser[], invitations: 
     role: row.roleLabel || row.role,
     status: mapMemberStatus(row.status),
     lastActiveAt: row.lastLoginAt ?? null,
+    joinedAt: row.joinedAt ?? row.lastLoginAt ?? null,
   }));
   const seen = new Set(mapped.map((row) => row.email.toLowerCase()));
   const invited: AdminOrgUser[] = invitations
@@ -534,6 +544,7 @@ function storeOrgUsers(orgId: string, members: AdminNetworkUser[], invitations: 
       role: row.roleLabel || row.role,
       status: "Invited" as const,
       lastActiveAt: null,
+      joinedAt: row.invitationSentAt ?? null,
     }));
   remoteOrgUsers[orgId] = [...mapped, ...invited];
 }
@@ -1054,7 +1065,7 @@ export function recordCreatedAdminSite(
   const org = getOrganisation(input.orgId);
   const name = input.name.trim();
   if (!org || !name) return null;
-  const next = site(org.id, input.id, name, input.address.trim() || org.state, "Never activated", null, input.siteCode);
+  const next = site(org.id, input.id, name, input.address.trim() || org.state, "Never activated", null, input.siteCode, new Date().toISOString());
   createdSites = [next, ...createdSites.filter((row) => row.id !== next.id)];
   persist();
   appendAdminAudit({
@@ -1474,6 +1485,7 @@ export async function refreshOrganisationDetail(orgId: string) {
     role: row.roleLabel || row.role,
     status: mapMemberStatus(row.status),
     lastActiveAt: row.lastLoginAt ?? null,
+    joinedAt: row.joinedAt ?? row.lastLoginAt ?? null,
   }));
   const seen = new Set(members.map((row) => row.email.toLowerCase()));
   const invited: AdminOrgUser[] = (detail.invitations ?? [])
@@ -1486,6 +1498,7 @@ export async function refreshOrganisationDetail(orgId: string) {
       role: row.roleLabel || row.role,
       status: "Invited" as const,
       lastActiveAt: null,
+      joinedAt: row.invitationSentAt ?? null,
     }));
   const hasUserPayload = Array.isArray(detail.users) || Array.isArray(detail.invitations);
   remoteOrgUsers[orgId] =
@@ -1516,7 +1529,7 @@ export function orgProfile(org: AdminOrganisation): AdminOrgProfile {
       contactName: "—",
       contactEmail: "—",
       contactPhone: "—",
-      joinedAt: "",
+      joinedAt: isoDay(org.createdAt),
       contractStart: "",
       nextReview: "",
       billing: "—",
@@ -1529,12 +1542,173 @@ export function listOrgUsers(orgId: string): AdminOrgUser[] {
 }
 
 export function lastOrgActivityAt(orgId: string) {
+  const org = getOrganisation(orgId);
   const dates = [
-    ...listSites().filter((row) => row.orgId === orgId).map((row) => row.lastActivityAt),
+    org?.createdAt,
+    org ? orgProfile(org).joinedAt : null,
+    ...listSites().filter((row) => row.orgId === orgId).flatMap((row) => [row.lastActivityAt, row.createdAt, row.activatedAt]),
+    ...listOrgUsers(orgId).flatMap((row) => [row.lastActiveAt, row.joinedAt]),
     ...listListings().filter((row) => row.orgId === orgId).map((row) => row.createdAt),
     ...listCollections().filter((row) => row.orgId === orgId || row.recipientOrgId === orgId).map((row) => row.occurredAt),
   ].filter((value): value is string => Boolean(value));
   return dates.sort().at(-1) ?? null;
+}
+
+export type AdminActivityItem = {
+  id: string;
+  at: string;
+  kind: string;
+  detail: string;
+  organisationId: string;
+  organisationName: string;
+  href?: string;
+};
+
+function mergeActivity(items: AdminActivityItem[]) {
+  const seen = new Set<string>();
+  return items
+    .filter((item) => item.at)
+    .sort((left, right) => right.at.localeCompare(left.at))
+    .filter((item) => {
+      const key = `${item.kind}|${item.organisationId}|${item.at.slice(0, 10)}|${item.detail}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function organisationCreatedActivity(org: AdminOrganisation): AdminActivityItem | null {
+  const at = orgProfile(org).joinedAt || org.createdAt;
+  if (!at) return null;
+  const code = formatEnterpriseId(org.enterpriseId);
+  return {
+    id: `org-created-${org.id}`,
+    at,
+    kind: "Organisation created",
+    detail: code ? `${org.name} · ${code}` : org.name,
+    organisationId: org.id,
+    organisationName: org.name,
+    href: `/admin/organisations/${org.id}`,
+  };
+}
+
+export function listOrganisationDirectoryActivity(filters: AdminFilters, limit = 5): AdminActivityItem[] {
+  const orgs = filteredOrganisations(filters);
+  const { startDate, endDate } = periodRange(filters.period, liveToday());
+  const items: AdminActivityItem[] = [];
+  for (const org of orgs) {
+    const created = organisationCreatedActivity(org);
+    if (created) items.push(created);
+    const users = listOrgUsers(org.id);
+    const admin = users.find((row) => /super admin/i.test(row.role)) ?? users[0];
+    if (admin) {
+      items.push({
+        id: `org-admin-${org.id}-${admin.id}`,
+        at: admin.joinedAt || admin.lastActiveAt || created?.at || "",
+        kind: admin.status === "Invited" ? "Super Admin invited" : "Super Admin added",
+        detail: `${admin.name} · ${org.name}`,
+        organisationId: org.id,
+        organisationName: org.name,
+        href: `/admin/organisations/${org.id}`,
+      });
+    }
+    for (const row of listSites().filter((site) => site.orgId === org.id)) {
+      items.push({
+        id: `org-site-${row.id}`,
+        at: row.createdAt || row.activatedAt || created?.at || "",
+        kind: "Site added",
+        detail: `${row.name} · ${org.name}`,
+        organisationId: org.id,
+        organisationName: org.name,
+        href: `/admin/organisations/${org.id}`,
+      });
+    }
+  }
+  const audit = listAdminAudit({ q: "", period: filters.period, organisationId: filters.organisationId, page: 1 })
+    .filter((row) => row.entityType === "organisation" || row.area === "organisations" || row.area === "plans")
+    .map((row) => ({
+      id: row.id,
+      at: row.at,
+      kind: row.action,
+      detail: row.detail || row.organisationName,
+      organisationId: row.organisationId,
+      organisationName: row.organisationName,
+      href: `/admin/organisations/${row.organisationId}`,
+    }));
+  return mergeActivity([...items, ...audit])
+    .filter((item) => inDateRange(item.at, startDate, endDate))
+    .slice(0, limit);
+}
+
+export function listOrganisationInternalActivity(orgId: string, period: PeriodKey = "30", limit = 6): AdminActivityItem[] {
+  const org = getOrganisation(orgId);
+  if (!org) return [];
+  const { startDate, endDate } = periodRange(period, liveToday());
+  const created = organisationCreatedActivity(org);
+  const items: AdminActivityItem[] = created ? [created] : [];
+  for (const row of listSites().filter((site) => site.orgId === orgId)) {
+    items.push({
+      id: `site-${row.id}`,
+      at: row.createdAt || row.activatedAt || created?.at || "",
+      kind: "Site added",
+      detail: row.address ? `${row.name} · ${row.address}` : row.name,
+      organisationId: org.id,
+      organisationName: org.name,
+    });
+  }
+  for (const user of listOrgUsers(orgId)) {
+    items.push({
+      id: `user-${user.id}`,
+      at: user.joinedAt || created?.at || "",
+      kind: user.status === "Invited" ? "User invited" : "User added",
+      detail: `${user.name} · ${user.role}`,
+      organisationId: org.id,
+      organisationName: org.name,
+    });
+    if (user.lastActiveAt && user.status !== "Invited") {
+      items.push({
+        id: `login-${user.id}`,
+        at: user.lastActiveAt,
+        kind: "User signed in",
+        detail: `${user.name} · ${user.role}`,
+        organisationId: org.id,
+        organisationName: org.name,
+      });
+    }
+  }
+  for (const row of listListings().filter((item) => item.orgId === orgId)) {
+    items.push({
+      id: `list-${row.id}`,
+      at: row.createdAt,
+      kind: row.status === "claimed" ? "Listing claimed" : `Listing ${row.status.replaceAll("_", " ")}`,
+      detail: `${getSite(row.siteId)?.name ?? row.food} · ${row.food}`,
+      organisationId: org.id,
+      organisationName: org.name,
+    });
+  }
+  for (const row of listCollections().filter((item) => item.orgId === orgId || item.recipientOrgId === orgId)) {
+    items.push({
+      id: `col-${row.id}`,
+      at: row.occurredAt,
+      kind: row.status === "completed" ? "Collection completed" : `Collection ${row.status.replaceAll("_", " ")}`,
+      detail: `${getSite(row.siteId)?.name ?? "Site"} · ${row.food}`,
+      organisationId: org.id,
+      organisationName: org.name,
+    });
+  }
+  for (const row of listAdminAudit({ q: "", period, organisationId: orgId, page: 1 })) {
+    items.push({
+      id: row.id,
+      at: row.at,
+      kind: row.action,
+      detail: row.detail || row.entity,
+      organisationId: org.id,
+      organisationName: org.name,
+    });
+  }
+  return mergeActivity(items)
+    .filter((item) => period === "all" || inDateRange(item.at, startDate, endDate))
+    .slice(0, limit);
 }
 
 function collectionImpactRows(rows: AdminCollection[]): RecoveryTransaction[] {
@@ -1633,39 +1807,7 @@ export function buildOrgDetail(orgId: string, period: PeriodKey = "30") {
   );
 
   const invited = users.filter((row) => row.status === "Invited").length;
-  const recentActivity = [
-    ...collections.map((row) => {
-      const provider = getOrganisation(row.orgId);
-      const site = getSite(row.siteId);
-      const inbound = row.recipientOrgId === orgId && row.orgId !== orgId;
-      return {
-        id: `col-${row.id}`,
-        kind: row.status === "completed" ? "Collection completed" : `Collection ${row.status.replaceAll("_", " ")}`,
-        detail: inbound
-          ? `${provider?.name ?? "Provider"} → ${matchOwnSite(orgId, row.recipientName)?.name ?? row.recipientName}`
-          : `${site?.name ?? "Site"} → ${row.recipientName}`,
-        at: row.occurredAt,
-      };
-    }),
-    ...listListings()
-      .filter((row) => row.orgId === orgId)
-      .map((row) => ({
-        id: `list-${row.id}`,
-        kind: row.status === "claimed" ? "Listing claimed" : `Listing ${row.status.replaceAll("_", " ")}`,
-        detail: `${getSite(row.siteId)?.name ?? row.food} · ${row.food}`,
-        at: row.createdAt,
-      })),
-    ...users
-      .filter((row) => row.status === "Invited")
-      .map((row) => ({
-        id: `user-${row.id}`,
-        kind: "User invited",
-        detail: row.name,
-        at: lastOrgActivityAt(orgId) ?? orgProfile(org).joinedAt,
-      })),
-  ]
-    .sort((a, b) => b.at.localeCompare(a.at))
-    .slice(0, 5);
+  const recentActivity = listOrganisationInternalActivity(orgId, period, 6);
 
   return {
     org,

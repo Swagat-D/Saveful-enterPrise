@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, LoaderCircle } from "lucide-react";
 import { AddressPicker } from "@/components/sites/AddressPicker";
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
 import { PortalShell } from "@/components/layout/PortalShell";
@@ -27,6 +27,7 @@ import {
   adminFiltersToQuery,
   lastAdminFilters,
   listLiveEnterprises,
+  formatEnterpriseId,
   recordCreatedAdminSite,
   refreshOrganisations,
   refreshSites,
@@ -37,8 +38,11 @@ import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
 import {
   TIME_OPTIONS,
   WEEKDAYS,
+  clearSiteFormDraft,
   contactFromSiteAdmin,
   emptySiteForm,
+  loadSiteFormDraft,
+  saveSiteFormDraft,
   siteFormToApiInput,
   siteToFormValues,
   type SiteFormValues,
@@ -56,6 +60,7 @@ type FieldKey =
   | "inviteFirstName"
   | "inviteLastName"
   | "inviteEmail"
+  | "inviteMobile"
   | "existingUserId";
 
 type AssignableUser = { id: string; name: string; email: string; mobile?: string; role?: string; status?: string };
@@ -94,6 +99,8 @@ export function SiteForm({
   });
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [formError, setFormError] = useState("");
+  const [draftNotice, setDraftNotice] = useState("");
+  const [draftSaving, setDraftSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [createdSiteId, setCreatedSiteId] = useState<number | null>(site ? Number(site.id) : null);
   const [assignedSiteCode, setAssignedSiteCode] = useState(site?.siteCode ?? "");
@@ -178,6 +185,17 @@ export function SiteForm({
     };
   }, [isAdmin, organisationId]);
 
+  useEffect(() => {
+    if (mode !== "create" || site) return;
+    const draft = loadSiteFormDraft(isAdmin ? "admin" : "enterprise");
+    if (!draft) return;
+    setValues(draft.values);
+    if (draft.organisationId && /^\d+$/.test(draft.organisationId)) {
+      setOrganisationId(draft.organisationId);
+    }
+    setDraftNotice("Restored your saved draft.");
+  }, [isAdmin, mode, site]);
+
   const update = <K extends keyof SiteFormValues>(key: K, value: SiteFormValues[K]) => {
     setValues((prev) => ({ ...prev, [key]: value }));
   };
@@ -206,9 +224,19 @@ export function SiteForm({
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.inviteEmail.trim())) {
         next.inviteEmail = "Please enter a valid email address.";
       }
+      if (!values.inviteMobile.trim()) next.inviteMobile = "Please enter a mobile number.";
+      else if (!/\d{6,}/.test(values.inviteMobile.replace(/\D/g, ""))) {
+        next.inviteMobile = "Please enter a valid mobile number.";
+      }
     }
     if (values.adminMode === "existing" && !values.existingUserId) {
       next.existingUserId = "Select a Site Admin so this site can be used.";
+    }
+    if (values.adminMode === "existing" && values.existingUserId) {
+      const selected = assignableUsers.find((item) => item.id === values.existingUserId);
+      if (selected && !String(selected.mobile ?? "").replace(/\D/g, "")) {
+        next.existingUserId = "This user has no mobile number. Choose someone else or invite a new Site Admin.";
+      }
     }
     return next;
   };
@@ -250,7 +278,7 @@ export function SiteForm({
           firstName: values.inviteFirstName.trim(),
           lastName: values.inviteLastName.trim(),
           email: values.inviteEmail.trim().toLowerCase(),
-          mobile: values.inviteMobile.trim() || undefined,
+          mobile: values.inviteMobile.trim(),
           role: "SITE_ADMIN",
           siteAdminForSiteId: savedSiteId,
           scopes: [{ scopeType: "SITE", scopeId: savedSiteId }],
@@ -276,9 +304,11 @@ export function SiteForm({
           { name: user?.name ?? "Saveful Admin", email: user?.email ?? "" },
         );
         await refreshSites().catch(() => undefined);
+        clearSiteFormDraft("admin");
         router.push(`/admin/sites/${savedSiteId}${adminQuery}`);
       } else {
         await refreshEnterpriseWorkspace();
+        clearSiteFormDraft("enterprise");
         router.push(`/sites/${savedSiteId}`);
       }
     } catch (err) {
@@ -297,6 +327,31 @@ export function SiteForm({
     } finally {
       setSaving(false);
     }
+  };
+
+  const persistDraft = async () => {
+    if (draftSaving) return;
+    setDraftSaving(true);
+    setFormError("");
+    setDraftNotice("");
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+      saveSiteFormDraft(isAdmin ? "admin" : "enterprise", values, isAdmin ? organisationId : undefined);
+      setDraftNotice(
+        isAdmin
+          ? "Draft saved. You can leave this page and come back — your details will be waiting."
+          : "Draft saved. You can open Structure settings to set up groups, territories and clusters, then return here.",
+      );
+    } catch {
+      setFormError("Draft could not be saved. Check that browser storage is available and try again.");
+    } finally {
+      setDraftSaving(false);
+    }
+  };
+
+  const openStructureSettings = async () => {
+    await persistDraft();
+    router.push("/settings/structure");
   };
 
   const siteContact =
@@ -332,9 +387,9 @@ export function SiteForm({
           <span className="text-gray-700">{mode === "create" ? "Add site" : "Edit"}</span>
         </nav>
 
-        <form onSubmit={handleSubmit} className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-          <header className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <div className="min-w-0">
+        <form onSubmit={handleSubmit} className="rounded-2xl border border-black/[0.05] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <header className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3.5 sm:px-5 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 flex-1">
               <h1 className="font-saveful-bold text-xl leading-none text-gray-900 sm:text-2xl">
                 {mode === "create" ? "Add site" : "Edit site"}
               </h1>
@@ -346,27 +401,25 @@ export function SiteForm({
                   : "Group, territory and cluster changes apply going forward only."}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Link
-                href={cancelHref}
-                className="inline-flex h-9 items-center rounded-lg border border-black/[0.06] bg-white px-3 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]"
-              >
-                Cancel
-              </Link>
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex h-9 items-center rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white disabled:opacity-60"
-              >
-                {submitLabel}
-              </button>
-            </div>
+            <FormActions
+              cancelHref={cancelHref}
+              submitLabel={submitLabel}
+              saving={saving}
+              draftSaving={draftSaving}
+              draftSaved={Boolean(draftNotice)}
+              onSaveDraft={mode === "create" ? persistDraft : undefined}
+            />
           </header>
 
           <div className="space-y-4 p-4 sm:p-5">
             {formError ? (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">
                 {formError}
+              </p>
+            ) : null}
+            {draftNotice ? (
+              <p className="rounded-lg border border-saveful-green/20 bg-saveful-green/[0.06] px-3 py-2 font-saveful text-sm text-saveful-green">
+                {draftNotice}
               </p>
             ) : null}
             <p className="font-saveful text-xs text-gray-500">
@@ -393,7 +446,7 @@ export function SiteForm({
                       {organisations.map((org) => (
                         <option key={org.id} value={org.id}>
                           {org.name}
-                          {org.enterpriseId ? ` · ${org.enterpriseId}` : ""}
+                          {org.enterpriseId ? ` · ${formatEnterpriseId(org.enterpriseId)}` : ""}
                         </option>
                       ))}
                     </select>
@@ -547,13 +600,16 @@ export function SiteForm({
                         className={inputClass}
                       />
                     </Field>
-                    <Field label="Mobile" htmlFor="inviteMobile" optional>
+                    <Field label="Mobile" htmlFor="inviteMobile" required error={errors.inviteMobile}>
                       <input
                         id="inviteMobile"
                         type="tel"
                         maxLength={30}
                         value={values.inviteMobile}
-                        onChange={(event) => update("inviteMobile", event.target.value)}
+                        onChange={(event) => {
+                          update("inviteMobile", event.target.value);
+                          clearError("inviteMobile");
+                        }}
                         placeholder="e.g. 0412 345 678"
                         className={inputClass}
                       />
@@ -613,7 +669,23 @@ export function SiteForm({
             </FormSection>
 
             <FormSection title="3. Enterprise structure" optional hint="Managed in Settings">
-              <div className="grid grid-cols-1 gap-3 p-3.5 md:grid-cols-3">
+              <div className="space-y-3 p-3.5">
+              <p className="font-saveful text-xs text-gray-500">
+                Save a draft if you need to set up groups, territories or clusters first.
+                {!isAdmin ? (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={openStructureSettings}
+                      className="font-saveful-semibold text-saveful-green hover:underline"
+                    >
+                      Open structure settings
+                    </button>
+                  </>
+                ) : null}
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <StructureField
                   label="Group"
                   hint="Changing this does not rewrite past collections."
@@ -636,9 +708,14 @@ export function SiteForm({
                   onChange={(clusterId) => update("clusterId", clusterId)}
                 />
               </div>
+              </div>
             </FormSection>
 
-            <FormSection title="4. Collection information" optional hint="Defaults for new listings">
+            <FormSection
+              title="4. Collection information"
+              optional
+              hint="Defaults for new listings, and can be changed within each listing"
+            >
               <div className="space-y-4 p-3.5">
                 <div>
                   <p className="mb-2 flex items-center gap-1.5 font-saveful text-xs text-gray-500">
@@ -705,7 +782,7 @@ export function SiteForm({
                   </Field>
                 </div>
 
-                <Field label="Collection instructions" htmlFor="collectionInstructions" optional>
+                <Field label="General collection instructions" htmlFor="collectionInstructions" optional>
                   <div className="relative">
                     <textarea
                       id="collectionInstructions"
@@ -720,13 +797,82 @@ export function SiteForm({
                       {values.collectionInstructions.length} / 500
                     </p>
                   </div>
+                  <p className="mt-1.5 font-saveful text-xs text-gray-500">
+                    Specific listing instructions can be added on each listing.
+                  </p>
                 </Field>
               </div>
             </FormSection>
           </div>
+
+          <footer className="sticky bottom-0 z-10 border-t border-gray-100 bg-white/95 px-4 py-3 backdrop-blur sm:px-5">
+            {draftNotice ? (
+              <p className="mb-2 font-saveful text-xs text-saveful-green xl:hidden">{draftNotice}</p>
+            ) : null}
+            <FormActions
+              cancelHref={cancelHref}
+              submitLabel={submitLabel}
+              saving={saving}
+              draftSaving={draftSaving}
+              draftSaved={Boolean(draftNotice)}
+              onSaveDraft={mode === "create" ? persistDraft : undefined}
+            />
+          </footer>
         </form>
       </PortalPageShell>
     </Shell>
+  );
+}
+
+function FormActions({
+  cancelHref,
+  submitLabel,
+  saving,
+  draftSaving,
+  draftSaved,
+  onSaveDraft,
+}: {
+  cancelHref: string;
+  submitLabel: string;
+  saving: boolean;
+  draftSaving?: boolean;
+  draftSaved?: boolean;
+  onSaveDraft?: () => void;
+}) {
+  const draftLabel = draftSaving ? "Saving draft…" : draftSaved ? "Draft saved" : "Save as draft";
+  return (
+    <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto xl:shrink-0">
+      <Link
+        href={cancelHref}
+        className="inline-flex h-9 items-center rounded-lg border border-black/[0.06] bg-white px-3 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]"
+      >
+        Cancel
+      </Link>
+      {onSaveDraft ? (
+        <button
+          type="button"
+          onClick={onSaveDraft}
+          disabled={draftSaving || saving}
+          aria-busy={draftSaving}
+          className={cn(
+            "inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 font-saveful-semibold text-sm disabled:opacity-60",
+            draftSaved && !draftSaving
+              ? "border-saveful-green/30 bg-saveful-green/[0.08] text-saveful-green"
+              : "border-black/[0.06] bg-white text-gray-800 hover:bg-[#F7F6F2]",
+          )}
+        >
+          {draftSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+          {draftLabel}
+        </button>
+      ) : null}
+      <button
+        type="submit"
+        disabled={saving || draftSaving}
+        className="inline-flex h-9 min-w-0 items-center justify-center rounded-lg bg-saveful-green px-3.5 text-center font-saveful-semibold text-sm text-white disabled:opacity-60"
+      >
+        {submitLabel}
+      </button>
+    </div>
   );
 }
 
@@ -755,7 +901,7 @@ function FormSection({
             Required
           </span>
         )}
-        {hint ? <span className="truncate font-saveful text-[11px] text-gray-400">{hint}</span> : null}
+        {hint ? <span className="min-w-0 font-saveful text-[11px] leading-snug text-gray-400">{hint}</span> : null}
       </div>
       {children}
     </section>

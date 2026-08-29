@@ -3,6 +3,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ImagePlus, Info, Lock } from "lucide-react";
 import { SettingsWorkspace } from "@/components/settings/SettingsWorkspace";
+import { formatEnterpriseId } from "@/lib/admin";
 import { appendAudit, formatAuditChanges } from "@/lib/audit";
 import { useSession } from "@/lib/auth";
 import { formatDisplayDate } from "@/lib/dates";
@@ -123,7 +124,7 @@ function OrganisationProfileForm() {
               />
             </Field>
             <Field label="Enterprise ID" hint="Enterprise ID cannot be changed.">
-              <input value={saved.enterpriseId} readOnly disabled className={inputClass} />
+              <input value={formatEnterpriseId(saved.enterpriseId) || saved.enterpriseId} readOnly disabled className={inputClass} />
             </Field>
             <Field label="Primary contact name" className="sm:col-span-2">
               <input

@@ -54,6 +54,48 @@ export type SiteFormValues = {
   existingUserId: string;
 };
 
+export type SiteFormDraft = {
+  organisationId?: string;
+  values: SiteFormValues;
+  savedAt: string;
+};
+
+function draftKey(variant: "admin" | "enterprise") {
+  return `saveful_add_site_draft_${variant}`;
+}
+
+export function loadSiteFormDraft(variant: "admin" | "enterprise"): SiteFormDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(draftKey(variant));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SiteFormDraft;
+    if (!parsed?.values) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSiteFormDraft(
+  variant: "admin" | "enterprise",
+  values: SiteFormValues,
+  organisationId?: string,
+) {
+  if (typeof window === "undefined") return;
+  const draft: SiteFormDraft = {
+    organisationId,
+    values,
+    savedAt: new Date().toISOString(),
+  };
+  window.localStorage.setItem(draftKey(variant), JSON.stringify(draft));
+}
+
+export function clearSiteFormDraft(variant: "admin" | "enterprise") {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(draftKey(variant));
+}
+
 export function emptySiteForm(): SiteFormValues {
   return {
     siteName: "",

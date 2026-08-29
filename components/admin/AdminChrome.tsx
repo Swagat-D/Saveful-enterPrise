@@ -4,13 +4,15 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MoreVertical, RotateCcw } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
+import { FilterResetButton } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import {
   adminFilterOptions,
   adminFiltersToQuery,
   EMPTY_ADMIN_FILTERS,
+  lastAdminFilters,
   ORG_TYPES,
   PARTICIPATION_ROLES,
   parseAdminFilters,
@@ -36,11 +38,17 @@ export function useAdminFilters() {
   };
 
   useEffect(() => {
-    const query = adminFiltersToQuery(filters);
-    if (query && !urlHasAdminFilters(searchParams)) {
-      router.replace(`${pathname}${query}`, { scroll: false });
+    if (urlHasAdminFilters(searchParams)) {
+      rememberAdminFilters(parseAdminFilters(searchParams));
+      return;
     }
-  }, [filters, pathname, router, searchParams]);
+    const remembered = adminFiltersToQuery(lastAdminFilters());
+    if (remembered) {
+      router.replace(`${pathname}${remembered}`, { scroll: false });
+    }
+    // Restore remembered scope once when this page URL has no admin keys.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   return {
     filters,
@@ -227,18 +235,7 @@ export function AdminFiltersBar({
             options={[{ id: "all", name: "All" }, ...options.pathways]}
           />
         </div>
-        <button
-          type="button"
-          onClick={onReset}
-          disabled={!active}
-          aria-label="Reset filters"
-          className={cn(
-            "mb-px flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-[#F7F6F2] text-gray-500",
-            active ? "hover:border-saveful-green/30 hover:text-saveful-green" : "opacity-40",
-          )}
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </button>
+        <FilterResetButton onReset={onReset} active={active} />
       </div>
     </div>
   );

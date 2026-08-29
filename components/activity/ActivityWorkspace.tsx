@@ -4,7 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Download, Plus, Search } from "lucide-react";
-import { MoreFilters } from "@/components/network/FilterBar";
+import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { useSession } from "@/lib/auth";
@@ -216,7 +216,8 @@ export function ActivityWorkspace() {
                     </MoreFilters>
                   </div>
                 </div>
-                <div className="hidden grid-cols-2 gap-2 lg:grid xl:grid-cols-4">
+                <div className="hidden items-end gap-2 lg:flex">
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 xl:grid-cols-4">
                   <FilterSelect value={filters.period} onChange={(period) => update({ period: period as PeriodKey })} options={PERIODS.map((item) => ({ id: item.id, name: `Period: ${item.label}` }))} />
                   <FilterSelect value={filters.groupId} onChange={(groupId) => update({ groupId })} options={[{ id: "all", name: "Group: All" }, ...options.groups.map((item) => ({ id: item.id, name: `Group: ${item.name}` }))]} />
                   <FilterSelect value={filters.territoryId} onChange={(territoryId) => update({ territoryId })} options={[{ id: "all", name: "Territory: All" }, ...options.territories.map((item) => ({ id: item.id, name: `Territory: ${item.name}` }))]} />
@@ -224,6 +225,11 @@ export function ActivityWorkspace() {
                   <FilterSelect value={filters.siteId} onChange={(siteId) => update({ siteId })} options={[{ id: "all", name: "Site: All" }, ...options.sites.map((item) => ({ id: item.id, name: `Site: ${item.name}` }))]} />
                   <FilterSelect value={filters.pathway} onChange={(pathway) => update({ pathway: pathway as ActivityFilters["pathway"] })} options={[{ id: "all", name: "Pathway: All" }, ...ACTIVITY_PATHWAYS.map((item) => ({ id: item.id, name: `Pathway: ${item.label}` }))]} />
                   <FilterSelect value={filters.status} onChange={(status) => update({ status, summary: "all" })} options={[{ id: "all", name: "Status: All" }, ...statusOptions.map((item) => ({ id: item.id, name: `Status: ${item.name}` }))]} />
+                  </div>
+                  <FilterResetButton
+                    onReset={() => setFilters({ ...EMPTY_ACTIVITY_FILTERS, tab: filters.tab })}
+                    active={hasActiveActivityFilters(filters)}
+                  />
                 </div>
               </div>
 

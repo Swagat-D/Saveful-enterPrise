@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MoreHorizontal, Plus, Search } from "lucide-react";
-import { MoreFilters } from "@/components/network/FilterBar";
+import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { useSession } from "@/lib/auth";
@@ -162,7 +162,7 @@ export function UsersAccess() {
                         .join(" · ") || "All users"}
                       title="Filter users"
                       subtitle="Role is what they can do. Scope is what they can access."
-                      onReset={() => setFilters({ ...filters, role: "all", scope: "all", status: "all", page: 1 })}
+                      onReset={() => setFilters({ ...EMPTY_USER_FILTERS })}
                     >
                       <div className="grid grid-cols-1 gap-3">
                         <FilterSelect
@@ -191,7 +191,8 @@ export function UsersAccess() {
                       </div>
                     </MoreFilters>
                   </div>
-                  <div className="hidden grid-cols-3 gap-2 lg:grid lg:w-auto">
+                  <div className="hidden items-end gap-2 lg:flex lg:w-auto">
+                    <div className="grid min-w-0 grid-cols-3 gap-2">
                     <FilterSelect
                       value={filters.role}
                       onChange={(role) => update({ role: role as UsersTableFilters["role"] })}
@@ -212,6 +213,8 @@ export function UsersAccess() {
                         { id: "deactivated", name: "Status: Deactivated" },
                       ]}
                     />
+                    </div>
+                    <FilterResetButton onReset={() => setFilters({ ...EMPTY_USER_FILTERS })} active={hasActiveUserFilters(filters)} />
                   </div>
                 </div>
               </div>

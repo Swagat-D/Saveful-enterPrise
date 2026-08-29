@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download, MoreHorizontal, Plus, Search } from "lucide-react";
-import { MoreFilters } from "@/components/network/FilterBar";
+import { Download, Plus, Search } from "lucide-react";
+import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
-import { AdminSection, FilterSelect, TablePager, type PageSize } from "@/components/admin/AdminChrome";
+import { AdminRowMenu, AdminSection, FilterSelect, TablePager, type PageSize } from "@/components/admin/AdminChrome";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { useSession } from "@/lib/auth";
 import { periodLabel } from "@/lib/dates";
@@ -97,7 +97,7 @@ function useAdminSitesState() {
     query: adminFiltersToQuery(admin),
     updateAdmin: (patch: Partial<AdminFilters>) => replace({ ...admin, ...patch, q: "" }, { ...table, page: 1 }),
     updateTable: (patch: Partial<AdminSitesTableFilters>) => replace(admin, { ...table, ...patch, page: patch.page ?? 1 }),
-    resetTable: () => replace(admin, { ...EMPTY_ADMIN_SITES_FILTERS, page: 1 }),
+    resetAll: () => replace(EMPTY_ADMIN_FILTERS, { ...EMPTY_ADMIN_SITES_FILTERS, page: 1 }),
   };
 }
 
@@ -105,7 +105,7 @@ export function AdminSites() {
   const user = useSession();
   useAdminAuditVersion();
   const router = useRouter();
-  const { admin, table, query, updateAdmin, updateTable, resetTable } = useAdminSitesState();
+  const { admin, table, query, updateAdmin, updateTable, resetAll } = useAdminSitesState();
   const directory = buildSitesDirectory(admin, table);
   const pageCount = Math.max(1, Math.ceil(directory.rows.length / table.pageSize));
   const page = Math.min(table.page, pageCount);
@@ -253,10 +253,7 @@ export function AdminSites() {
                 hasActiveAdminSitesFilters(table) || admin.orgType !== "all" || admin.organisationId !== "all" ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      updateAdmin({ orgType: "all", organisationId: "all" });
-                      resetTable();
-                    }}
+                    onClick={resetAll}
                     className="font-saveful-semibold text-xs text-saveful-green hover:underline"
                   >
                     Clear filters
@@ -293,10 +290,7 @@ export function AdminSites() {
                       }
                       title="Filter sites"
                       subtitle="Refine the list without shrinking the table."
-                      onReset={() => {
-                        updateAdmin({ orgType: "all", organisationId: "all" });
-                        resetTable();
-                      }}
+                      onReset={resetAll}
                     >
                       <div className="grid grid-cols-1 gap-3">
                         <FilterSelect label="Organisation Type" value={admin.orgType} onChange={(orgType) => updateAdmin({ orgType: orgType as AdminFilters["orgType"], organisationId: "all" })} options={[{ id: "all", name: "All" }, ...ORG_TYPES.map((item) => ({ id: item.id, name: item.label }))]} />
@@ -318,7 +312,8 @@ export function AdminSites() {
                       </div>
                     </MoreFilters>
                   </div>
-                  <div className="hidden min-w-0 grid-cols-7 gap-2 lg:grid lg:w-auto">
+                  <div className="hidden min-w-0 items-end gap-2 lg:flex lg:w-auto">
+                    <div className="grid min-w-0 grid-cols-7 gap-2">
                     <FilterSelect
                       value={admin.orgType}
                       onChange={(orgType) => updateAdmin({ orgType: orgType as AdminFilters["orgType"], organisationId: "all" })}
@@ -360,6 +355,18 @@ export function AdminSites() {
                         id: item.id,
                         name: item.id === "all" ? "Activity status: All" : item.name,
                       }))}
+                    />
+                    </div>
+                    <FilterResetButton
+                      onReset={resetAll}
+                      active={
+                        filterCount > 0 ||
+                        admin.country !== "all" ||
+                        admin.state !== "all" ||
+                        admin.period !== "30" ||
+                        admin.role !== "all" ||
+                        admin.pathway !== "all"
+                      }
                     />
                   </div>
                 </div>
@@ -409,7 +416,7 @@ export function AdminSites() {
                         <td className="py-2.5 pr-3 font-saveful text-sm text-gray-600">{formatLastActivity(site.lastActivityAt)}</td>
                         <td className="py-2.5 pr-3 font-saveful text-sm tabular-nums text-gray-800">{site.recoveredKg > 0 ? formatKg(site.recoveredKg) : "—"}</td>
                         <td className="py-2.5" onClick={(event) => event.stopPropagation()}>
-                          <RowMenu site={site} query={query} actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }} open={menuId === site.id} onToggle={() => setMenuId((current) => (current === site.id ? null : site.id))} />
+                          <RowMenu site={site} query={query} actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }} open={menuId === site.id} onOpenChange={(open) => setMenuId(open ? site.id : null)} />
                         </td>
                       </tr>
                     ))}
@@ -439,7 +446,7 @@ export function AdminSites() {
                       </p>
                     </Link>
                     <div className="mt-2">
-                      <RowMenu site={site} query={query} actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }} open={menuId === site.id} onToggle={() => setMenuId((current) => (current === site.id ? null : site.id))} />
+                      <RowMenu site={site} query={query} actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }} open={menuId === site.id} onOpenChange={(open) => setMenuId(open ? site.id : null)} />
                     </div>
                   </article>
                 ))}
@@ -526,7 +533,7 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
               <td className="px-3.5 py-2.5 font-saveful text-sm text-gray-600">{formatLastActivity(site.lastActivityAt)}</td>
               <td className="px-3.5 py-2.5 font-saveful text-sm tabular-nums text-gray-800">{site.recoveredKg > 0 ? formatKg(site.recoveredKg) : "—"}</td>
               <td className="px-3.5 py-2.5" onClick={(event) => event.stopPropagation()}>
-                <RowMenu site={site} query={query} actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }} open={menuId === site.id} onToggle={() => setMenuId((current) => (current === site.id ? null : site.id))} />
+                <RowMenu site={site} query={query} actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }} open={menuId === site.id} onOpenChange={(open) => setMenuId(open ? site.id : null)} />
               </td>
             </tr>
           ))}
@@ -592,45 +599,36 @@ function RowMenu({
   query,
   actor,
   open,
-  onToggle,
+  onOpenChange,
 }: {
   site: AdminDirectorySite;
   query: string;
   actor: { name: string; email: string };
   open: boolean;
-  onToggle: () => void;
+  onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <div className="relative">
+    <AdminRowMenu label={`Actions for ${site.name}`} open={open} onOpenChange={onOpenChange}>
+      <Link href={`/admin/sites/${site.id}${query}`} className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]">
+        View site
+      </Link>
+      <Link
+        href={`/admin/organisations/${site.orgId}${query.includes("?") ? `${query}&tab=sites` : `${query}?tab=sites`}`}
+        className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]"
+      >
+        View organisation
+      </Link>
       <button
         type="button"
-        onClick={onToggle}
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/[0.06] text-gray-600 hover:bg-[#F7F6F2]"
-        aria-label="Site actions"
+        className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
+        onClick={() => {
+          updateSiteStatus(site.id, site.siteStatus === "deactivated" ? "active" : "deactivated", actor);
+          onOpenChange(false);
+        }}
       >
-        <MoreHorizontal className="h-4 w-4" />
+        {site.siteStatus === "deactivated" ? "Reactivate site" : "Deactivate site"}
       </button>
-      {open ? (
-        <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
-          <Link href={`/admin/sites/${site.id}${query}`} className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]">
-            View site
-          </Link>
-          <Link href={`/admin/organisations/${site.orgId}${query.includes("?") ? `${query}&tab=sites` : `${query}?tab=sites`}`} className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]">
-            View organisation
-          </Link>
-          <button
-            type="button"
-            className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-            onClick={() => {
-              updateSiteStatus(site.id, site.siteStatus === "deactivated" ? "active" : "deactivated", actor);
-              onToggle();
-            }}
-          >
-            {site.siteStatus === "deactivated" ? "Reactivate site" : "Deactivate site"}
-          </button>
-        </div>
-      ) : null}
-    </div>
+    </AdminRowMenu>
   );
 }
 

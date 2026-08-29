@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ListFilter } from "lucide-react";
+import { ChevronDown, ListFilter, RotateCcw } from "lucide-react";
 import { cascadeFilters, filterOptions, filtersToQuery, parseNetworkFilters } from "@/lib/networkQuery";
 import { demoNetworkSites } from "@/lib/network";
 import { EMPTY_FILTERS, scopeFromUser } from "@/lib/scope";
@@ -53,6 +53,7 @@ export function FilterBar({
     setFilters({ ...filters, ...patch }, extra);
   };
 
+  const resetFilters = () => setFilters({ ...EMPTY_FILTERS }, extra);
   const activeCount = [
     filters.groupId !== "all",
     filters.territoryId !== "all",
@@ -114,7 +115,7 @@ export function FilterBar({
           summary={summary}
           title="Filter this view"
           subtitle="Refine the dashboard without covering the numbers."
-          onReset={() => setFilters({ ...EMPTY_FILTERS }, extra)}
+          onReset={resetFilters}
         >
           <div className="grid grid-cols-1 gap-3">{fields}</div>
         </MoreFilters>
@@ -124,9 +125,38 @@ export function FilterBar({
         <p className="mb-3 font-saveful text-[11px] uppercase tracking-[0.16em] text-gray-400">
           Filter this view
         </p>
-        <div className="grid grid-cols-5 gap-3">{fields}</div>
+        <div className="flex items-end gap-3">
+          <div className="grid min-w-0 flex-1 grid-cols-5 gap-3">{fields}</div>
+          <FilterResetButton onReset={resetFilters} active={activeCount > 0} className="mb-0.5" />
+        </div>
       </div>
     </>
+  );
+}
+
+export function FilterResetButton({
+  onReset,
+  active,
+  className,
+}: {
+  onReset: () => void;
+  active: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onReset}
+      disabled={!active}
+      aria-label="Reset filters"
+      className={cn(
+        "mb-px flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-[#F7F6F2] text-gray-500",
+        active ? "hover:border-saveful-green/30 hover:text-saveful-green" : "opacity-40",
+        className,
+      )}
+    >
+      <RotateCcw className="h-3.5 w-3.5" />
+    </button>
   );
 }
 

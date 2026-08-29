@@ -31,16 +31,19 @@ import {
   PARTICIPATION_ROLES,
   buildOrgDirectory,
   createOrganisation,
+  formatEnterpriseId,
+  listOrganisationDirectoryActivity,
   orgCounts,
   orgTypeLabel,
   planLabel,
+  useAdminVersion,
   roleShortLabel,
   updateOrganisation,
   type AdminOrganisation,
 } from "@/lib/admin";
 import type { ApiRegion, MeasurementUnit } from "@/lib/api";
 import { ApiError } from "@/lib/api";
-import { listAdminAudit, useAdminAuditVersion } from "@/lib/adminAudit";
+import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
 import { formatDisplayDate } from "@/lib/dates";
 import { formatCount } from "@/lib/impact";
@@ -48,6 +51,7 @@ import { cn } from "@/lib/utils";
 
 export function AdminOrganisations() {
   const user = useSession();
+  useAdminVersion();
   useAdminAuditVersion();
   const { filters, update, reset, query } = useAdminFilters();
   const directory = buildOrgDirectory(filters);
@@ -65,7 +69,7 @@ export function AdminOrganisations() {
   const pageCount = Math.max(1, Math.ceil(directory.organisations.length / pageSize));
   const current = Math.min(page, pageCount);
   const rows = directory.organisations.slice((current - 1) * pageSize, current * pageSize);
-  const recent = listAdminAudit({ q: "", period: "30", organisationId: filters.organisationId, page: 1 }).slice(0, 3);
+  const recent = listOrganisationDirectoryActivity(filters, 5);
 
   const metrics = [
     { label: "Organisations", value: formatCount(directory.metrics.organisations), hint: null, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green" },
@@ -77,9 +81,12 @@ export function AdminOrganisations() {
 
   const directoryActive =
     Boolean(filters.q) ||
+    filters.period !== "30" ||
+    filters.country !== "all" ||
+    filters.state !== "all" ||
     filters.orgType !== "all" ||
     filters.role !== "all" ||
-    filters.state !== "all" ||
+    filters.organisationId !== "all" ||
     filters.accountStatus !== "all" ||
     filters.activityStatus !== "all" ||
     filters.plan !== "all";
@@ -281,7 +288,7 @@ export function AdminOrganisations() {
                       <Link href={`/admin/organisations/${org.id}${query}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">
                         {org.name}
                       </Link>
-                      <p className="font-saveful text-[11px] text-gray-400">{org.enterpriseId ? `${org.enterpriseId} · ${org.country}` : org.country}</p>
+                      <p className="font-saveful text-[11px] text-gray-400">{org.enterpriseId ? `${formatEnterpriseId(org.enterpriseId)} · ${org.country}` : org.country}</p>
                     </td>
                     <td className="px-3 py-2.5 font-saveful text-sm text-gray-700">{orgTypeLabel(org.type)}</td>
                     <td className="px-3 py-2.5 font-saveful text-sm text-gray-700">{roleShortLabel(org.roles)}</td>
@@ -319,7 +326,7 @@ export function AdminOrganisations() {
                   <Link href={`/admin/organisations/${org.id}${query}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">
                     {org.name}
                   </Link>
-                  <p className="font-saveful text-[11px] text-gray-400">{org.enterpriseId ? `${org.enterpriseId} · ${org.country}` : org.country}</p>
+                  <p className="font-saveful text-[11px] text-gray-400">{org.enterpriseId ? `${formatEnterpriseId(org.enterpriseId)} · ${org.country}` : org.country}</p>
                   <p className="mt-1.5 font-saveful text-xs text-gray-500">
                     {orgTypeLabel(org.type)} · {roleShortLabel(org.roles)} · {org.state}
                   </p>
@@ -375,17 +382,23 @@ export function AdminOrganisations() {
           </div>
         </AdminSection>
         <AdminSection title="Recent activity" action={<Link href={`/admin/audit${query}`} className="whitespace-nowrap font-saveful-semibold text-xs text-saveful-green hover:underline">View all →</Link>}>
-          <ul>
+          <ul className="max-h-[10.5rem] overflow-y-auto">
             {recent.map((item) => (
               <li key={item.id} className="flex items-start justify-between gap-3 border-b border-gray-50 px-3.5 py-2.5 last:border-0">
                 <div className="min-w-0">
-                  <p className="truncate font-saveful text-sm text-gray-800">{item.action}</p>
-                  <p className="truncate font-saveful text-[11px] text-gray-400">{item.organisationName}</p>
+                  {item.href ? (
+                    <Link href={`${item.href}${query}`} className="truncate font-saveful text-sm text-gray-800 hover:text-saveful-green">
+                      {item.kind}
+                    </Link>
+                  ) : (
+                    <p className="truncate font-saveful text-sm text-gray-800">{item.kind}</p>
+                  )}
+                  <p className="truncate font-saveful text-[11px] text-gray-400">{item.detail}</p>
                 </div>
                 <p className="shrink-0 font-saveful text-[11px] text-gray-400">{formatDisplayDate(item.at.slice(0, 10))}</p>
               </li>
             ))}
-            {recent.length === 0 ? <li className="px-3.5 py-6 text-center font-saveful text-sm text-gray-500">No recent admin changes.</li> : null}
+            {recent.length === 0 ? <li className="px-3.5 py-6 text-center font-saveful text-sm text-gray-500">No recent organisation activity.</li> : null}
           </ul>
         </AdminSection>
       </div>
@@ -500,7 +513,7 @@ export function AddOrganisationForm({
       );
       onCreated?.(
         created.enterpriseId
-          ? `${created.message} Enterprise ID ${created.enterpriseId}.`
+          ? `${created.message} Enterprise ID ${formatEnterpriseId(created.enterpriseId)}.`
           : created.message,
       );
       if (!onCreated) onClose?.();

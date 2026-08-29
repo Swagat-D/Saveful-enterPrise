@@ -34,6 +34,7 @@ import { PortalPageShell } from "@/components/ui/Portal";
 import {
   ORG_DETAIL_TABS,
   buildOrgDetail,
+  formatEnterpriseId,
   orgTypeLabel,
   parseOrgDetailTab,
   participationLabel,
@@ -168,7 +169,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
               </div>
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-7">
-              <Meta label="Enterprise ID" value={profile.code} />
+              <Meta label="Enterprise ID" value={formatEnterpriseId(profile.code) || profile.code} />
               <Meta label="Primary contact" value={profile.contactName} />
               <Meta label="Email" value={profile.contactEmail} />
               <Meta label="Phone" value={profile.contactPhone} />
@@ -419,7 +420,7 @@ function OverviewTab({
           </dl>
         </AdminSection>
         <AdminSection title="Recent activity" action={<button type="button" onClick={() => onTab("audit")} className="font-saveful-semibold text-xs text-saveful-green hover:underline">View all activity →</button>}>
-          <ul>
+          <ul className="max-h-[10.5rem] overflow-y-auto">
             {model.recentActivity.map((item) => (
               <li key={item.id} className="border-b border-gray-50 px-3.5 py-2.5 last:border-0">
                 <p className="font-saveful-semibold text-sm text-gray-900">{item.kind}</p>
@@ -504,7 +505,7 @@ function AccountTab({
           </div>
         </div>
         <dl className="space-y-2 px-3.5 py-3">
-          <ImpactRow label="Enterprise ID" value={profile.code} />
+          <ImpactRow label="Enterprise ID" value={formatEnterpriseId(profile.code) || profile.code} />
           <ImpactRow label="Address" value={profile.address || "—"} />
           <ImpactRow label="Country" value={profile.country || "—"} />
           <ImpactRow label="Timezone" value={profile.timezone || "—"} />

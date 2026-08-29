@@ -7,6 +7,7 @@ import { AdminFiltersBar, AdminPage, AdminSection, StatusPill, TablePager, useAd
 import { useSession } from "@/lib/auth";
 import {
   buildAdminOverview,
+  formatEnterpriseId,
   getOrganisation,
   listListings,
   listCollections,
@@ -54,7 +55,7 @@ export function AdminUsers() {
     listOrgUsers(org.id).map((user) => ({
       ...user,
       orgName: org.name,
-      orgType: org.enterpriseId ? `Enterprise · ${org.enterpriseId}` : "Enterprise",
+      orgType: org.enterpriseId ? `Enterprise · ${formatEnterpriseId(org.enterpriseId)}` : "Enterprise",
     })),
   );
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
