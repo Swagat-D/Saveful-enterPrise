@@ -12,10 +12,11 @@ import {
   type ApiEnterpriseInvite,
   type ApiEnterpriseUser,
   type ApiSiteRow,
+  type EnterpriseStructureResponse,
 } from "@/lib/api";
 import { replaceActivityFromListings } from "@/lib/activity";
 import { applyOrganization, getOrganization } from "@/lib/organization";
-import { replaceStructure } from "@/lib/orgStructure";
+import { listUnits, replaceStructure, type OrgStructureUnit } from "@/lib/orgStructure";
 import { mapEnterpriseRole, scopeFromApi } from "@/lib/enterpriseRole";
 import { replaceNetworkSites, replaceNetworkUnits } from "@/lib/network";
 import { getSession, type SessionUser } from "@/lib/auth";
@@ -240,6 +241,107 @@ export async function refreshEnterpriseActivity(orgId?: string | number | null) 
   return rows;
 }
 
+function mapStructureUnit(row: {
+  id: number;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  isActive?: boolean;
+  group?: { id: number } | null;
+  groupId?: number;
+}): OrgStructureUnit {
+  return {
+    id: String(row.id),
+    name: row.name,
+    code: row.code ?? "",
+    description: row.description ?? "",
+    status: row.isActive === false ? "deactivated" : "active",
+    groupId: row.group?.id != null ? String(row.group.id) : row.groupId != null ? String(row.groupId) : undefined,
+  };
+}
+
+function unitsFromPayload(payload: unknown): OrgStructureUnit[] | null {
+  if (payload == null) return null;
+  if (Array.isArray(payload)) {
+    return payload
+      .filter((row): row is { id: number; name: string } => Boolean(row && typeof row === "object" && "id" in row))
+      .map(mapStructureUnit);
+  }
+  if (typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    for (const key of ["groups", "clusters", "territories", "data", "items"]) {
+      if (Array.isArray(record[key])) return unitsFromPayload(record[key]);
+    }
+  }
+  return null;
+}
+
+function unitsFromStructure(
+  structure: EnterpriseStructureResponse | null | undefined,
+  key: "groups" | "clusters" | "territories",
+): OrgStructureUnit[] | null {
+  if (!structure) return null;
+  if (key === "clusters") {
+    if (Array.isArray(structure.clusters)) return structure.clusters.map(mapStructureUnit);
+    const nested = structure.groups?.flatMap((group) =>
+      (group.clusters ?? []).map((cluster) =>
+        mapStructureUnit({
+          ...cluster,
+          groupId: group.id,
+        }),
+      ),
+    );
+    return nested ?? null;
+  }
+  const rows = structure[key];
+  return Array.isArray(rows) ? rows.map(mapStructureUnit) : null;
+}
+
+function applyEnterpriseStructure(input: {
+  listedGroups: unknown;
+  listedClusters: unknown;
+  listedTerritories: unknown;
+  structure?: EnterpriseStructureResponse | null;
+}) {
+  const groups =
+    unitsFromPayload(input.listedGroups) ?? unitsFromStructure(input.structure, "groups");
+  const clusters =
+    unitsFromPayload(input.listedClusters) ?? unitsFromStructure(input.structure, "clusters");
+  const territories =
+    unitsFromPayload(input.listedTerritories) ?? unitsFromStructure(input.structure, "territories");
+
+  if (!groups && !clusters && !territories) return;
+
+  const next = {
+    group: groups ?? listUnits("group"),
+    cluster: clusters ?? listUnits("cluster"),
+    territory: territories ?? listUnits("territory"),
+  };
+  replaceStructure(next);
+  replaceNetworkUnits({
+    groups: next.group.map((group) => ({ id: group.id, name: group.name })),
+    territories: next.territory.map((territory) => ({ id: territory.id, name: territory.name })),
+    clusters: next.cluster.map((cluster) => ({ id: cluster.id, name: cluster.name })),
+  });
+}
+
+/** Groups, clusters and territories only — used after add/edit so the table updates without waiting on listings. */
+export async function refreshEnterpriseStructure() {
+  const [listedGroups, listedClusters, listedTerritories, structure, sites] = await Promise.all([
+    listEnterpriseGroups({ includeInactive: true }).catch(() => null),
+    listEnterpriseClusters({ includeInactive: true }).catch(() => null),
+    listEnterpriseTerritories({ includeInactive: true }).catch(() => null),
+    getEnterpriseStructure().catch(() => null),
+    getOrganisationSites().catch(() => null),
+  ]);
+
+  const siteRows = sites?.sites ?? (sites?.site ? [sites.site] : []);
+  if (siteRows.length) replaceNetworkSites(siteRows.map(toSite));
+
+  applyEnterpriseStructure({ listedGroups, listedClusters, listedTerritories, structure });
+  return { groups: listUnits("group"), clusters: listUnits("cluster"), territories: listUnits("territory") };
+}
+
 export async function refreshEnterpriseWorkspace(options?: { session?: SessionUser | null }) {
   const [profile, auth, sites, membersPayload, invitesPayload, structure, listedGroups, listedClusters, listedTerritories] =
     await Promise.all([
@@ -249,9 +351,9 @@ export async function refreshEnterpriseWorkspace(options?: { session?: SessionUs
       listEnterpriseMembers().catch(() => null),
       listEnterpriseInvites().catch(() => null),
       getEnterpriseStructure().catch(() => null),
-      listEnterpriseGroups().catch(() => null),
-      listEnterpriseClusters().catch(() => null),
-      listEnterpriseTerritories().catch(() => null),
+      listEnterpriseGroups({ includeInactive: true }).catch(() => null),
+      listEnterpriseClusters({ includeInactive: true }).catch(() => null),
+      listEnterpriseTerritories({ includeInactive: true }).catch(() => null),
     ]);
 
   const siteRows = sites?.sites ?? (sites?.site ? [sites.site] : []);
@@ -288,72 +390,10 @@ export async function refreshEnterpriseWorkspace(options?: { session?: SessionUs
   }
 
   replaceNetworkSites(siteRows.map(toSite));
+  applyEnterpriseStructure({ listedGroups, listedClusters, listedTerritories, structure });
+
   const organisationId = auth?.organisation?.id ?? getOrganization().organisationId;
-  await refreshEnterpriseActivity(organisationId).catch(() => undefined);
-
-  const groups =
-    listedGroups?.map((group) => ({
-      id: String(group.id),
-      name: group.name,
-      code: group.code ?? "",
-      description: "",
-      status: group.isActive === false ? ("deactivated" as const) : ("active" as const),
-    })) ??
-    structure?.groups.map((group) => ({
-      id: String(group.id),
-      name: group.name,
-      code: group.code ?? "",
-      description: "",
-      status: group.isActive ? ("active" as const) : ("deactivated" as const),
-    })) ??
-    [];
-
-  const clusters =
-    listedClusters?.map((cluster) => ({
-      id: String(cluster.id),
-      name: cluster.name,
-      code: cluster.code ?? "",
-      description: "",
-      status: cluster.isActive === false ? ("deactivated" as const) : ("active" as const),
-      groupId: cluster.group?.id != null ? String(cluster.group.id) : undefined,
-    })) ??
-    structure?.groups.flatMap((group) =>
-      group.clusters.map((cluster) => ({
-        id: String(cluster.id),
-        name: cluster.name,
-        code: "",
-        description: "",
-        status: cluster.isActive ? ("active" as const) : ("deactivated" as const),
-        groupId: String(group.id),
-      })),
-    ) ??
-    [];
-
-  const territories =
-    listedTerritories?.map((territory) => ({
-      id: String(territory.id),
-      name: territory.name,
-      code: territory.code ?? "",
-      description: "",
-      status: territory.isActive === false ? ("deactivated" as const) : ("active" as const),
-    })) ??
-    structure?.territories.map((territory) => ({
-      id: String(territory.id),
-      name: territory.name,
-      code: territory.code ?? "",
-      description: "",
-      status: territory.isActive ? ("active" as const) : ("deactivated" as const),
-    })) ??
-    [];
-
-  if (groups.length || clusters.length || territories.length) {
-    replaceStructure({ group: groups, territory: territories, cluster: clusters });
-    replaceNetworkUnits({
-      groups: groups.map((group) => ({ id: group.id, name: group.name })),
-      territories: territories.map((territory) => ({ id: territory.id, name: territory.name })),
-      clusters: clusters.map((cluster) => ({ id: cluster.id, name: cluster.name })),
-    });
-  }
+  void refreshEnterpriseActivity(organisationId).catch(() => undefined);
 
   return { profile, sites: siteRows, users: listUsers() };
 }

@@ -184,6 +184,17 @@ function optionalCode(code: string) {
   return code.trim() ? code.trim().toUpperCase() : undefined;
 }
 
+function createdRecordId(payload: unknown): number | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.id === "number" && Number.isInteger(record.id) && record.id > 0) return record.id;
+  for (const key of ["group", "cluster", "territory", "data"]) {
+    const nested = createdRecordId(record[key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 function slugId(name: string, kind: OrgStructureKind) {
   const base =
     name
@@ -217,10 +228,15 @@ export async function saveUnit(kind: OrgStructureKind, draft: StructureDraft, ex
   const description = draft.description.trim().slice(0, 250);
 
   try {
+    const payload = {
+      name,
+      ...(optionalCode(code) ? { code: optionalCode(code) } : {}),
+      ...(description ? { description } : {}),
+    };
+
     if (existingId) {
       const id = asApiId(existingId);
       if (!id) return { ok: false as const, error: `This ${label.toLowerCase()} cannot be updated on the server.` };
-      const payload = { name, ...(optionalCode(code) ? { code: optionalCode(code) } : {}) };
       if (kind === "group") await updateEnterpriseGroup(id, payload);
       else if (kind === "territory") await updateEnterpriseTerritory(id, payload);
       else await updateEnterpriseCluster(id, payload);
@@ -250,14 +266,20 @@ export async function saveUnit(kind: OrgStructureKind, draft: StructureDraft, ex
       return { ok: true as const, id: existingId };
     }
 
-    let created: { id: number };
-    const createPayload = { name, ...(optionalCode(code) ? { code: optionalCode(code) } : {}) };
-    if (kind === "group") created = await createEnterpriseGroup(createPayload);
-    else if (kind === "territory") created = await createEnterpriseTerritory(createPayload);
-    else created = await createEnterpriseCluster(createPayload);
+    const created =
+      kind === "group"
+        ? await createEnterpriseGroup(payload)
+        : kind === "territory"
+          ? await createEnterpriseTerritory(payload)
+          : await createEnterpriseCluster(payload);
+    const createdId = createdRecordId(created);
+    if (!createdId) {
+      emit();
+      return { ok: true as const, id: "" };
+    }
 
     const unit: OrgStructureUnit = {
-      id: String(created.id),
+      id: String(createdId),
       name,
       code,
       description,

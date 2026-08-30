@@ -57,6 +57,8 @@ export type InvitationPreview = {
   role: string;
   expiresAt: string;
   termsVersion: string;
+  invitedByName?: string;
+  siteName?: string;
 };
 
 export type EnterpriseProfileResponse = {
@@ -295,17 +297,25 @@ export type OrganisationSitesResponse = {
   organisation?: { id: number; name: string; logoUrl?: string | null };
 };
 
+export type EnterpriseStructureUnit = {
+  id: number;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  isActive: boolean;
+  siteCount?: number;
+};
+
 export type EnterpriseStructureResponse = {
   totalSites?: number;
   unassignedSites?: Array<{ id: number; name: string }>;
-  groups: Array<{
-    id: number;
-    name: string;
-    code?: string | null;
-    isActive: boolean;
-    clusters: Array<{ id: number; name: string; isActive: boolean; siteCount: number }>;
-  }>;
-  territories: Array<{ id: number; name: string; code?: string | null; isActive: boolean; siteCount: number }>;
+  groups: Array<
+    EnterpriseStructureUnit & {
+      clusters?: Array<{ id: number; name: string; isActive: boolean; siteCount: number }>;
+    }
+  >;
+  clusters?: EnterpriseStructureUnit[];
+  territories: EnterpriseStructureUnit[];
 };
 
 export type EnterpriseGroupRow = {
@@ -335,20 +345,31 @@ export type EnterpriseTerritoryRow = {
   siteCount?: number;
 };
 
-export function listEnterpriseGroups() {
-  return apiFetch<EnterpriseGroupRow[]>("/enterprise/groups", { auth: true });
+function structureListQuery(options?: { groupId?: number; includeInactive?: boolean }) {
+  const params = new URLSearchParams();
+  if (options?.groupId) params.set("groupId", String(options.groupId));
+  if (options?.includeInactive) params.set("includeInactive", "true");
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
-export function listEnterpriseClusters(groupId?: number) {
-  const query = groupId ? `?groupId=${groupId}` : "";
-  return apiFetch<EnterpriseClusterRow[]>(`/enterprise/clusters${query}`, { auth: true });
+export function listEnterpriseGroups(options?: { includeInactive?: boolean }) {
+  return apiFetch<EnterpriseGroupRow[]>(`/enterprise/groups${structureListQuery(options)}`, { auth: true });
 }
 
-export function listEnterpriseTerritories() {
-  return apiFetch<EnterpriseTerritoryRow[]>("/enterprise/territories", { auth: true });
+export function listEnterpriseClusters(options?: { groupId?: number; includeInactive?: boolean }) {
+  return apiFetch<EnterpriseClusterRow[]>(`/enterprise/clusters${structureListQuery(options)}`, {
+    auth: true,
+  });
 }
 
-export function createEnterpriseGroup(input: { name: string; code?: string }) {
+export function listEnterpriseTerritories(options?: { includeInactive?: boolean }) {
+  return apiFetch<EnterpriseTerritoryRow[]>(`/enterprise/territories${structureListQuery(options)}`, {
+    auth: true,
+  });
+}
+
+export function createEnterpriseGroup(input: { name: string; code?: string; description?: string }) {
   return apiFetch<EnterpriseGroupRow>("/enterprise/groups", {
     method: "POST",
     auth: true,
@@ -356,7 +377,10 @@ export function createEnterpriseGroup(input: { name: string; code?: string }) {
   });
 }
 
-export function updateEnterpriseGroup(id: number, input: { name?: string; code?: string; isActive?: boolean }) {
+export function updateEnterpriseGroup(
+  id: number,
+  input: { name?: string; code?: string; description?: string; isActive?: boolean },
+) {
   return apiFetch<EnterpriseGroupRow>(`/enterprise/groups/${id}`, {
     method: "PATCH",
     auth: true,
@@ -368,7 +392,7 @@ export function deleteEnterpriseGroup(id: number) {
   return apiFetch<{ message: string }>(`/enterprise/groups/${id}`, { method: "DELETE", auth: true });
 }
 
-export function createEnterpriseCluster(input: { name: string; code?: string }) {
+export function createEnterpriseCluster(input: { name: string; code?: string; description?: string }) {
   return apiFetch<EnterpriseClusterRow>("/enterprise/clusters", {
     method: "POST",
     auth: true,
@@ -378,7 +402,7 @@ export function createEnterpriseCluster(input: { name: string; code?: string }) 
 
 export function updateEnterpriseCluster(
   id: number,
-  input: { name?: string; code?: string; isActive?: boolean },
+  input: { name?: string; code?: string; description?: string; isActive?: boolean },
 ) {
   return apiFetch<EnterpriseClusterRow>(`/enterprise/clusters/${id}`, {
     method: "PATCH",
@@ -391,7 +415,7 @@ export function deleteEnterpriseCluster(id: number) {
   return apiFetch<{ message: string }>(`/enterprise/clusters/${id}`, { method: "DELETE", auth: true });
 }
 
-export function createEnterpriseTerritory(input: { name: string; code?: string }) {
+export function createEnterpriseTerritory(input: { name: string; code?: string; description?: string }) {
   return apiFetch<EnterpriseTerritoryRow>("/enterprise/territories", {
     method: "POST",
     auth: true,
@@ -399,7 +423,10 @@ export function createEnterpriseTerritory(input: { name: string; code?: string }
   });
 }
 
-export function updateEnterpriseTerritory(id: number, input: { name?: string; code?: string; isActive?: boolean }) {
+export function updateEnterpriseTerritory(
+  id: number,
+  input: { name?: string; code?: string; description?: string; isActive?: boolean },
+) {
   return apiFetch<EnterpriseTerritoryRow>(`/enterprise/territories/${id}`, {
     method: "PATCH",
     auth: true,

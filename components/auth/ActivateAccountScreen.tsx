@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, Check, Eye, EyeOff, Lock, Shield } from "lucide-react";
+import { Building2, Check, Eye, EyeOff, Lock, MapPin, Shield } from "lucide-react";
 import { acceptInvitation, ApiError, type InvitationPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -106,13 +106,38 @@ export function ActivateAccountScreen({
               You&rsquo;ve been invited to Saveful for Business
             </h1>
             <p className="mt-3 font-saveful text-[15px] leading-relaxed text-gray-600">
-              You&rsquo;ve been invited to manage{" "}
-              <span className="font-saveful-semibold text-gray-900">{possessive(preview.enterprise)}</span> Enterprise
-              account.
+              {preview.siteName ? (
+                preview.invitedByName ? (
+                  <>
+                    You&rsquo;ve been invited by{" "}
+                    <span className="font-saveful-semibold text-gray-900">{preview.invitedByName}</span> of{" "}
+                    <span className="font-saveful-semibold text-gray-900">{possessive(preview.enterprise)}</span>{" "}
+                    Enterprise Account to manage{" "}
+                    <span className="font-saveful-semibold text-gray-900">{preview.siteName}</span>.
+                  </>
+                ) : (
+                  <>
+                    You&rsquo;ve been invited to manage{" "}
+                    <span className="font-saveful-semibold text-gray-900">{preview.siteName}</span> for{" "}
+                    <span className="font-saveful-semibold text-gray-900">{possessive(preview.enterprise)}</span>{" "}
+                    Enterprise Account.
+                  </>
+                )
+              ) : (
+                <>
+                  You&rsquo;ve been invited to manage{" "}
+                  <span className="font-saveful-semibold text-gray-900">{possessive(preview.enterprise)}</span> Enterprise
+                  account.
+                </>
+              )}
             </p>
 
             <div className="mt-6 grid grid-cols-1 overflow-hidden rounded-xl border border-black/[0.08] bg-white sm:grid-cols-2">
-              <ContextCell icon={Building2} label="Enterprise" value={preview.enterprise} />
+              {preview.siteName ? (
+                <ContextCell icon={MapPin} label="Site" value={preview.siteName} />
+              ) : (
+                <ContextCell icon={Building2} label="Enterprise" value={preview.enterprise} />
+              )}
               <ContextCell icon={Shield} label="Your role" value={preview.role} last />
             </div>
 
@@ -221,7 +246,8 @@ export function ActivateAccountScreen({
                   Account activated
                 </h2>
                 <p className="mt-2 font-saveful text-sm leading-relaxed text-gray-600">
-                  You can now sign in to {preview?.enterprise ?? "your Enterprise"} with the password you just created.
+                  You can now sign in to {preview?.siteName ?? preview?.enterprise ?? "your account"} with the password
+                  you just created.
                 </p>
                 <button
                   type="button"

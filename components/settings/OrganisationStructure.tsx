@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search, X } from "lucide-react";
@@ -8,7 +8,7 @@ import { AdminRowMenu } from "@/components/admin/AdminChrome";
 import { SettingsWorkspace } from "@/components/settings/SettingsWorkspace";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
-import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
+import { refreshEnterpriseStructure } from "@/lib/enterpriseLive";
 import {
   canDeleteUnit,
   deactivateUnit,
@@ -69,7 +69,7 @@ export function OrganisationStructure() {
   const searchParams = useSearchParams();
   const user = useSession();
   const permissions = structurePermissions(user);
-  useOrgStructureVersion();
+  const structureVersion = useOrgStructureVersion();
 
   const kind = parseTab(searchParams.get("tab"));
   const tab = TABS.find((item) => item.id === kind) ?? TABS[0];
@@ -80,6 +80,21 @@ export function OrganisationStructure() {
   const [menuId, setMenuId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [actionError, setActionError] = useState("");
+  const [loading, setLoading] = useState(
+    () => !listUnits("group").length && !listUnits("territory").length && !listUnits("cluster").length,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshEnterpriseStructure()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -89,7 +104,7 @@ export function OrganisationStructure() {
         return `${unit.name} ${unit.code} ${unit.description}`.toLowerCase().includes(needle);
       })
       .sort((a, b) => a.name.localeCompare(b.name) * (sortDir === "asc" ? 1 : -1));
-  }, [kind, query, sortDir]);
+  }, [kind, query, sortDir, structureVersion]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -247,7 +262,7 @@ export function OrganisationStructure() {
                                 setActionError(result.error);
                                 return;
                               }
-                              await refreshEnterpriseWorkspace();
+                              void refreshEnterpriseStructure();
                             }}
                             onDelete={() => {
                               setMenuId(null);
@@ -261,7 +276,9 @@ export function OrganisationStructure() {
                 })}
               </tbody>
             </table>
-            {rows.length === 0 ? (
+            {loading && rows.length === 0 ? (
+              <p className="px-4 py-8 text-center font-saveful text-sm text-gray-500">Loading {tab.label.toLowerCase()}…</p>
+            ) : rows.length === 0 ? (
               <p className="px-4 py-8 text-center font-saveful text-sm text-gray-500">
                 No {tab.label.toLowerCase()} match this search.
               </p>
@@ -407,8 +424,8 @@ function StructureFormDialog({
         setError(result.error);
         return;
       }
-      await refreshEnterpriseWorkspace();
       onClose();
+      void refreshEnterpriseStructure();
     } finally {
       setSaving(false);
     }
@@ -492,8 +509,8 @@ function DeactivateDialog({
         setError(result.error);
         return;
       }
-      await refreshEnterpriseWorkspace();
       onClose();
+      void refreshEnterpriseStructure();
     } finally {
       setSaving(false);
     }
@@ -597,8 +614,8 @@ function DeleteDialog({
                 setError(result.error);
                 return;
               }
-              await refreshEnterpriseWorkspace();
               onClose();
+              void refreshEnterpriseStructure();
             } finally {
               setSaving(false);
             }
