@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { ACCESS_TOKEN_KEY, ApiError, getAuthProfile, loginWithPassword } from "@/lib/api";
+import { ACCESS_TOKEN_KEY, ApiError, getAuthProfile, loginWithPassword, onUnauthorized } from "@/lib/api";
 import type { AdminLoginCredentials, LoginCredentials, PortalKind, UserRole } from "@/types/auth";
 import type { AccessScope, EnterpriseRole } from "@/types/enterprise";
 import { mapEnterpriseRole } from "@/lib/enterpriseRole";
@@ -33,9 +33,36 @@ const displayNameFromEmail = (email: string) => {
     .join(" ");
 };
 
+function tokenExpiryMs(token: string) {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(json) as { exp?: number };
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearStoredSession() {
+  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(USER_KEY);
+  window.localStorage.removeItem(PASS_KEY);
+  sessionCache = null;
+  sessionRawCache = null;
+}
+
 export function getStoredToken() {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  const token = window.localStorage.getItem(TOKEN_KEY);
+  if (!token || token === "dev-session") return null;
+  const exp = tokenExpiryMs(token);
+  if (exp != null && exp <= Date.now()) {
+    clearStoredSession();
+    return null;
+  }
+  return token;
 }
 
 let sessionCache: SessionUser | null = null;
@@ -61,7 +88,7 @@ export function getSession(): SessionUser | null {
       ...parsed,
       portal: parsed.portal === "admin" ? "admin" : "enterprise",
     };
-    if (!token || token === "dev-session") {
+    if (!getStoredToken()) {
       sessionCache = null;
       sessionRawCache = null;
       return null;
@@ -196,12 +223,35 @@ export function isEnterpriseSession(user: SessionUser | null) {
 
 export function logout() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(TOKEN_KEY);
-  window.localStorage.removeItem(USER_KEY);
-  window.localStorage.removeItem(PASS_KEY);
-  sessionCache = null;
-  sessionRawCache = null;
+  clearStoredSession();
   emitSession();
+}
+
+export async function ensureLiveSession() {
+  const user = getSession();
+  if (!user) return null;
+  try {
+    const profile = await getAuthProfile();
+    if (user.portal === "admin" && profile.user.platformRole !== PLATFORM_ADMIN) {
+      logout();
+      return null;
+    }
+    if (user.portal !== "admin" && profile.user.platformRole === PLATFORM_ADMIN) {
+      logout();
+      return null;
+    }
+    return user;
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+      logout();
+      return null;
+    }
+    return user;
+  }
+}
+
+if (typeof window !== "undefined") {
+  onUnauthorized(() => logout());
 }
 
 export function verifyCurrentPassword(current: string) {

@@ -16,17 +16,15 @@ const INSTRUCTIONS: Record<string, string> = {
 };
 
 export function siteOperations(site: OrganizationSite) {
-  const days = site.collectionDays ?? ["mon", "tue", "wed", "thu", "fri"];
-  const from = site.collectionFrom ?? "14:00";
-  const to = site.collectionTo ?? "17:00";
+  const days = site.collectionDays ?? [];
+  const from = site.collectionFrom ?? "";
+  const to = site.collectionTo ?? "";
+  const hasHours = days.length > 0 && Boolean(from && to);
   return {
     primaryContact: site.primaryContact || (site.hasManager ? site.managerName : "Not assigned"),
     siteAdmin: site.hasManager ? site.managerName : "Not assigned",
-    collectionHours: formatCollectionHours(days, from, to),
-    collectionInstructions:
-      site.collectionInstructions ||
-      INSTRUCTIONS[site.id] ||
-      "Ask for the kitchen manager on arrival. Historical recovery records stay unchanged if this site is reassigned.",
+    collectionHours: hasHours ? formatCollectionHours(days, from, to) : "—",
+    collectionInstructions: site.collectionInstructions?.trim() || INSTRUCTIONS[site.id] || "—",
   };
 }
 

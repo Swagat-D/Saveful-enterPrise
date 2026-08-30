@@ -400,8 +400,13 @@ export function ListingWizard({ kind }: { kind: ListingKind }) {
                 {errors.location ? <ErrorText>{errors.location}</ErrorText> : null}
                 {selectedSite ? (
                   <p className="mt-2 font-saveful text-xs text-gray-500">
-                    Default from this site: {siteOperations(selectedSite).collectionHours}.{" "}
-                    {siteOperations(selectedSite).collectionInstructions}
+                    {(() => {
+                      const ops = siteOperations(selectedSite);
+                      const hours = ops.collectionHours !== "—" ? ops.collectionHours : "";
+                      const notes = ops.collectionInstructions !== "—" ? ops.collectionInstructions : "";
+                      if (!hours && !notes) return "No collection defaults saved on this site.";
+                      return `Default from this site: ${[hours, notes].filter(Boolean).join(". ")}`;
+                    })()}
                   </p>
                 ) : null}
               </Section>

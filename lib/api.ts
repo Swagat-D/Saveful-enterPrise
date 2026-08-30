@@ -319,6 +319,12 @@ export function getAccessToken() {
   return token;
 }
 
+let unauthorizedHandler: (() => void) | null = null;
+
+export function onUnauthorized(handler: () => void) {
+  unauthorizedHandler = handler;
+}
+
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { auth = false, headers, ...rest } = options;
   const nextHeaders = new Headers(headers);
@@ -342,6 +348,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    if (auth && response.status === 401) unauthorizedHandler?.();
     const code = body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string"
       ? (body as { error: string }).error
       : undefined;

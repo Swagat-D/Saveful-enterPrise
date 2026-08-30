@@ -2045,8 +2045,8 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
       : {
           primaryContact: profile.contactName,
           siteAdmin: users[0]?.name ?? profile.contactName,
-          collectionHours: "As arranged with the organisation",
-          collectionInstructions: "Ask for the site contact on arrival.",
+          collectionHours: "—",
+          collectionInstructions: "—",
           phone: profile.contactPhone,
         },
   };

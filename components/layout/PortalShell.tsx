@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 import { getEnterpriseSidebarLinks } from "@/config/sidebar";
-import { homePath, isAdminSession, logout, useSession } from "@/lib/auth";
+import { ensureLiveSession, homePath, isAdminSession, logout, useSession } from "@/lib/auth";
 import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
 import { getOrganization, useOrganizationVersion } from "@/lib/organization";
 import { useOrgStructureVersion } from "@/lib/orgStructure";
@@ -36,7 +36,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user || isAdminSession(user)) return;
-    void refreshEnterpriseWorkspace().catch(() => undefined);
+    void ensureLiveSession().then((live) => {
+      if (live) void refreshEnterpriseWorkspace().catch(() => undefined);
+    });
   }, [user]);
 
   if (!isClient) {
