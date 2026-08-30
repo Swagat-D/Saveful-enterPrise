@@ -171,9 +171,12 @@ export function SiteForm({
         if (cancelled) return;
         setAdminUnits({
           group: structure.groups.filter((item) => item.isActive).map((item) => ({ id: String(item.id), name: item.name })),
-          cluster: structure.groups.flatMap((group) =>
-            group.clusters.filter((item) => item.isActive).map((item) => ({ id: String(item.id), name: item.name })),
-          ),
+          cluster: (
+            structure.clusters ??
+            structure.groups.flatMap((group) => group.clusters ?? [])
+          )
+            .filter((item) => item.isActive)
+            .map((item) => ({ id: String(item.id), name: item.name })),
           territory: structure.territories
             .filter((item) => item.isActive)
             .map((item) => ({ id: String(item.id), name: item.name })),
