@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CircleHelp, LoaderCircle } from "lucide-react";
@@ -18,6 +18,7 @@ import {
   createOrganisationSite,
   getAdminEnterpriseStructure,
   getEnterprise,
+  getOrganisationSiteDetails,
   inviteAdminEnterpriseUser,
   listAdminEnterpriseUsers,
   inviteEnterpriseUser,
@@ -34,7 +35,7 @@ import {
   useAdminVersion,
 } from "@/lib/admin";
 import { useSession } from "@/lib/auth";
-import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
+import { refreshEnterpriseWorkspace, siteFromApiRow } from "@/lib/enterpriseLive";
 import {
   TIME_OPTIONS,
   WEEKDAYS,
@@ -87,9 +88,11 @@ export function SiteForm({
   const user = useSession();
   const isAdmin = variant === "admin";
   useOrgStructureVersion();
-  useUsersVersion();
+  const usersVersion = useUsersVersion();
   useAdminVersion();
   const [values, setValues] = useState<SiteFormValues>(site ? siteToFormValues(site) : emptySiteForm());
+  const [liveSite, setLiveSite] = useState<OrganizationSite | undefined>(site);
+  const draftAppliedRef = useRef(false);
   const [organisationId, setOrganisationId] = useState(initialAdminOrganisationId(defaultOrganisationId));
   const [adminUsers, setAdminUsers] = useState<AssignableUser[]>([]);
   const [adminUnits, setAdminUnits] = useState<{ group: StructureOption[]; territory: StructureOption[]; cluster: StructureOption[] }>({
@@ -186,9 +189,54 @@ export function SiteForm({
   }, [isAdmin, organisationId]);
 
   useEffect(() => {
-    if (mode !== "create" || site) return;
-    const draft = loadSiteFormDraft(isAdmin ? "admin" : "enterprise");
+    if (mode !== "edit" || !site || isAdmin) return;
+    let cancelled = false;
+    getOrganisationSiteDetails(Number(site.id))
+      .then((detail) => {
+        if (cancelled) return;
+        const next = siteFromApiRow({
+          ...detail.site,
+          managers: detail.managers ?? detail.site.managers,
+        });
+        setLiveSite(next);
+        if (!draftAppliedRef.current) setValues(siteToFormValues(next));
+      })
+      .catch(() => {
+        if (!cancelled) setLiveSite(site);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, mode, site]);
+
+  useEffect(() => {
+    if (mode !== "edit" || !liveSite || draftAppliedRef.current) return;
+    const next = siteToFormValues(liveSite);
+    setValues((prev) => {
+      if (!prev.existingUserId && next.existingUserId) {
+        return { ...prev, adminMode: "existing", existingUserId: next.existingUserId };
+      }
+      if (!prev.inviteFirstName && !prev.inviteEmail && (next.inviteFirstName || next.inviteEmail)) {
+        return {
+          ...prev,
+          inviteFirstName: next.inviteFirstName,
+          inviteLastName: next.inviteLastName,
+          inviteEmail: next.inviteEmail,
+          inviteMobile: next.inviteMobile,
+        };
+      }
+      return prev;
+    });
+  }, [liveSite, mode, usersVersion]);
+
+  useEffect(() => {
+    const variant = isAdmin ? "admin" : "enterprise";
+    const siteId = mode === "edit" ? site?.id : undefined;
+    if (mode === "edit" && !siteId) return;
+    if (mode === "create" && site) return;
+    const draft = loadSiteFormDraft(variant, siteId);
     if (!draft) return;
+    draftAppliedRef.current = true;
     setValues(draft.values);
     if (draft.organisationId && /^\d+$/.test(draft.organisationId)) {
       setOrganisationId(draft.organisationId);
@@ -273,21 +321,28 @@ export function SiteForm({
       setCreatedSiteId(savedSiteId);
       if (saved.site.siteCode) setAssignedSiteCode(saved.site.siteCode);
 
+      const currentEmail = (liveSite?.email || site?.email || "").trim().toLowerCase();
+      const currentManagerId = liveSite?.managerUserId || site?.managerUserId || "";
+
       if (values.adminMode === "invite") {
-        const invite = {
-          firstName: values.inviteFirstName.trim(),
-          lastName: values.inviteLastName.trim(),
-          email: values.inviteEmail.trim().toLowerCase(),
-          mobile: values.inviteMobile.trim(),
-          role: "SITE_ADMIN",
-          siteAdminForSiteId: savedSiteId,
-          scopes: [{ scopeType: "SITE", scopeId: savedSiteId }],
-        };
-        if (isAdmin) await inviteAdminEnterpriseUser(organisationId, invite);
-        else await inviteEnterpriseUser(invite);
+        const nextEmail = values.inviteEmail.trim().toLowerCase();
+        const sameContact = Boolean(currentEmail && nextEmail === currentEmail);
+        if (!sameContact) {
+          const invite = {
+            firstName: values.inviteFirstName.trim(),
+            lastName: values.inviteLastName.trim(),
+            email: nextEmail,
+            mobile: values.inviteMobile.trim(),
+            role: "SITE_ADMIN",
+            siteAdminForSiteId: savedSiteId,
+            scopes: [{ scopeType: "SITE", scopeId: savedSiteId }],
+          };
+          if (isAdmin) await inviteAdminEnterpriseUser(organisationId, invite);
+          else await inviteEnterpriseUser(invite);
+        }
       }
 
-      if (values.adminMode === "existing") {
+      if (values.adminMode === "existing" && values.existingUserId !== currentManagerId) {
         if (isAdmin) await assignAdminSiteAdmin(organisationId, savedSiteId, Number(values.existingUserId));
         else await assignExistingSiteAdmin(savedSiteId, Number(values.existingUserId));
       }
@@ -304,12 +359,12 @@ export function SiteForm({
           { name: user?.name ?? "Saveful Admin", email: user?.email ?? "" },
         );
         await refreshSites().catch(() => undefined);
-        clearSiteFormDraft("admin");
-        router.push(`/admin/sites/${savedSiteId}${adminQuery}`);
+        clearSiteFormDraft("admin", mode === "edit" ? String(savedSiteId) : undefined);
+        router.push(mode === "edit" ? `/admin/sites${adminQuery}` : `/admin/sites/${savedSiteId}${adminQuery}`);
       } else {
         await refreshEnterpriseWorkspace();
-        clearSiteFormDraft("enterprise");
-        router.push(`/sites/${savedSiteId}`);
+        clearSiteFormDraft("enterprise", mode === "edit" ? String(savedSiteId) : undefined);
+        router.push(mode === "edit" ? "/sites" : `/sites/${savedSiteId}`);
       }
     } catch (err) {
       const message =
@@ -336,11 +391,17 @@ export function SiteForm({
     setDraftNotice("");
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 400));
-      saveSiteFormDraft(isAdmin ? "admin" : "enterprise", values, isAdmin ? organisationId : undefined);
+      saveSiteFormDraft(
+        isAdmin ? "admin" : "enterprise",
+        values,
+        isAdmin ? organisationId : undefined,
+        mode === "edit" ? site?.id ?? liveSite?.id : undefined,
+      );
+      draftAppliedRef.current = true;
       setDraftNotice(
         isAdmin
           ? "Draft saved. You can leave this page and come back — your details will be waiting."
-          : "Draft saved. You can open Structure settings to set up groups, territories and clusters, then return here.",
+          : "Draft saved. You can leave this page or open Structure settings, then return here.",
       );
     } catch {
       setFormError("Draft could not be saved. Check that browser storage is available and try again.");
@@ -407,7 +468,7 @@ export function SiteForm({
               saving={saving}
               draftSaving={draftSaving}
               draftSaved={Boolean(draftNotice)}
-              onSaveDraft={mode === "create" ? persistDraft : undefined}
+              onSaveDraft={persistDraft}
             />
           </header>
 
@@ -536,6 +597,13 @@ export function SiteForm({
                 <p className="font-saveful text-xs text-gray-500">
                   A Site Admin is required. Without one, nobody can operate this site.
                 </p>
+                {mode === "edit" && (liveSite?.managerName || liveSite?.email || liveSite?.mobile) ? (
+                  <div className="grid grid-cols-1 gap-3 rounded-xl border border-black/[0.04] bg-[#F7F6F2] px-3.5 py-3 sm:grid-cols-3">
+                    <ContactPreview label="Current name" value={liveSite.managerName || liveSite.primaryContact || "—"} />
+                    <ContactPreview label="Current email" value={liveSite.email || "—"} />
+                    <ContactPreview label="Current mobile" value={liveSite.mobile || "—"} />
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap gap-1.5">
                   {(
                     [
@@ -702,7 +770,7 @@ export function SiteForm({
                 />
                 <StructureField
                   label="Cluster"
-                  hint="Create new clusters in Structure settings."
+                  hint="Independent label. Changing this does not rewrite past collections."
                   value={values.clusterId}
                   options={structureUnits.cluster}
                   onChange={(clusterId) => update("clusterId", clusterId)}
@@ -815,7 +883,7 @@ export function SiteForm({
               saving={saving}
               draftSaving={draftSaving}
               draftSaved={Boolean(draftNotice)}
-              onSaveDraft={mode === "create" ? persistDraft : undefined}
+              onSaveDraft={persistDraft}
             />
           </footer>
         </form>

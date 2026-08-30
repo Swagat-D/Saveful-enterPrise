@@ -1,6 +1,19 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import {
+  ApiError,
+  createEnterpriseCluster,
+  createEnterpriseGroup,
+  createEnterpriseTerritory,
+  deleteEnterpriseCluster,
+  deleteEnterpriseGroup,
+  deleteEnterpriseTerritory,
+  updateEnterpriseCluster,
+  updateEnterpriseGroup,
+  updateEnterpriseTerritory,
+  updateOrganisationSite,
+} from "@/lib/api";
 import { appendAudit } from "@/lib/audit";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import type { OrgStructureKind, OrgUnitStatus, OrganizationSite } from "@/types/enterprise";
@@ -13,6 +26,8 @@ export type OrgStructureUnit = {
   code: string;
   description: string;
   status: OrgUnitStatus;
+  /** Present on clusters — backend create/update requires a parent group. */
+  groupId?: string;
 };
 
 export type SiteOrgPatch = {
@@ -25,6 +40,7 @@ export type StructureDraft = {
   name: string;
   code: string;
   description: string;
+  groupId?: string;
 };
 
 const UNIT_CODES: Record<string, string> = {
@@ -148,7 +164,24 @@ export function hasHistoricalData(kind: OrgStructureKind, id: string) {
 }
 
 export function canDeleteUnit(kind: OrgStructureKind, id: string) {
+  if (kind === "group" && state.cluster.some((cluster) => cluster.groupId === id)) {
+    return false;
+  }
   return !hasHistoricalData(kind, id) && sitesAssignedTo(kind, id).length === 0;
+}
+
+function asApiId(id: string) {
+  const value = Number(id);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function structureError(err: unknown, fallback: string) {
+  if (err instanceof ApiError) return err.message || fallback;
+  return err instanceof Error ? err.message : fallback;
+}
+
+function optionalCode(code: string) {
+  return code.trim() ? code.trim().toUpperCase() : undefined;
 }
 
 function slugId(name: string, kind: OrgStructureKind) {
@@ -172,7 +205,7 @@ function uniqueName(kind: OrgStructureKind, name: string, excludeId?: string) {
   return !state[kind].some((unit) => unit.id !== excludeId && unit.name.trim().toLowerCase() === value);
 }
 
-export function saveUnit(kind: OrgStructureKind, draft: StructureDraft, existingId?: string, actor = "Enterprise user") {
+export async function saveUnit(kind: OrgStructureKind, draft: StructureDraft, existingId?: string, actor = "Enterprise user") {
   const name = draft.name.trim();
   if (!name) return { ok: false as const, error: `${structureLabel(kind)} name is required.` };
   if (!uniqueName(kind, name, existingId)) {
@@ -183,62 +216,72 @@ export function saveUnit(kind: OrgStructureKind, draft: StructureDraft, existing
   const code = draft.code.trim().toUpperCase();
   const description = draft.description.trim().slice(0, 250);
 
-  if (existingId) {
-    const previous = getUnit(kind, existingId);
-    state = {
-      ...state,
-      [kind]: state[kind].map((unit) =>
-        unit.id === existingId
-          ? {
-              ...unit,
-              name,
-              code,
-              description,
-            }
-          : unit,
-      ),
+  try {
+    if (existingId) {
+      const id = asApiId(existingId);
+      if (!id) return { ok: false as const, error: `This ${label.toLowerCase()} cannot be updated on the server.` };
+      const payload = { name, ...(optionalCode(code) ? { code: optionalCode(code) } : {}) };
+      if (kind === "group") await updateEnterpriseGroup(id, payload);
+      else if (kind === "territory") await updateEnterpriseTerritory(id, payload);
+      else await updateEnterpriseCluster(id, payload);
+
+      const previous = getUnit(kind, existingId);
+      state = {
+        ...state,
+        [kind]: state[kind].map((unit) =>
+          unit.id === existingId ? { ...unit, name, code, description } : unit,
+        ),
+      };
+      const changes = [
+        previous && previous.name !== name ? { field: "Name", previous: previous.name, next: name } : null,
+        previous && previous.code !== code ? { field: "Code", previous: previous.code || "—", next: code || "—" } : null,
+        previous && previous.description !== description
+          ? { field: "Description", previous: previous.description || "—", next: description || "—" }
+          : null,
+      ].filter((item): item is { field: string; previous: string; next: string } => Boolean(item));
+      appendAudit({
+        actor,
+        action: `Updated ${label.toLowerCase()}`,
+        area: "structure",
+        entity: name,
+        changes,
+      });
+      emit();
+      return { ok: true as const, id: existingId };
+    }
+
+    let created: { id: number };
+    const createPayload = { name, ...(optionalCode(code) ? { code: optionalCode(code) } : {}) };
+    if (kind === "group") created = await createEnterpriseGroup(createPayload);
+    else if (kind === "territory") created = await createEnterpriseTerritory(createPayload);
+    else created = await createEnterpriseCluster(createPayload);
+
+    const unit: OrgStructureUnit = {
+      id: String(created.id),
+      name,
+      code,
+      description,
+      status: "active",
     };
-    const changes = [
-      previous && previous.name !== name ? { field: "Name", previous: previous.name, next: name } : null,
-      previous && previous.code !== code ? { field: "Code", previous: previous.code || "—", next: code || "—" } : null,
-      previous && previous.description !== description
-        ? { field: "Description", previous: previous.description || "—", next: description || "—" }
-        : null,
-    ].filter((item): item is { field: string; previous: string; next: string } => Boolean(item));
+    state = { ...state, [kind]: [...state[kind], unit] };
     appendAudit({
       actor,
-      action: `Updated ${label.toLowerCase()}`,
+      action: `Added ${label.toLowerCase()}`,
       area: "structure",
       entity: name,
-      changes,
+      changes: [
+        { field: "Status", previous: "—", next: "Active" },
+        ...(code ? [{ field: "Code", previous: "—", next: code }] : []),
+      ],
     });
     emit();
-    return { ok: true as const, id: existingId };
+    return { ok: true as const, id: unit.id };
+  } catch (err) {
+    return { ok: false as const, error: structureError(err, `Could not save this ${label.toLowerCase()}.`) };
   }
-
-  const unit: OrgStructureUnit = {
-    id: slugId(name, kind),
-    name,
-    code,
-    description,
-    status: "active",
-  };
-  state = { ...state, [kind]: [...state[kind], unit] };
-  appendAudit({
-    actor,
-    action: `Added ${label.toLowerCase()}`,
-    area: "structure",
-    entity: name,
-    changes: [
-      { field: "Status", previous: "—", next: "Active" },
-      ...(code ? [{ field: "Code", previous: "—", next: code }] : []),
-    ],
-  });
-  emit();
-  return { ok: true as const, id: unit.id };
 }
 
-export function deactivateUnit(
+export async function deactivateUnit(
   kind: OrgStructureKind,
   id: string,
   reassignments: { siteId: string; nextId: string | null }[],
@@ -246,6 +289,8 @@ export function deactivateUnit(
 ) {
   const unit = getUnit(kind, id);
   if (!unit || unit.status === "deactivated") return { ok: false as const, error: "This structure is already deactivated." };
+  const unitId = asApiId(id);
+  if (!unitId) return { ok: false as const, error: "This structure cannot be updated on the server." };
 
   const affected = sitesAssignedTo(kind, id);
   const field = siteField(kind);
@@ -265,6 +310,22 @@ export function deactivateUnit(
         return { ok: false as const, error: "Sites can only be moved to an active structure." };
       }
     }
+  }
+
+  try {
+    for (const site of affected) {
+      const siteId = asApiId(site.id);
+      if (!siteId) continue;
+      const nextId = chosen.get(site.id) ?? null;
+      const nextApiId = nextId ? asApiId(nextId) : null;
+      await updateOrganisationSite(siteId, { [field]: nextApiId });
+    }
+    const inactive = { isActive: false };
+    if (kind === "group") await updateEnterpriseGroup(unitId, inactive);
+    else if (kind === "territory") await updateEnterpriseTerritory(unitId, inactive);
+    else await updateEnterpriseCluster(unitId, inactive);
+  } catch (err) {
+    return { ok: false as const, error: structureError(err, "Could not deactivate this structure.") };
   }
 
   const assignments = { ...state.assignments };
@@ -302,8 +363,18 @@ export function deactivateUnit(
   return { ok: true as const };
 }
 
-export function reactivateUnit(kind: OrgStructureKind, id: string, actor = "Enterprise user") {
+export async function reactivateUnit(kind: OrgStructureKind, id: string, actor = "Enterprise user") {
   const unit = getUnit(kind, id);
+  const unitId = asApiId(id);
+  if (!unitId) return { ok: false as const, error: "This structure cannot be updated on the server." };
+  try {
+    const active = { isActive: true };
+    if (kind === "group") await updateEnterpriseGroup(unitId, active);
+    else if (kind === "territory") await updateEnterpriseTerritory(unitId, active);
+    else await updateEnterpriseCluster(unitId, active);
+  } catch (err) {
+    return { ok: false as const, error: structureError(err, "Could not reactivate this structure.") };
+  }
   state = {
     ...state,
     [kind]: state[kind].map((item) => (item.id === id ? { ...item, status: "active" as const } : item)),
@@ -318,12 +389,25 @@ export function reactivateUnit(kind: OrgStructureKind, id: string, actor = "Ente
     });
   }
   emit();
+  return { ok: true as const };
 }
 
-export function deleteUnit(kind: OrgStructureKind, id: string, actor = "Enterprise user") {
+export async function deleteUnit(kind: OrgStructureKind, id: string, actor = "Enterprise user") {
   const unit = getUnit(kind, id);
+  if (kind === "group" && state.cluster.some((cluster) => cluster.groupId === id)) {
+    return { ok: false as const, error: "This group still has clusters. Move or delete those clusters first." };
+  }
   if (!canDeleteUnit(kind, id)) {
     return { ok: false as const, error: "This structure has history or assigned sites. Deactivate it instead." };
+  }
+  const unitId = asApiId(id);
+  if (!unitId) return { ok: false as const, error: "This structure cannot be deleted on the server." };
+  try {
+    if (kind === "group") await deleteEnterpriseGroup(unitId);
+    else if (kind === "territory") await deleteEnterpriseTerritory(unitId);
+    else await deleteEnterpriseCluster(unitId);
+  } catch (err) {
+    return { ok: false as const, error: structureError(err, "Could not delete this structure.") };
   }
   state = { ...state, [kind]: state[kind].filter((item) => item.id !== id) };
   if (unit) {

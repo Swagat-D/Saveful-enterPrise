@@ -398,8 +398,11 @@ export function userCoversSite(user: DirectoryUser, site: OrganizationSite) {
 }
 
 export function usersForSite(site: OrganizationSite) {
+  const contactEmail = site.email.trim().toLowerCase();
   return users.filter((user) => {
-    if (user.role === "enterprise_super_admin") return true;
+    if (user.role === "enterprise_super_admin" || user.role === "enterprise_admin") return true;
+    if (site.managerUserId && user.id === site.managerUserId) return true;
+    if (contactEmail && user.email.trim().toLowerCase() === contactEmail) return true;
     if (user.scope.siteIds?.includes(site.id)) return true;
     if (site.groupId && user.scope.groupIds?.includes(site.groupId)) return true;
     if (site.territoryId && user.scope.territoryIds?.includes(site.territoryId)) return true;

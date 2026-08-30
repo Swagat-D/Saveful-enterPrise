@@ -381,7 +381,7 @@ export function AdminOrganisations() {
             </div>
           </div>
         </AdminSection>
-        <AdminSection title="Recent activity" action={<Link href={`/admin/audit${query}`} className="whitespace-nowrap font-saveful-semibold text-xs text-saveful-green hover:underline">View all →</Link>}>
+        <AdminSection title="Recent activity" action={<Link href={`/admin/activity${query}`} className="whitespace-nowrap font-saveful-semibold text-xs text-saveful-green hover:underline">View all →</Link>}>
           <ul className="max-h-[10.5rem] overflow-y-auto">
             {recent.map((item) => (
               <li key={item.id} className="flex items-start justify-between gap-3 border-b border-gray-50 px-3.5 py-2.5 last:border-0">

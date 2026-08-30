@@ -120,12 +120,7 @@ export async function login(credentials: LoginCredentials) {
   try {
     data = await loginWithPassword(email, password);
   } catch (err) {
-    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-      throw new Error(
-        "That email and password were not recognised. If you were invited, open the activation link in your email first.",
-      );
-    }
-    throw err;
+    throw new Error(enterpriseLoginError(err));
   }
 
   if (data.user.platformRole === PLATFORM_ADMIN) {
@@ -169,6 +164,32 @@ export async function login(credentials: LoginCredentials) {
   }
 }
 
+function enterpriseLoginError(err: unknown) {
+  if (!(err instanceof ApiError)) {
+    return err instanceof Error ? err.message : "Sign in failed.";
+  }
+  const message = err.message.toLowerCase();
+  if (err.status === 403) {
+    if (message.includes("too many")) {
+      return "Too many sign-in attempts. Wait 15 minutes, then try again.";
+    }
+    return err.message || "Sign in was blocked.";
+  }
+  if (err.status === 401) {
+    if (message.includes("invalid credentials")) {
+      return "That email or password is incorrect. Use the password you created when you activated your account, or reset it with Forgot password.";
+    }
+    if (message.includes("user not found")) {
+      return "No active account for that email. If you were invited, open the activation link in your email first.";
+    }
+    if (message.includes("no organisation")) {
+      return "This account is not linked to an Enterprise organisation yet.";
+    }
+    return err.message || "That email or password is incorrect.";
+  }
+  return err.message || "Sign in failed.";
+}
+
 export async function loginAdmin(credentials: AdminLoginCredentials) {
   const email = credentials.email.trim();
   const password = credentials.password;
@@ -176,7 +197,20 @@ export async function loginAdmin(credentials: AdminLoginCredentials) {
     throw new Error("Email and password are required");
   }
 
-  const data = await loginWithPassword(email, password);
+  let data;
+  try {
+    data = await loginWithPassword(email, password);
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      const message = err.message.toLowerCase();
+      throw new Error(
+        err.status === 403 && message.includes("too many")
+          ? "Too many sign-in attempts. Wait 15 minutes, then try again."
+          : "That email or password is incorrect.",
+      );
+    }
+    throw err;
+  }
   if (data.user.platformRole !== PLATFORM_ADMIN) {
     throw new Error("Only a Saveful admin account can sign in here.");
   }

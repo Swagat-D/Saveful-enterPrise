@@ -21,7 +21,7 @@ export function scopeFromApi(
   const next: UserAccessScope = {};
   for (const scope of scopes ?? []) {
     const id = scope.scopeId == null ? null : String(scope.scopeId);
-    const type = scope.scopeType.toUpperCase();
+    const type = (scope.scopeType ?? "").toUpperCase();
     if (type === "ENTERPRISE") {
       next.enterprise = true;
     } else if (type === "GROUP" && id) {

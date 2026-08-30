@@ -12,6 +12,7 @@ import {
   adminFilterOptions,
   adminFiltersToQuery,
   EMPTY_ADMIN_FILTERS,
+  isAdminDashboardPath,
   lastAdminFilters,
   ORG_TYPES,
   PARTICIPATION_ROLES,
@@ -31,22 +32,23 @@ export function useAdminFilters() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   useAdminVersion();
+  const persistGlobal = isAdminDashboardPath(pathname);
   const filters = parseAdminFilters(searchParams);
   const setFilters = (next: AdminFilters) => {
-    rememberAdminFilters(next, true);
+    if (persistGlobal) rememberAdminFilters(next, true);
     router.replace(`${pathname}${adminFiltersToQuery(next)}`, { scroll: false });
   };
 
   useEffect(() => {
     if (urlHasAdminFilters(searchParams)) {
-      rememberAdminFilters(parseAdminFilters(searchParams));
+      if (persistGlobal) rememberAdminFilters(parseAdminFilters(searchParams));
       return;
     }
     const remembered = adminFiltersToQuery(lastAdminFilters());
     if (remembered) {
       router.replace(`${pathname}${remembered}`, { scroll: false });
     }
-    // Restore remembered scope once when this page URL has no admin keys.
+    // Restore dashboard scope once when this page URL has no admin keys.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 

@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MoreHorizontal, Plus, Search, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
+import { AdminRowMenu } from "@/components/admin/AdminChrome";
 import { SettingsWorkspace } from "@/components/settings/SettingsWorkspace";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
+import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
 import {
   canDeleteUnit,
   deactivateUnit,
@@ -43,7 +45,7 @@ const TABS: { id: OrgStructureKind; label: string; description: string }[] = [
     id: "cluster",
     label: "Clusters",
     description:
-      "Clusters are independent labels for local groupings. They are not children of Territories.",
+      "Clusters are independent labels for local groupings. They are not children of Groups or Territories.",
   },
 ];
 
@@ -77,6 +79,7 @@ export function OrganisationStructure() {
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(10);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [actionError, setActionError] = useState("");
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -132,6 +135,11 @@ export function OrganisationStructure() {
 
         <div className="space-y-4 p-4 sm:p-5">
           <p className="max-w-3xl font-saveful text-sm leading-relaxed text-gray-600">{tab.description}</p>
+          {actionError ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 font-saveful text-sm text-amber-800">
+              {actionError}
+            </p>
+          ) : null}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <label className="relative block min-w-0 flex-1">
@@ -222,7 +230,7 @@ export function OrganisationStructure() {
                             canEdit={permissions.edit}
                             canDeactivate={permissions.deactivate}
                             canRemove={permissions.remove && canDeleteUnit(kind, unit.id)}
-                            onToggle={() => setMenuId((current) => (current === unit.id ? null : unit.id))}
+                            onOpenChange={(next) => setMenuId(next ? unit.id : null)}
                             onEdit={() => {
                               setMenuId(null);
                               setDialog({ type: "form", unit });
@@ -231,9 +239,15 @@ export function OrganisationStructure() {
                               setMenuId(null);
                               setDialog({ type: "deactivate", unit });
                             }}
-                            onReactivate={() => {
+                            onReactivate={async () => {
                               setMenuId(null);
-                              reactivateUnit(kind, unit.id, user?.name || "Enterprise user");
+                              setActionError("");
+                              const result = await reactivateUnit(kind, unit.id, user?.name || "Enterprise user");
+                              if (!result.ok) {
+                                setActionError(result.error);
+                                return;
+                              }
+                              await refreshEnterpriseWorkspace();
                             }}
                             onDelete={() => {
                               setMenuId(null);
@@ -314,7 +328,7 @@ function RowMenu({
   canEdit,
   canDeactivate,
   canRemove,
-  onToggle,
+  onOpenChange,
   onEdit,
   onDeactivate,
   onReactivate,
@@ -326,51 +340,39 @@ function RowMenu({
   canEdit: boolean;
   canDeactivate: boolean;
   canRemove: boolean;
-  onToggle: () => void;
+  onOpenChange: (open: boolean) => void;
   onEdit: () => void;
   onDeactivate: () => void;
   onReactivate: () => void;
   onDelete: () => void;
 }) {
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="rounded-lg p-1.5 text-gray-500 hover:bg-[#F7F6F2]"
-        aria-label={`${unit.name} actions`}
-      >
-        <MoreHorizontal className="h-4 w-4" />
-      </button>
-      {open ? (
-        <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
-          {canEdit ? (
-            <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={onEdit}>
-              Edit {structureLabel(kind).toLowerCase()}
-            </button>
-          ) : null}
-          {canDeactivate && unit.status === "active" ? (
-            <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={onDeactivate}>
-              Deactivate
-            </button>
-          ) : null}
-          {canDeactivate && unit.status === "deactivated" ? (
-            <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={onReactivate}>
-              Reactivate
-            </button>
-          ) : null}
-          {canRemove ? (
-            <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm text-red-600 hover:bg-red-50" onClick={onDelete}>
-              Delete
-            </button>
-          ) : hasHistoricalData(kind, unit.id) ? (
-            <p className="px-3 py-2 font-saveful text-[11px] leading-relaxed text-gray-400">
-              Has historical collections. Deactivate instead of deleting.
-            </p>
-          ) : null}
-        </div>
+    <AdminRowMenu label={`${unit.name} actions`} open={open} onOpenChange={onOpenChange}>
+      {canEdit ? (
+        <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={onEdit}>
+          Edit {structureLabel(kind).toLowerCase()}
+        </button>
       ) : null}
-    </div>
+      {canDeactivate && unit.status === "active" ? (
+        <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={onDeactivate}>
+          Deactivate
+        </button>
+      ) : null}
+      {canDeactivate && unit.status === "deactivated" ? (
+        <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={onReactivate}>
+          Reactivate
+        </button>
+      ) : null}
+      {canRemove ? (
+        <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm text-red-600 hover:bg-red-50" onClick={onDelete}>
+          Delete
+        </button>
+      ) : hasHistoricalData(kind, unit.id) ? (
+        <p className="px-3 py-2 font-saveful text-[11px] leading-relaxed text-gray-400">
+          Has historical collections. Deactivate instead of deleting.
+        </p>
+      ) : null}
+    </AdminRowMenu>
   );
 }
 
@@ -389,14 +391,27 @@ function StructureFormDialog({
   const [code, setCode] = useState(unit?.code ?? "");
   const [description, setDescription] = useState(unit?.description ?? "");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const submit = () => {
-    const result = saveUnit(kind, { name, code, description }, unit?.id, user?.name || "Enterprise user");
-    if (!result.ok) {
-      setError(result.error);
-      return;
+  const submit = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      const result = await saveUnit(
+        kind,
+        { name, code, description },
+        unit?.id,
+        user?.name || "Enterprise user",
+      );
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      await refreshEnterpriseWorkspace();
+      onClose();
+    } finally {
+      setSaving(false);
     }
-    onClose();
   };
 
   return (
@@ -434,7 +449,9 @@ function StructureFormDialog({
         <Button variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={submit}>{unit ? "Save changes" : `Add ${label}`}</Button>
+        <Button disabled={saving} onClick={() => void submit()}>
+          {saving ? "Saving…" : unit ? "Save changes" : `Add ${label}`}
+        </Button>
       </div>
     </Modal>
   );
@@ -455,23 +472,31 @@ function DeactivateDialog({
   const user = useSession();
   const [nextBySite, setNextBySite] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const ready = affected.every((site) => Boolean(nextBySite[site.id]));
 
-  const submit = () => {
-    const result = deactivateUnit(
-      kind,
-      unit.id,
-      affected.map((site) => ({
-        siteId: site.id,
-        nextId: nextBySite[site.id] === "unassigned" ? null : nextBySite[site.id] ?? null,
-      })),
-      user?.name || "Enterprise user",
-    );
-    if (!result.ok) {
-      setError(result.error);
-      return;
+  const submit = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      const result = await deactivateUnit(
+        kind,
+        unit.id,
+        affected.map((site) => ({
+          siteId: site.id,
+          nextId: nextBySite[site.id] === "unassigned" ? null : nextBySite[site.id] ?? null,
+        })),
+        user?.name || "Enterprise user",
+      );
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      await refreshEnterpriseWorkspace();
+      onClose();
+    } finally {
+      setSaving(false);
     }
-    onClose();
   };
 
   return (
@@ -529,8 +554,8 @@ function DeactivateDialog({
         <Button variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button disabled={affected.length > 0 && !ready} onClick={submit}>
-          Deactivate {label}
+        <Button disabled={saving || (affected.length > 0 && !ready)} onClick={() => void submit()}>
+          {saving ? "Saving…" : `Deactivate ${label}`}
         </Button>
       </div>
     </Modal>
@@ -548,10 +573,13 @@ function DeleteDialog({
 }) {
   const user = useSession();
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   return (
     <Modal title={`Delete ${structureLabel(kind)}`} onClose={onClose}>
       <p className="font-saveful text-sm leading-relaxed text-gray-600">
-        {unit.name} has no assigned sites and no historical collections, so it can be removed.
+        {kind === "group"
+          ? `${unit.name} can be removed only if it has no clusters and no assigned sites.`
+          : `${unit.name} has no assigned sites and no historical collections, so it can be removed.`}
       </p>
       {error ? <p className="mt-3 font-saveful text-sm text-amber-700">{error}</p> : null}
       <div className="mt-6 flex justify-end gap-2">
@@ -559,16 +587,24 @@ function DeleteDialog({
           Cancel
         </Button>
         <Button
-          onClick={() => {
-            const result = deleteUnit(kind, unit.id, user?.name || "Enterprise user");
-            if (!result.ok) {
-              setError(result.error);
-              return;
+          disabled={saving}
+          onClick={async () => {
+            setError("");
+            setSaving(true);
+            try {
+              const result = await deleteUnit(kind, unit.id, user?.name || "Enterprise user");
+              if (!result.ok) {
+                setError(result.error);
+                return;
+              }
+              await refreshEnterpriseWorkspace();
+              onClose();
+            } finally {
+              setSaving(false);
             }
-            onClose();
           }}
         >
-          Delete
+          {saving ? "Deleting…" : "Delete"}
         </Button>
       </div>
     </Modal>

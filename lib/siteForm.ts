@@ -56,21 +56,25 @@ export type SiteFormValues = {
 
 export type SiteFormDraft = {
   organisationId?: string;
+  siteId?: string;
   values: SiteFormValues;
   savedAt: string;
 };
 
-function draftKey(variant: "admin" | "enterprise") {
-  return `saveful_add_site_draft_${variant}`;
+function draftKey(variant: "admin" | "enterprise", siteId?: string) {
+  return siteId
+    ? `saveful_edit_site_draft_${variant}_${siteId}`
+    : `saveful_add_site_draft_${variant}`;
 }
 
-export function loadSiteFormDraft(variant: "admin" | "enterprise"): SiteFormDraft | null {
+export function loadSiteFormDraft(variant: "admin" | "enterprise", siteId?: string): SiteFormDraft | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(draftKey(variant));
+    const raw = window.localStorage.getItem(draftKey(variant, siteId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SiteFormDraft;
     if (!parsed?.values) return null;
+    if (siteId && parsed.siteId && parsed.siteId !== siteId) return null;
     return parsed;
   } catch {
     return null;
@@ -81,19 +85,21 @@ export function saveSiteFormDraft(
   variant: "admin" | "enterprise",
   values: SiteFormValues,
   organisationId?: string,
+  siteId?: string,
 ) {
   if (typeof window === "undefined") return;
   const draft: SiteFormDraft = {
     organisationId,
+    siteId,
     values,
     savedAt: new Date().toISOString(),
   };
-  window.localStorage.setItem(draftKey(variant), JSON.stringify(draft));
+  window.localStorage.setItem(draftKey(variant, siteId), JSON.stringify(draft));
 }
 
-export function clearSiteFormDraft(variant: "admin" | "enterprise") {
+export function clearSiteFormDraft(variant: "admin" | "enterprise", siteId?: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(draftKey(variant));
+  window.localStorage.removeItem(draftKey(variant, siteId));
 }
 
 export function emptySiteForm(): SiteFormValues {
@@ -117,13 +123,25 @@ export function emptySiteForm(): SiteFormValues {
   };
 }
 
+function splitName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0], last: "" };
+  return { first: parts[0], last: parts.slice(1).join(" ") };
+}
+
 export function siteToFormValues(site: OrganizationSite): SiteFormValues {
   const current = resolveSite(site);
-  const existing = listUsers().find(
-    (user) =>
-      user.email === current.email ||
-      (user.scope.siteIds?.includes(current.id) && (user.role === "site_admin" || user.role === "group_admin")),
-  );
+  const email = (current.email ?? "").trim().toLowerCase();
+  const existing = listUsers().find((user) => {
+    if (current.managerUserId && user.id === current.managerUserId) return true;
+    if (email && user.email.trim().toLowerCase() === email) return true;
+    return Boolean(
+      user.scope.siteIds?.includes(current.id) && (user.role === "site_admin" || user.role === "group_admin"),
+    );
+  });
+  const names = splitName(current.managerName || current.primaryContact || "");
+  const useExisting = Boolean(existing);
   return {
     siteName: current.name,
     siteCode: current.siteCode,
@@ -140,12 +158,12 @@ export function siteToFormValues(site: OrganizationSite): SiteFormValues {
     collectionFrom: site.collectionFrom ?? "14:00",
     collectionTo: site.collectionTo ?? "17:00",
     collectionInstructions: site.collectionInstructions ?? "",
-    adminMode: site.hasManager && existing ? "existing" : "invite",
-    inviteFirstName: "",
-    inviteLastName: "",
-    inviteEmail: "",
-    inviteMobile: "",
-    existingUserId: existing?.id ?? "",
+    adminMode: useExisting ? "existing" : "invite",
+    inviteFirstName: names.first,
+    inviteLastName: names.last,
+    inviteEmail: current.email ?? "",
+    inviteMobile: current.mobile ?? "",
+    existingUserId: existing?.id ?? current.managerUserId ?? "",
   };
 }
 

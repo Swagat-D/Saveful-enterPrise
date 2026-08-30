@@ -26,9 +26,9 @@ import {
   exportAdminSitesCsv,
   getOrganisation,
   hasActiveAdminSitesFilters,
+  lastAdminFilters,
   parseAdminFilters,
   parseAdminSitesTable,
-  rememberAdminFilters,
   refreshSites,
   updateSiteStatus,
   urlHasAdminFilters,
@@ -76,7 +76,6 @@ function useAdminSitesState() {
 
   const replace = (nextAdmin: AdminFilters, nextTable: AdminSitesTableFilters) => {
     const cleaned = { ...nextAdmin, q: "" };
-    rememberAdminFilters(cleaned, true);
     const params = new URLSearchParams(adminFiltersToQuery(cleaned).replace(/^\?/, ""));
     adminSitesTableToQuery(nextTable).forEach((value, key) => params.set(key, value));
     const query = params.toString();
@@ -85,9 +84,10 @@ function useAdminSitesState() {
 
   useEffect(() => {
     if (urlHasAdminFilters(searchParams)) return;
-    const remembered = adminFiltersToQuery(admin);
-    if (remembered) replace(admin, table);
-    // Restore remembered admin scope once when the URL has no admin keys.
+    const remembered = lastAdminFilters();
+    const query = adminFiltersToQuery(remembered);
+    if (query) replace(remembered, table);
+    // Restore dashboard scope once when the URL has no admin keys.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

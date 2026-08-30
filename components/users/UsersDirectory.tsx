@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { getOrganisationSiteDetails, type ApiSiteRow } from "@/lib/api";
 import { demoSites } from "@/lib/demo";
 import {
   formatScope,
@@ -12,7 +14,87 @@ import {
   useUsersVersion,
   usersForSite,
 } from "@/lib/users";
+import type { DirectoryUser } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
+
+function splitName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0], last: "" };
+  return { first: parts[0], last: parts.slice(1).join(" ") };
+}
+
+function directoryUserFromContact(input: {
+  id: string;
+  name: string;
+  email: string;
+  mobile?: string;
+  siteId: string;
+  status?: DirectoryUser["status"];
+}): DirectoryUser {
+  const names = splitName(input.name);
+  return {
+    id: input.id,
+    firstName: names.first,
+    lastName: names.last,
+    name: input.name.trim() || input.email,
+    email: input.email,
+    mobile: input.mobile ?? "",
+    role: "site_admin",
+    scope: { siteIds: [input.siteId] },
+    status: input.status ?? "active",
+    lastActiveAt: null,
+    invitedAt: null,
+    inviteToken: null,
+  };
+}
+
+function mergeSitePeople(
+  siteId: string,
+  fromDirectory: DirectoryUser[],
+  managers: NonNullable<ApiSiteRow["managers"]>,
+  contact?: { name: string; email: string; mobile?: string; userId?: string | null },
+) {
+  const rows = [...fromDirectory];
+  const seen = new Set(rows.map((user) => user.email.trim().toLowerCase()).filter(Boolean));
+  const seenIds = new Set(rows.map((user) => user.id));
+
+  for (const manager of managers) {
+    const email = manager.user?.email?.trim() ?? "";
+    const key = email.toLowerCase();
+    const id = String(manager.userId);
+    if ((key && seen.has(key)) || seenIds.has(id)) continue;
+    const name = `${manager.user?.firstName ?? ""} ${manager.user?.lastName ?? ""}`.trim() || email || "Site Admin";
+    rows.push(
+      directoryUserFromContact({
+        id,
+        name,
+        email,
+        mobile: manager.user?.phoneNumber,
+        siteId,
+        status: "active",
+      }),
+    );
+    if (key) seen.add(key);
+    seenIds.add(id);
+  }
+
+  const contactKey = contact?.email.trim().toLowerCase() ?? "";
+  if ((contact?.email || contact?.name) && !(contactKey && seen.has(contactKey))) {
+    const id = contact?.userId && !seenIds.has(contact.userId) ? contact.userId : `contact-${siteId}`;
+    rows.unshift(
+      directoryUserFromContact({
+        id,
+        name: contact?.name || contact?.email || "Site Admin",
+        email: contact?.email ?? "",
+        mobile: contact?.mobile,
+        siteId,
+      }),
+    );
+  }
+
+  return rows;
+}
 
 export function UsersDirectory({
   siteId,
@@ -26,7 +108,32 @@ export function UsersDirectory({
 }) {
   useUsersVersion();
   const site = siteId ? demoSites.find((item) => item.id === siteId) : undefined;
-  const rows = site ? usersForSite(site) : listUsers();
+  const [managers, setManagers] = useState<NonNullable<ApiSiteRow["managers"]>>([]);
+
+  useEffect(() => {
+    if (!siteId || !/^\d+$/.test(siteId)) return;
+    let cancelled = false;
+    getOrganisationSiteDetails(Number(siteId))
+      .then((detail) => {
+        if (!cancelled) setManagers(detail.managers ?? detail.site.managers ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setManagers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId]);
+
+  const rows = useMemo(() => {
+    if (!site) return listUsers();
+    return mergeSitePeople(site.id, usersForSite(site), managers, {
+      name: site.managerName || site.primaryContact || "",
+      email: site.email,
+      mobile: site.mobile,
+      userId: site.managerUserId,
+    });
+  }, [managers, site]);
   const invited = rows.filter((user) => user.status === "invited").length;
   const active = rows.filter((user) => user.status === "active").length;
 
@@ -62,10 +169,17 @@ export function UsersDirectory({
                   rows.map((user) => (
                   <tr key={user.id} className="border-b border-gray-50 last:border-0">
                     <td className={cn("pr-4", compact ? "py-2" : "py-3")}>
-                      <Link href={`/users/${user.id}`} className="hover:text-saveful-green">
-                        <p className="font-saveful-semibold text-sm text-gray-900">{user.name}</p>
-                        <p className="font-saveful text-xs text-gray-500">{user.email}</p>
-                      </Link>
+                      {user.id.startsWith("contact-") || user.id.startsWith("invite-") ? (
+                        <div>
+                          <p className="font-saveful-semibold text-sm text-gray-900">{user.name}</p>
+                          <p className="font-saveful text-xs text-gray-500">{user.email}</p>
+                        </div>
+                      ) : (
+                        <Link href={`/users/${user.id}`} className="hover:text-saveful-green">
+                          <p className="font-saveful-semibold text-sm text-gray-900">{user.name}</p>
+                          <p className="font-saveful text-xs text-gray-500">{user.email}</p>
+                        </Link>
+                      )}
                     </td>
                     <td className={cn("pr-4 font-saveful text-sm text-gray-700", compact ? "py-2" : "py-3")}>
                       {roleLabel(user.role)}

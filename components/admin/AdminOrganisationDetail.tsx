@@ -34,7 +34,9 @@ import { PortalPageShell } from "@/components/ui/Portal";
 import {
   ORG_DETAIL_TABS,
   buildOrgDetail,
+  adminFiltersToQuery,
   formatEnterpriseId,
+  lastAdminFilters,
   orgTypeLabel,
   parseOrgDetailTab,
   participationLabel,
@@ -45,7 +47,7 @@ import {
   type OrgDetailTab,
   type OrgTypeId,
 } from "@/lib/admin";
-import { listAdminAudit, useAdminAuditVersion } from "@/lib/adminAudit";
+import { listAdminAudit, refreshAdminAudit, useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
 import { CHART_TOOLTIP } from "@/lib/demo";
 import { formatDisplayDate } from "@/lib/dates";
@@ -75,6 +77,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
 
   useEffect(() => {
     void refreshOrganisationDetail(id).catch(() => undefined);
+    void refreshAdminAudit().catch(() => undefined);
   }, [id]);
 
   const setTab = (next: OrgDetailTab) => {
@@ -103,7 +106,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
     <AdminPortalShell>
       <PortalPageShell className="!space-y-3 sm:!space-y-3">
         <nav className="flex flex-wrap items-center gap-1.5 font-saveful text-xs text-gray-500">
-          <Link href={`/admin/organisations${query}`} className="hover:text-saveful-green">
+          <Link href={`/admin/organisations${adminFiltersToQuery(lastAdminFilters())}`} className="hover:text-saveful-green">
             Organisations
           </Link>
           <span className="text-gray-300">/</span>
@@ -423,7 +426,13 @@ function OverviewTab({
           <ul className="max-h-[10.5rem] overflow-y-auto">
             {model.recentActivity.map((item) => (
               <li key={item.id} className="border-b border-gray-50 px-3.5 py-2.5 last:border-0">
-                <p className="font-saveful-semibold text-sm text-gray-900">{item.kind}</p>
+                {item.href ? (
+                  <Link href={item.href} className="font-saveful-semibold text-sm text-saveful-green hover:underline">
+                    {item.kind}
+                  </Link>
+                ) : (
+                  <p className="font-saveful-semibold text-sm text-gray-900">{item.kind}</p>
+                )}
                 <p className="truncate font-saveful text-xs text-gray-500">{item.detail}</p>
                 <p className="mt-0.5 font-saveful text-[11px] text-gray-400">{formatDisplayDate(item.at.slice(0, 10))}</p>
               </li>
@@ -542,9 +551,11 @@ function AuditTab({ orgId, period, query }: { orgId: string; period: PeriodKey; 
   return (
     <AdminSection
       title="Support & audit"
-      action={<Link href={`/admin/audit${query}`} className="font-saveful-semibold text-xs text-saveful-green hover:underline">View full audit →</Link>}
+      action={<Link href={`/admin/audit${query}`} className="font-saveful-semibold text-xs text-saveful-green hover:underline">Platform audit log →</Link>}
     >
-      <p className="px-3.5 pt-3 font-saveful text-xs text-gray-500">Saveful Admin changes to this organisation. Customer activity stays in listings and collections.</p>
+      <p className="px-3.5 pt-3 font-saveful text-xs text-gray-500">
+        Administrative changes for this organisation: provisioning, invites, profile and access. Listings and collections stay in Activity.
+      </p>
       <RecordTable
         columns={["When", "Action", "Actor", "Change"]}
         rows={rows.map((row) => [

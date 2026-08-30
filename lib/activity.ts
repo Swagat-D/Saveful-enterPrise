@@ -1,12 +1,14 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { daysAgoIso, inDateRange, periodRange } from "@/lib/dates";
+import type { ApiFoodListing } from "@/lib/api";
+import { daysAgoIso, inDateRange, liveToday, periodRange } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import { demoNetworkSites } from "@/lib/network";
 import { PATHWAY_LABEL } from "@/lib/networkQuery";
 import { getUnit, listUnits, resolveSite } from "@/lib/orgStructure";
 import { siteInScope } from "@/lib/scope";
+import { listUsers, roleLabel } from "@/lib/users";
 import type {
   AccessScope,
   ActivityCollection,
@@ -190,8 +192,8 @@ function add(
 const siteIds = SITES.map((site) => site.id);
 const pickSite = (index: number) => siteIds[index % siteIds.length] ?? "";
 
-export const activityListings: ActivityListing[] = seeds.map((item) => item.listing);
-export const activityCollections: ActivityCollection[] = seeds.flatMap((item) => item.collections);
+export let activityListings: ActivityListing[] = seeds.map((item) => item.listing);
+export let activityCollections: ActivityCollection[] = seeds.flatMap((item) => item.collections);
 
 const listeners = new Set<() => void>();
 let version = 0;
@@ -210,6 +212,119 @@ function subscribe(listener: () => void) {
 
 export function useActivityVersion() {
   return useSyncExternalStore(subscribe, () => version, () => 0);
+}
+
+function livePathway(row: ApiFoodListing): RecoveryPathway {
+  const pathway = (row.recoveryPathway || "").toUpperCase();
+  if (pathway === "LIVESTOCK_FEED") return "livestock";
+  if (pathway === "CIRCULAR_RECOVERY") return "circular";
+  if (pathway === "BIOENERGY") return "bioenergy";
+  const type = (row.listingType || "").toUpperCase();
+  if (type === "ANIMAL") return "livestock";
+  return "people";
+}
+
+function liveListingStatus(row: ApiFoodListing): ActivityListingStatus {
+  const status = (row.status || "").toUpperCase();
+  const claims = row.foodClaims ?? [];
+  const hasDriver = claims.some((claim) => (claim.driverPickups ?? []).some((pickup) => pickup.status !== "CANCELLED"));
+  const hasCollected = claims.some((claim) => (claim.status || "").toUpperCase() === "COLLECTED");
+  if (status === "CANCELLED") return "cancelled";
+  if (status === "EXPIRED") return "expired";
+  if (hasCollected) return claims.every((claim) => (claim.status || "").toUpperCase() === "COLLECTED") ? "completed" : "collected";
+  if (status === "CLAIMED" || status === "PARTIAL") return hasDriver ? "driver_assigned" : "claimed";
+  if (hasDriver) return "driver_assigned";
+  return "published";
+}
+
+function liveCollectionStatus(status: string): ActivityCollectionStatus {
+  const value = status.toUpperCase();
+  if (value === "COLLECTED") return "completed";
+  if (value === "CONFIRMED") return "in_progress";
+  if (value === "CANCELLED") return "cancelled";
+  return "scheduled";
+}
+
+function liveFoodLabel(row: ApiFoodListing) {
+  const names = (row.foodItems ?? []).map((item) => item.name?.trim()).filter(Boolean);
+  return names.join(", ") || "Food listing";
+}
+
+function liveDriverName(claim: NonNullable<ApiFoodListing["foodClaims"]>[number]) {
+  const driver = claim.driverPickups?.[0]?.driver;
+  if (!driver) return null;
+  const name = [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
+  return name || null;
+}
+
+export function replaceActivityFromListings(rows: ApiFoodListing[]) {
+  const listings: ActivityListing[] = [];
+  const collections: ActivityCollection[] = [];
+  for (const row of rows) {
+    const org = siteOrg(String(row.siteId));
+    const food = liveFoodLabel(row);
+    const pathway = livePathway(row);
+    const listingId = String(row.id);
+    const claimIds = (row.foodClaims ?? [])
+      .filter((claim) => (claim.status || "").toUpperCase() !== "CANCELLED")
+      .map((claim) => String(claim.id));
+    listings.push({
+      id: listingId,
+      code: `LST-${String(row.id).padStart(5, "0")}`,
+      siteId: org.siteId,
+      siteName: org.siteName,
+      groupId: org.groupId,
+      groupName: org.groupName,
+      territoryId: org.territoryId,
+      territoryName: org.territoryName,
+      clusterId: org.clusterId,
+      clusterName: org.clusterName,
+      food,
+      category: row.foodItems?.[0]?.category || foodCategory(food, pathway),
+      pathway,
+      quantityKg: row.totalQtyKg ?? 0,
+      claimedKg: (row.foodClaims ?? []).reduce(
+        (sum, claim) => sum + (claim.claimItems ?? []).reduce((inner, item) => inner + (item.qtyKg ?? 0), 0),
+        0,
+      ),
+      status: liveListingStatus(row),
+      createdAt: row.createdAt,
+      pickupFrom: row.pickupFromTime ?? row.createdAt,
+      pickupTo: row.pickupByTime ?? row.createdAt,
+      notes: "",
+      collectionIds: claimIds,
+    });
+    for (const claim of row.foodClaims ?? []) {
+      if ((claim.status || "").toUpperCase() === "CANCELLED") continue;
+      const kg = (claim.claimItems ?? []).reduce((sum, item) => sum + (item.qtyKg ?? 0), 0);
+      collections.push({
+        id: String(claim.id),
+        code: `COL-${String(claim.id).padStart(5, "0")}`,
+        listingId,
+        listingCode: `LST-${String(row.id).padStart(5, "0")}`,
+        siteId: org.siteId,
+        siteName: org.siteName,
+        groupId: org.groupId,
+        groupName: org.groupName,
+        territoryId: org.territoryId,
+        territoryName: org.territoryName,
+        clusterId: org.clusterId,
+        clusterName: org.clusterName,
+        food,
+        pathway,
+        quantityKg: kg || row.totalQtyKg || 0,
+        recipientName: claim.claimantOrg?.name || "Recipient",
+        driverName: liveDriverName(claim),
+        confirmedBy: claim.confirmedAt ? claim.claimantOrg?.name || null : null,
+        notes: "",
+        status: liveCollectionStatus(claim.status),
+        occurredAt: claim.collectedAt || claim.confirmedAt || claim.createdAt || row.createdAt,
+      });
+    }
+  }
+  activityListings = listings;
+  activityCollections = collections;
+  emit();
 }
 
 function listingRecord(row: ActivityListing): ActivityListing {
@@ -335,7 +450,13 @@ function matchesOrg(
   scope: AccessScope,
 ) {
   const site = demoNetworkSites.find((item) => item.id === row.siteId);
-  if (!site || !siteInScope(site, scope)) return false;
+  if (site && !siteInScope(site, scope)) return false;
+  if (!site) {
+    if (scope.siteIds && !scope.siteIds.includes(row.siteId)) return false;
+    if (scope.groupIds && row.groupId && !scope.groupIds.includes(row.groupId)) return false;
+    if (scope.territoryIds && row.territoryId && !scope.territoryIds.includes(row.territoryId)) return false;
+    if (scope.clusterIds && row.clusterId && !scope.clusterIds.includes(row.clusterId)) return false;
+  }
   if (filters.groupId !== "all" && row.groupId !== filters.groupId) return false;
   if (filters.territoryId !== "all" && row.territoryId !== filters.territoryId) return false;
   if (filters.clusterId !== "all" && row.clusterId !== filters.clusterId) return false;
@@ -349,7 +470,7 @@ function matchesPathwayAndPeriod(
   filters: ActivityFilters,
 ) {
   if (filters.pathway !== "all" && pathway !== filters.pathway) return false;
-  const { startDate, endDate } = periodRange(filters.period);
+  const { startDate, endDate } = periodRange(filters.period, liveToday());
   return inDateRange(iso, startDate, endDate);
 }
 
@@ -427,9 +548,109 @@ export function getListing(id: string) {
   return row ? listingRecord(row) : null;
 }
 
+export type EnterpriseActivityEvent = {
+  id: string;
+  at: string;
+  kind: string;
+  detail: string;
+  type: string;
+  href: string;
+};
+
+function listingEventKind(status: ActivityListingStatus) {
+  if (status === "claimed") return "Listing claimed";
+  if (status === "published") return "Listing published";
+  if (status === "collected" || status === "completed") return "Listing collected";
+  if (status === "driver_assigned") return "Driver assigned";
+  return `Listing ${status.replaceAll("_", " ")}`;
+}
+
+export function listEnterpriseActivity(filters: ActivityFilters, scope: AccessScope): EnterpriseActivityEvent[] {
+  const { startDate, endDate } = periodRange(filters.period, liveToday());
+  const inPeriod = (iso: string) => Boolean(iso) && (filters.period === "all" || inDateRange(iso, startDate, endDate));
+  const items: EnterpriseActivityEvent[] = [];
+
+  for (const site of demoNetworkSites) {
+    if (!siteInScope(site, scope)) continue;
+    if (filters.siteId !== "all" && site.id !== filters.siteId) continue;
+    const at = site.createdAt || site.activatedAt || "";
+    if (!inPeriod(at)) continue;
+    items.push({
+      id: `site-${site.id}`,
+      at,
+      kind: "Site added",
+      detail: site.address ? `${site.name} · ${site.address}` : site.name,
+      type: "Site",
+      href: `/sites/${site.id}`,
+    });
+  }
+
+  for (const user of listUsers()) {
+    const isSuper = user.role === "enterprise_super_admin";
+    if (inPeriod(user.invitedAt || user.lastActiveAt || "")) {
+      items.push({
+        id: `user-${user.id}`,
+        at: user.invitedAt || user.lastActiveAt || "",
+        kind:
+          user.status === "invited"
+            ? isSuper
+              ? "Super Admin invited"
+              : "User invited"
+            : isSuper
+              ? "Super Admin added"
+              : "User added",
+        detail: `${user.name} · ${roleLabel(user.role)}`,
+        type: "User",
+        href: "/users",
+      });
+    }
+    if (user.lastActiveAt && user.status !== "invited" && inPeriod(user.lastActiveAt)) {
+      items.push({
+        id: `login-${user.id}`,
+        at: user.lastActiveAt,
+        kind: "User signed in",
+        detail: `${user.name} · ${roleLabel(user.role)}`,
+        type: "User",
+        href: "/users",
+      });
+    }
+  }
+
+  for (const listing of activityListings.map(listingRecord)) {
+    if (!listingInScope(listing, scope)) continue;
+    if (!matchesOrg(listing, filters, scope)) continue;
+    if (!inPeriod(listing.createdAt)) continue;
+    items.push({
+      id: `list-${listing.id}`,
+      at: listing.createdAt,
+      kind: listingEventKind(listing.status),
+      detail: `${listing.siteName} · ${listing.food}`,
+      type: "Listing",
+      href: `/activity/listings/${listing.id}`,
+    });
+  }
+
+  for (const collection of activityCollections.map(collectionRecord)) {
+    if (!matchesOrg(collection, filters, scope)) continue;
+    if (!inPeriod(collection.occurredAt)) continue;
+    items.push({
+      id: `col-${collection.id}`,
+      at: collection.occurredAt,
+      kind: collection.status === "completed" ? "Collection completed" : `Collection ${collection.status.replaceAll("_", " ")}`,
+      detail: `${collection.siteName} · ${collection.food}`,
+      type: "Collection",
+      href: `/activity/collections/${collection.id}`,
+    });
+  }
+
+  return items.sort((left, right) => right.at.localeCompare(left.at));
+}
+
 export function listingInScope(listing: ActivityListing, scope: AccessScope) {
   const site = demoNetworkSites.find((item) => item.id === listing.siteId);
-  return Boolean(site && siteInScope(site, scope));
+  if (site) return siteInScope(site, scope);
+  if (scope.siteIds) return scope.siteIds.includes(listing.siteId);
+  return scope.groupIds == null && scope.territoryIds == null && scope.clusterIds == null && scope.siteIds == null;
 }
 
 export const LISTING_JOURNEY_STEPS = [

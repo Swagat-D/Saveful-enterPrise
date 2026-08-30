@@ -62,6 +62,7 @@ export type OrganizationSite = {
   address: string;
   postCode: string;
   managerName: string;
+  managerUserId?: string | null;
   email: string;
   mobile: string;
   hasManager: boolean;

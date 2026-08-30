@@ -12,6 +12,7 @@ import {
   getOrganisation,
   getSite,
   pathwayLabel,
+  useAdminVersion,
 } from "@/lib/admin";
 import { formatKg } from "@/lib/impact";
 
@@ -27,6 +28,7 @@ function contextOrgId(recordOrgId: string, filterOrgId: string) {
 }
 
 export function AdminListings() {
+  useAdminVersion();
   const { filters, update, reset, query } = useAdminFilters();
   const rows = filteredListings(filters);
   return (
@@ -72,6 +74,7 @@ export function AdminListings() {
 }
 
 export function AdminCollections() {
+  useAdminVersion();
   const { filters, update, reset, query } = useAdminFilters();
   const rows = filteredCollections(filters);
   return (

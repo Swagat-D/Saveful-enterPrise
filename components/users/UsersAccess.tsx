@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MoreHorizontal, Plus, Search } from "lucide-react";
@@ -8,6 +8,7 @@ import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { useSession } from "@/lib/auth";
+import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
 import { userPermissions } from "@/lib/permissions";
 import {
   EMPTY_USER_FILTERS,
@@ -50,6 +51,11 @@ export function UsersAccess() {
   const paged = rows.slice((page - 1) * filters.pageSize, page * filters.pageSize);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    if (!user || user.portal === "admin") return;
+    void refreshEnterpriseWorkspace({ session: user }).catch(() => undefined);
+  }, [user]);
 
   const setFilters = (next: UsersTableFilters) => {
     router.replace(`${pathname}${userFiltersToQuery({ ...next, page: next.page || 1 })}`, { scroll: false });

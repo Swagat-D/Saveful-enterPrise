@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 import { getAdminSidebarLinks } from "@/config/sidebar";
 import { adminFiltersToQuery, lastAdminFilters, refreshOrganisations, useAdminVersion } from "@/lib/admin";
+import { refreshAdminAudit } from "@/lib/adminAudit";
 import { ensureLiveSession, homePath, isAdminSession, logout, useSession } from "@/lib/auth";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
@@ -31,7 +32,10 @@ export function AdminPortalShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || !isAdminSession(user)) return;
     void ensureLiveSession().then((live) => {
-      if (live) void refreshOrganisations().catch(() => undefined);
+      if (live) {
+        void refreshOrganisations().catch(() => undefined);
+        void refreshAdminAudit().catch(() => undefined);
+      }
     });
   }, [user]);
 

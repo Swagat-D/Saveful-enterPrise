@@ -138,9 +138,17 @@ export type ApiSiteRow = {
   territoryId?: number | null;
   managers?: Array<{
     userId: number;
-    user?: { firstName?: string; lastName?: string; email?: string };
+    user?: { firstName?: string; lastName?: string; email?: string; phoneNumber?: string };
   }>;
 };
+
+export function getOrganisationSiteDetails(siteId: number) {
+  return apiFetch<{
+    site: ApiSiteRow;
+    managers?: ApiSiteRow["managers"];
+    staff?: ApiSiteRow["managers"];
+  }>(`/sites/${siteId}/details`, { auth: true });
+}
 
 export type CreateOrganisationSiteInput = {
   siteName: string;
@@ -288,14 +296,120 @@ export type OrganisationSitesResponse = {
 };
 
 export type EnterpriseStructureResponse = {
+  totalSites?: number;
+  unassignedSites?: Array<{ id: number; name: string }>;
   groups: Array<{
     id: number;
     name: string;
+    code?: string | null;
     isActive: boolean;
     clusters: Array<{ id: number; name: string; isActive: boolean; siteCount: number }>;
   }>;
-  territories: Array<{ id: number; name: string; isActive: boolean; siteCount: number }>;
+  territories: Array<{ id: number; name: string; code?: string | null; isActive: boolean; siteCount: number }>;
 };
+
+export type EnterpriseGroupRow = {
+  id: number;
+  name: string;
+  code?: string | null;
+  isActive: boolean;
+  clusterCount?: number;
+  siteCount?: number;
+  clusters?: Array<{ id: number; name: string; siteCount: number }>;
+};
+
+export type EnterpriseClusterRow = {
+  id: number;
+  name: string;
+  code?: string | null;
+  isActive: boolean;
+  group?: { id: number; name: string } | null;
+  siteCount?: number;
+};
+
+export type EnterpriseTerritoryRow = {
+  id: number;
+  name: string;
+  code?: string | null;
+  isActive: boolean;
+  siteCount?: number;
+};
+
+export function listEnterpriseGroups() {
+  return apiFetch<EnterpriseGroupRow[]>("/enterprise/groups", { auth: true });
+}
+
+export function listEnterpriseClusters(groupId?: number) {
+  const query = groupId ? `?groupId=${groupId}` : "";
+  return apiFetch<EnterpriseClusterRow[]>(`/enterprise/clusters${query}`, { auth: true });
+}
+
+export function listEnterpriseTerritories() {
+  return apiFetch<EnterpriseTerritoryRow[]>("/enterprise/territories", { auth: true });
+}
+
+export function createEnterpriseGroup(input: { name: string; code?: string }) {
+  return apiFetch<EnterpriseGroupRow>("/enterprise/groups", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateEnterpriseGroup(id: number, input: { name?: string; code?: string; isActive?: boolean }) {
+  return apiFetch<EnterpriseGroupRow>(`/enterprise/groups/${id}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteEnterpriseGroup(id: number) {
+  return apiFetch<{ message: string }>(`/enterprise/groups/${id}`, { method: "DELETE", auth: true });
+}
+
+export function createEnterpriseCluster(input: { name: string; code?: string }) {
+  return apiFetch<EnterpriseClusterRow>("/enterprise/clusters", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateEnterpriseCluster(
+  id: number,
+  input: { name?: string; code?: string; isActive?: boolean },
+) {
+  return apiFetch<EnterpriseClusterRow>(`/enterprise/clusters/${id}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteEnterpriseCluster(id: number) {
+  return apiFetch<{ message: string }>(`/enterprise/clusters/${id}`, { method: "DELETE", auth: true });
+}
+
+export function createEnterpriseTerritory(input: { name: string; code?: string }) {
+  return apiFetch<EnterpriseTerritoryRow>("/enterprise/territories", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateEnterpriseTerritory(id: number, input: { name?: string; code?: string; isActive?: boolean }) {
+  return apiFetch<EnterpriseTerritoryRow>(`/enterprise/territories/${id}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteEnterpriseTerritory(id: number) {
+  return apiFetch<{ message: string }>(`/enterprise/territories/${id}`, { method: "DELETE", auth: true });
+}
 
 type ApiFetchOptions = RequestInit & {
   auth?: boolean;
@@ -363,6 +477,24 @@ export function loginWithPassword(email: string, password: string) {
     body: JSON.stringify({
       email: email.trim().toLowerCase(),
       password,
+    }),
+  });
+}
+
+export function requestPasswordReset(email: string) {
+  return apiFetch<{ message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+}
+
+export function resetPasswordWithOtp(input: { email: string; otp: string; newPassword: string }) {
+  return apiFetch<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({
+      email: input.email.trim().toLowerCase(),
+      otp: input.otp.trim(),
+      newPassword: input.newPassword,
     }),
   });
 }
@@ -546,6 +678,49 @@ export function listAdminNetworkUsers() {
   });
 }
 
+export type ApiAuditLogRow = {
+  id: number;
+  organisationId: number;
+  organisation?: { id: number; name: string } | null;
+  actorUserId?: number | null;
+  actorName: string;
+  actorEmail: string;
+  area: string;
+  action: string;
+  entityType: string;
+  entityId?: number | null;
+  entityLabel?: string | null;
+  previousValue?: Record<string, unknown> | null;
+  newValue?: Record<string, unknown> | null;
+  summary: string;
+  createdAt: string;
+};
+
+export type AdminAuditLogResponse = {
+  total: number;
+  rows: ApiAuditLogRow[];
+};
+
+export async function listAdminEnterpriseAudit(input?: { organisationId?: string | number; page?: number; limit?: number }) {
+  const params = new URLSearchParams();
+  if (input?.organisationId != null) params.set("organisationId", String(input.organisationId));
+  if (input?.page) params.set("page", String(input.page));
+  if (input?.limit) params.set("limit", String(input.limit));
+  const query = params.toString();
+  return apiFetch<AdminAuditLogResponse>(`/admin/enterprise/audit${query ? `?${query}` : ""}`, { auth: true });
+}
+
+export async function listAllAdminEnterpriseAudit() {
+  const first = await listAdminEnterpriseAudit({ page: 1, limit: 100 });
+  const rows = [...(first.rows ?? [])];
+  const totalPages = Math.max(1, Math.ceil((first.total ?? rows.length) / 100));
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await listAdminEnterpriseAudit({ page, limit: 100 });
+    rows.push(...(next.rows ?? []));
+  }
+  return rows;
+}
+
 export function uploadEnterpriseLogo(file: File) {
   const body = new FormData();
   body.append("logo", file);
@@ -595,4 +770,87 @@ export function getOrganisationSites() {
 
 export function getEnterpriseStructure() {
   return apiFetch<EnterpriseStructureResponse>("/enterprise/structure", { auth: true });
+}
+
+export type ApiFoodItem = {
+  id: number;
+  name: string;
+  totalQtyKg?: number;
+  remainingQtyKg?: number;
+  unit?: string | null;
+  category?: string | null;
+};
+
+export type ApiFoodClaim = {
+  id: number;
+  status: string;
+  createdAt?: string;
+  collectedAt?: string | null;
+  confirmedAt?: string | null;
+  claimantOrg?: { id: number; name: string } | null;
+  claimItems?: Array<{ qtyKg?: number; foodItem?: { name?: string } | null }>;
+  driverPickups?: Array<{
+    id: number;
+    status: string;
+    driver?: { firstName?: string; lastName?: string } | null;
+  }>;
+};
+
+export type ApiFoodListing = {
+  id: number;
+  siteId: number;
+  organisationId: number;
+  listingType?: string;
+  recoveryPathway?: string | null;
+  totalQtyKg?: number;
+  remainingQtyKg?: number;
+  status: string;
+  createdAt: string;
+  pickupFromTime?: string;
+  pickupByTime?: string;
+  foodItems?: ApiFoodItem[];
+  foodClaims?: ApiFoodClaim[];
+};
+
+export type OrgFoodListingsResponse = {
+  listings: ApiFoodListing[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+function foodListingsFromPayload(payload: unknown): OrgFoodListingsResponse {
+  if (Array.isArray(payload)) {
+    return { listings: payload as ApiFoodListing[], total: payload.length, page: 1, limit: payload.length, totalPages: 1 };
+  }
+  const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const listings = Array.isArray(record.listings)
+    ? (record.listings as ApiFoodListing[])
+    : Array.isArray(record.data)
+      ? (record.data as ApiFoodListing[])
+      : [];
+  return {
+    listings,
+    total: typeof record.total === "number" ? record.total : listings.length,
+    page: typeof record.page === "number" ? record.page : 1,
+    limit: typeof record.limit === "number" ? record.limit : listings.length,
+    totalPages: typeof record.totalPages === "number" ? record.totalPages : 1,
+  };
+}
+
+export async function listOrganisationFoodListings(orgId: string | number, page = 1, limit = 100) {
+  const query = `page=${page}&limit=${limit}`;
+  const payload = await apiFetch<unknown>(`/food-listings/org/${orgId}?${query}`, { auth: true });
+  return foodListingsFromPayload(payload);
+}
+
+export async function listAllOrganisationFoodListings(orgId: string | number) {
+  const first = await listOrganisationFoodListings(orgId, 1, 100);
+  const listings = [...first.listings];
+  for (let page = 2; page <= Math.max(1, first.totalPages); page += 1) {
+    const next = await listOrganisationFoodListings(orgId, page, 100);
+    listings.push(...next.listings);
+  }
+  return listings;
 }

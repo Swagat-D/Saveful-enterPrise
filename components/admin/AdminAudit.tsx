@@ -40,6 +40,7 @@ import {
   listAdminAudit,
   listAllAdminAudit,
   parseAdminAuditFilters,
+  refreshAdminAudit,
   useAdminAuditVersion,
   type AdminAuditEntry,
   type AdminAuditFilters,
@@ -82,6 +83,10 @@ export function AdminAudit() {
   const paged = rows.slice((page - 1) * filters.pageSize, page * filters.pageSize);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = rows.find((entry) => entry.id === selectedId) ?? null;
+
+  useEffect(() => {
+    void refreshAdminAudit().catch(() => undefined);
+  }, []);
 
   const setFilters = (next: AdminAuditFilters) => {
     router.replace(`${pathname}${adminAuditFiltersToQuery({ ...next, page: next.page || 1 })}`, { scroll: false });

@@ -5,7 +5,17 @@ import Image from "next/image";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { cn } from "@/lib/utils";
+import { ApiError, requestPasswordReset, resetPasswordWithOtp } from "@/lib/api";
 import type { LoginFormConfig, LoginCredentials } from "@/types/auth";
+
+function passwordRules(password: string) {
+  return [
+    { id: "length", label: "At least 10 characters", ok: password.length >= 10 },
+    { id: "upper", label: "1 uppercase letter", ok: /[A-Z]/.test(password) },
+    { id: "number", label: "1 number", ok: /\d/.test(password) },
+    { id: "special", label: "1 special character", ok: /[^A-Za-z0-9]/.test(password) },
+  ];
+}
 
 type View = "login" | "forgot" | "verify-otp" | "reset-password" | "forgot-success";
 
@@ -80,7 +90,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
     }
   };
 
-  const wait = () => new Promise((resolve) => setTimeout(resolve, 400));
+  const resetReady = passwordRules(newPassword).every((rule) => rule.ok);
 
   return (
     <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-3xl bg-white p-8 shadow-2xl md:p-10">
@@ -191,11 +201,22 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
             className="space-y-6"
             onSubmit={async (e) => {
               e.preventDefault();
+              setError("");
+              setInfo("");
               setIsLoading(true);
-              await wait();
-              setInfo("OTP sent. Please check your inbox and spam folder.");
-              setView("verify-otp");
-              setIsLoading(false);
+              try {
+                await requestPasswordReset(forgotEmail);
+                setInfo("A reset code was sent. Check your inbox and spam folder.");
+                setView("verify-otp");
+              } catch (err) {
+                if (err instanceof ApiError && err.status === 404) {
+                  setError("No active account for that email. If you were invited, open the activation link in your email first.");
+                } else {
+                  setError(err instanceof Error ? err.message : "Could not send a reset code.");
+                }
+              } finally {
+                setIsLoading(false);
+              }
             }}
           >
             <Banner tone="error" message={error} />
@@ -235,10 +256,12 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
           className="space-y-6"
           onSubmit={async (e) => {
             e.preventDefault();
-            setIsLoading(true);
-            await wait();
+            setError("");
+            if (otpCode.length !== 6) {
+              setError("Enter the 6-digit code from your email.");
+              return;
+            }
             setView("reset-password");
-            setIsLoading(false);
           }}
         >
           <div className="mb-2 text-center">
@@ -269,14 +292,28 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
           className="space-y-6"
           onSubmit={async (e) => {
             e.preventDefault();
+            setError("");
+            if (!resetReady) {
+              setError("Please meet all password requirements.");
+              return;
+            }
             if (newPassword !== confirmNewPassword) {
               setError("Passwords do not match.");
               return;
             }
             setIsLoading(true);
-            await wait();
-            setView("forgot-success");
-            setIsLoading(false);
+            try {
+              await resetPasswordWithOtp({
+                email: forgotEmail,
+                otp: otpCode,
+                newPassword,
+              });
+              setView("forgot-success");
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Could not reset your password.");
+            } finally {
+              setIsLoading(false);
+            }
           }}
         >
           <h2 className="text-center text-2xl font-bold text-[#1a1a1a]">Set New Password</h2>
@@ -288,6 +325,13 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
             onChange={(e) => setNewPassword(e.target.value)}
             required
           />
+          <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-[#6B6B6B]">
+            {passwordRules(newPassword).map((rule) => (
+              <li key={rule.id} className={rule.ok ? "text-saveful-green" : undefined}>
+                {rule.ok ? "✓" : "○"} {rule.label}
+              </li>
+            ))}
+          </ul>
           <Input
             type="password"
             placeholder="Confirm new password"
@@ -296,7 +340,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
             required
           />
           <button
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white"
+            className="h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white disabled:opacity-50"
             disabled={isLoading}
           >
             {isLoading ? "Resetting..." : "Reset Password"}

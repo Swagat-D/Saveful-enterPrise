@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { appendAdminAudit, listAdminAudit } from "@/lib/adminAudit";
-import { ApiError, getEnterprise, listAdminNetworkUsers, listAdminSites, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminNetworkInvite, type AdminNetworkUser, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
+import { ApiError, getEnterprise, listAdminNetworkUsers, listAdminSites, listAllOrganisationFoodListings, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminNetworkInvite, type AdminNetworkUser, type ApiFoodListing, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
 import { inDateRange, liveToday, periodRange, previousPeriodRange } from "@/lib/dates";
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
@@ -239,6 +239,8 @@ let remoteSites: AdminSite[] = [];
 let remoteOrgs: AdminOrganisation[] = [];
 let remoteOrgUsers: Record<string, AdminOrgUser[]> = {};
 let remoteOrgProfiles: Record<string, AdminOrgProfile> = {};
+let remoteListingsByOrg: Record<string, AdminListing[]> = {};
+let remoteCollectionsByOrg: Record<string, AdminCollection[]> = {};
 let loaded = false;
 
 function site(
@@ -341,6 +343,10 @@ export function rememberAdminFilters(filters: AdminFilters, announce = false) {
     window.sessionStorage.setItem(FILTER_STORE, JSON.stringify(rememberedFilters));
   }
   if (announce) emit();
+}
+
+export function isAdminDashboardPath(pathname: string) {
+  return pathname === "/admin" || pathname === "/admin/dashboard";
 }
 
 export function urlHasAdminFilters(params: URLSearchParams) {
@@ -464,6 +470,7 @@ export async function refreshOrganisations() {
     await Promise.all(needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)));
   }
   await Promise.all([refreshSites().catch(() => undefined), refreshEnterpriseUsers().catch(() => undefined)]);
+  await Promise.all(listLiveEnterprises().slice(0, 30).map((org) => refreshOrganisationListings(org.id).catch(() => undefined)));
   return listOrganisations();
 }
 
@@ -632,11 +639,11 @@ function applySiteOverlay(row: AdminSite): AdminSite {
 }
 
 export function listListings(): AdminListing[] {
-  return [];
+  return Object.values(remoteListingsByOrg).flat();
 }
 
 export function listCollections(): AdminCollection[] {
-  return [];
+  return Object.values(remoteCollectionsByOrg).flat();
 }
 
 export function getSite(id: string) {
@@ -706,7 +713,7 @@ export function filteredSites(filters: AdminFilters) {
 
 export function filteredListings(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
   const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
-  const { startDate, endDate } = range ?? periodRange(filters.period);
+  const { startDate, endDate } = range ?? periodRange(filters.period, liveToday());
   return listListings().filter((row) => {
     if (!allowed.has(row.orgId) || !inDateRange(row.createdAt, startDate, endDate)) return false;
     if (filters.pathway !== "all" && row.pathway !== filters.pathway) return false;
@@ -716,7 +723,7 @@ export function filteredListings(filters: AdminFilters, range?: { startDate?: st
 
 export function filteredCollections(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
   const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
-  const { startDate, endDate } = range ?? periodRange(filters.period);
+  const { startDate, endDate } = range ?? periodRange(filters.period, liveToday());
   return listCollections().filter((row) => {
     if (!allowed.has(row.orgId) || !inDateRange(row.occurredAt, startDate, endDate)) return false;
     if (filters.pathway !== "all" && row.pathway !== filters.pathway) return false;
@@ -1455,8 +1462,108 @@ function profileFromDetail(detail: EnterpriseDetail): AdminOrgProfile {
   };
 }
 
+function mapListingPathway(row: ApiFoodListing): RecoveryPathway {
+  const pathway = (row.recoveryPathway || "").toUpperCase();
+  if (pathway === "LIVESTOCK_FEED") return "livestock";
+  if (pathway === "CIRCULAR_RECOVERY") return "circular";
+  if (pathway === "BIOENERGY") return "bioenergy";
+  if (pathway === "FOOD_FOR_PEOPLE") return "people";
+  const type = (row.listingType || "").toUpperCase();
+  if (type === "ANIMAL") return "livestock";
+  return "people";
+}
+
+function mapListingStatus(row: ApiFoodListing): string {
+  const status = (row.status || "").toUpperCase();
+  const claims = row.foodClaims ?? [];
+  const hasDriver = claims.some((claim) => (claim.driverPickups ?? []).some((pickup) => pickup.status !== "CANCELLED"));
+  const hasCollected = claims.some((claim) => (claim.status || "").toUpperCase() === "COLLECTED");
+  if (status === "CANCELLED") return "cancelled";
+  if (status === "EXPIRED") return "expired";
+  if (hasCollected || status === "CLAIMED") return hasCollected ? "collected" : "claimed";
+  if (hasDriver) return "driver_assigned";
+  if (status === "PARTIAL") return "claimed";
+  return "published";
+}
+
+function listingFoodLabel(row: ApiFoodListing) {
+  const names = (row.foodItems ?? []).map((item) => item.name?.trim()).filter(Boolean);
+  return names.join(", ") || "Food listing";
+}
+
+function mapLiveListing(row: ApiFoodListing): AdminListing {
+  return {
+    id: String(row.id),
+    orgId: String(row.organisationId),
+    siteId: String(row.siteId),
+    code: `LST-${String(row.id).padStart(5, "0")}`,
+    food: listingFoodLabel(row),
+    pathway: mapListingPathway(row),
+    quantityKg: row.totalQtyKg ?? 0,
+    status: mapListingStatus(row),
+    createdAt: row.createdAt,
+  };
+}
+
+function mapLiveCollections(row: ApiFoodListing): AdminCollection[] {
+  const listing = mapLiveListing(row);
+  return (row.foodClaims ?? [])
+    .filter((claim) => (claim.status || "").toUpperCase() !== "CANCELLED")
+    .map((claim) => {
+      const claimStatus = (claim.status || "").toUpperCase();
+      const kg = (claim.claimItems ?? []).reduce((sum, item) => sum + (item.qtyKg ?? 0), 0);
+      return {
+        id: String(claim.id),
+        orgId: listing.orgId,
+        siteId: listing.siteId,
+        listingId: listing.id,
+        code: `COL-${String(claim.id).padStart(5, "0")}`,
+        food: listing.food,
+        pathway: listing.pathway,
+        quantityKg: kg || listing.quantityKg,
+        recipientName: claim.claimantOrg?.name || "Recipient",
+        recipientOrgId: claim.claimantOrg?.id != null ? String(claim.claimantOrg.id) : undefined,
+        status: claimStatus === "COLLECTED" ? "completed" : claimStatus === "CONFIRMED" ? "claimed" : "claimed",
+        occurredAt: claim.collectedAt || claim.confirmedAt || claim.createdAt || listing.createdAt,
+      };
+    });
+}
+
+function listingActivityKind(status: string) {
+  if (status === "claimed") return "Listing claimed";
+  if (status === "published") return "Listing published";
+  if (status === "collected" || status === "completed") return "Listing collected";
+  if (status === "driver_assigned") return "Driver assigned";
+  return `Listing ${status.replaceAll("_", " ")}`;
+}
+
+export async function refreshOrganisationListings(orgId: string) {
+  if (!/^\d+$/.test(orgId)) return [];
+  const rows = await listAllOrganisationFoodListings(orgId);
+  remoteListingsByOrg[orgId] = rows.map(mapLiveListing);
+  remoteCollectionsByOrg[orgId] = rows.flatMap(mapLiveCollections);
+  const latestBySite = new Map<string, string>();
+  for (const listing of remoteListingsByOrg[orgId]) {
+    const current = latestBySite.get(listing.siteId);
+    if (!current || listing.createdAt > current) latestBySite.set(listing.siteId, listing.createdAt);
+  }
+  if (latestBySite.size) {
+    remoteSites = remoteSites.map((site) => {
+      const latest = latestBySite.get(site.id);
+      if (!latest) return site;
+      if (site.lastActivityAt && site.lastActivityAt >= latest) return site;
+      return { ...site, lastActivityAt: latest };
+    });
+  }
+  emit();
+  return remoteListingsByOrg[orgId];
+}
+
 export async function refreshOrganisationDetail(orgId: string) {
-  const detail = await getEnterprise(orgId);
+  const [detail] = await Promise.all([
+    getEnterprise(orgId),
+    refreshOrganisationListings(orgId).catch(() => undefined),
+  ]);
   remoteOrgProfiles[orgId] = profileFromDetail(detail);
   const latestLogin = (detail.users ?? [])
     .map((row) => row.lastLoginAt)
@@ -1592,78 +1699,31 @@ function organisationCreatedActivity(org: AdminOrganisation): AdminActivityItem 
   };
 }
 
-export function listOrganisationDirectoryActivity(filters: AdminFilters, limit = 5): AdminActivityItem[] {
-  const orgs = filteredOrganisations(filters);
-  const { startDate, endDate } = periodRange(filters.period, liveToday());
-  const items: AdminActivityItem[] = [];
-  for (const org of orgs) {
-    const created = organisationCreatedActivity(org);
-    if (created) items.push(created);
-    const users = listOrgUsers(org.id);
-    const admin = users.find((row) => /super admin/i.test(row.role)) ?? users[0];
-    if (admin) {
-      items.push({
-        id: `org-admin-${org.id}-${admin.id}`,
-        at: admin.joinedAt || admin.lastActiveAt || created?.at || "",
-        kind: admin.status === "Invited" ? "Super Admin invited" : "Super Admin added",
-        detail: `${admin.name} · ${org.name}`,
-        organisationId: org.id,
-        organisationName: org.name,
-        href: `/admin/organisations/${org.id}`,
-      });
-    }
-    for (const row of listSites().filter((site) => site.orgId === org.id)) {
-      items.push({
-        id: `org-site-${row.id}`,
-        at: row.createdAt || row.activatedAt || created?.at || "",
-        kind: "Site added",
-        detail: `${row.name} · ${org.name}`,
-        organisationId: org.id,
-        organisationName: org.name,
-        href: `/admin/organisations/${org.id}`,
-      });
-    }
-  }
-  const audit = listAdminAudit({ q: "", period: filters.period, organisationId: filters.organisationId, page: 1 })
-    .filter((row) => row.entityType === "organisation" || row.area === "organisations" || row.area === "plans")
-    .map((row) => ({
-      id: row.id,
-      at: row.at,
-      kind: row.action,
-      detail: row.detail || row.organisationName,
-      organisationId: row.organisationId,
-      organisationName: row.organisationName,
-      href: `/admin/organisations/${row.organisationId}`,
-    }));
-  return mergeActivity([...items, ...audit])
-    .filter((item) => inDateRange(item.at, startDate, endDate))
-    .slice(0, limit);
-}
-
-export function listOrganisationInternalActivity(orgId: string, period: PeriodKey = "30", limit = 6): AdminActivityItem[] {
-  const org = getOrganisation(orgId);
-  if (!org) return [];
-  const { startDate, endDate } = periodRange(period, liveToday());
+function collectOrganisationActivity(org: AdminOrganisation): AdminActivityItem[] {
   const created = organisationCreatedActivity(org);
   const items: AdminActivityItem[] = created ? [created] : [];
-  for (const row of listSites().filter((site) => site.orgId === orgId)) {
+  const orgHref = `/admin/organisations/${org.id}`;
+  for (const row of listSites().filter((site) => site.orgId === org.id)) {
     items.push({
       id: `site-${row.id}`,
       at: row.createdAt || row.activatedAt || created?.at || "",
       kind: "Site added",
-      detail: row.address ? `${row.name} · ${row.address}` : row.name,
+      detail: row.address ? `${row.name} · ${row.address}` : `${row.name} · ${org.name}`,
       organisationId: org.id,
       organisationName: org.name,
+      href: orgHref,
     });
   }
-  for (const user of listOrgUsers(orgId)) {
+  for (const user of listOrgUsers(org.id)) {
+    const isSuperAdmin = /super admin/i.test(user.role);
     items.push({
       id: `user-${user.id}`,
       at: user.joinedAt || created?.at || "",
-      kind: user.status === "Invited" ? "User invited" : "User added",
+      kind: user.status === "Invited" ? (isSuperAdmin ? "Super Admin invited" : "User invited") : isSuperAdmin ? "Super Admin added" : "User added",
       detail: `${user.name} · ${user.role}`,
       organisationId: org.id,
       organisationName: org.name,
+      href: orgHref,
     });
     if (user.lastActiveAt && user.status !== "Invited") {
       items.push({
@@ -1673,20 +1733,22 @@ export function listOrganisationInternalActivity(orgId: string, period: PeriodKe
         detail: `${user.name} · ${user.role}`,
         organisationId: org.id,
         organisationName: org.name,
+        href: orgHref,
       });
     }
   }
-  for (const row of listListings().filter((item) => item.orgId === orgId)) {
+  for (const row of listListings().filter((item) => item.orgId === org.id)) {
     items.push({
       id: `list-${row.id}`,
       at: row.createdAt,
-      kind: row.status === "claimed" ? "Listing claimed" : `Listing ${row.status.replaceAll("_", " ")}`,
+      kind: listingActivityKind(row.status),
       detail: `${getSite(row.siteId)?.name ?? row.food} · ${row.food}`,
       organisationId: org.id,
       organisationName: org.name,
+      href: `/admin/listings/${row.id}`,
     });
   }
-  for (const row of listCollections().filter((item) => item.orgId === orgId || item.recipientOrgId === orgId)) {
+  for (const row of listCollections().filter((item) => item.orgId === org.id || item.recipientOrgId === org.id)) {
     items.push({
       id: `col-${row.id}`,
       at: row.occurredAt,
@@ -1694,9 +1756,10 @@ export function listOrganisationInternalActivity(orgId: string, period: PeriodKe
       detail: `${getSite(row.siteId)?.name ?? "Site"} · ${row.food}`,
       organisationId: org.id,
       organisationName: org.name,
+      href: `/admin/collections/${row.id}`,
     });
   }
-  for (const row of listAdminAudit({ q: "", period, organisationId: orgId, page: 1 })) {
+  for (const row of listAdminAudit({ q: "", period: "all", organisationId: org.id, page: 1 })) {
     items.push({
       id: row.id,
       at: row.at,
@@ -1704,9 +1767,30 @@ export function listOrganisationInternalActivity(orgId: string, period: PeriodKe
       detail: row.detail || row.entity,
       organisationId: org.id,
       organisationName: org.name,
+      href: `/admin/organisations/${org.id}`,
     });
   }
-  return mergeActivity(items)
+  return mergeActivity(items);
+}
+
+export function listNetworkActivity(filters: AdminFilters, limit?: number): AdminActivityItem[] {
+  const orgs = filteredOrganisations(filters);
+  const { startDate, endDate } = periodRange(filters.period, liveToday());
+  const rows = mergeActivity(orgs.flatMap(collectOrganisationActivity)).filter(
+    (item) => filters.period === "all" || inDateRange(item.at, startDate, endDate),
+  );
+  return limit ? rows.slice(0, limit) : rows;
+}
+
+export function listOrganisationDirectoryActivity(filters: AdminFilters, limit = 5): AdminActivityItem[] {
+  return listNetworkActivity(filters, limit);
+}
+
+export function listOrganisationInternalActivity(orgId: string, period: PeriodKey = "30", limit = 6): AdminActivityItem[] {
+  const org = getOrganisation(orgId);
+  if (!org) return [];
+  const { startDate, endDate } = periodRange(period, liveToday());
+  return collectOrganisationActivity(org)
     .filter((item) => period === "all" || inDateRange(item.at, startDate, endDate))
     .slice(0, limit);
 }
@@ -1737,9 +1821,8 @@ function collectionImpactRows(rows: AdminCollection[]): RecoveryTransaction[] {
 export function buildOrgDetail(orgId: string, period: PeriodKey = "30") {
   const org = getOrganisation(orgId);
   if (!org) return null;
-  const allTime: AdminFilters = { ...EMPTY_ADMIN_FILTERS, organisationId: orgId, period: "all" };
-  const previousRange = previousPeriodRange(period);
-  const { startDate, endDate } = periodRange(period);
+  const previousRange = previousPeriodRange(period, liveToday());
+  const { startDate, endDate } = periodRange(period, liveToday());
   const sites = listSites().filter((row) => row.orgId === orgId);
   const collections = listCollections().filter((row) => row.orgId === orgId || row.recipientOrgId === orgId);
   const periodCollections = collections.filter((row) => inDateRange(row.occurredAt, startDate, endDate));
@@ -1813,7 +1896,9 @@ export function buildOrgDetail(orgId: string, period: PeriodKey = "30") {
     org,
     profile: orgProfile(org),
     sites,
-    listings: filteredListings(allTime),
+    listings: listListings()
+      .filter((row) => row.orgId === orgId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
     collections: collections.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
     users,
     activityStatus: orgActivityStatus(orgId),

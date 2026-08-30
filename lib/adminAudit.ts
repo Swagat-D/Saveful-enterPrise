@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { listAllAdminEnterpriseAudit, type ApiAuditLogRow } from "@/lib/api";
 import { DEMO_TODAY, addDays, inDateRange, liveToday, periodRange, toApiDate } from "@/lib/dates";
 import type { PeriodKey } from "@/types/enterprise";
 
@@ -74,6 +75,7 @@ const STORAGE_KEY = "saveful_admin_audit_log";
 const listeners = new Set<() => void>();
 let version = 0;
 let extras: AdminAuditEntry[] = [];
+let remoteEntries: AdminAuditEntry[] = [];
 let loaded = false;
 
 function emit() {
@@ -165,6 +167,67 @@ function persist() {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(extras));
 }
 
+function formatAuditAction(action: string) {
+  return action
+    .replace(/[._]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .trim();
+}
+
+function mapAuditArea(area: string): AdminAuditArea {
+  const value = area.toUpperCase();
+  if (value === "SITES") return "sites";
+  if (value === "NOTIFICATIONS") return "notifications";
+  if (value === "ENTERPRISE_SETTINGS") return "plans";
+  return "organisations";
+}
+
+function mapAuditEntityType(type: string): AdminAuditEntityType {
+  const value = type.toLowerCase();
+  if (value.includes("site")) return "site";
+  if (value.includes("role")) return "role";
+  if (value.includes("notification")) return "notification";
+  if (value.includes("listing")) return "listing";
+  if (value.includes("collection") || value.includes("claim")) return "collection";
+  return "organisation";
+}
+
+function changesFromValues(previous: Record<string, unknown> | null | undefined, next: Record<string, unknown> | null | undefined): AdminAuditChange[] {
+  if (!next || typeof next !== "object") return [];
+  const before = previous && typeof previous === "object" ? previous : {};
+  return Object.keys(next).map((field) => ({
+    field,
+    previous: before[field] == null ? "—" : String(before[field]),
+    next: next[field] == null ? "—" : String(next[field]),
+  }));
+}
+
+function mapRemoteAudit(row: ApiAuditLogRow): AdminAuditEntry {
+  return {
+    id: `api-${row.id}`,
+    at: row.createdAt,
+    actorType: "saveful_admin",
+    actor: row.actorName || row.actorEmail || "Admin",
+    actorEmail: row.actorEmail ?? "",
+    action: formatAuditAction(row.action),
+    organisationId: String(row.organisationId),
+    organisationName: row.organisation?.name || `Organisation ${row.organisationId}`,
+    entityType: mapAuditEntityType(row.entityType),
+    entity: row.entityLabel || row.entityType,
+    entityId: String(row.entityId ?? row.id),
+    area: mapAuditArea(row.area),
+    detail: row.summary,
+    changes: changesFromValues(row.previousValue, row.newValue),
+  };
+}
+
+export async function refreshAdminAudit() {
+  const rows = await listAllAdminEnterpriseAudit();
+  remoteEntries = rows.map(mapRemoteAudit);
+  emit();
+  return listAllAdminAudit();
+}
+
 export function appendAdminAudit(
   entry: Omit<AdminAuditEntry, "id" | "at" | "actorType" | "entityId" | "area"> & {
     at?: string;
@@ -193,7 +256,7 @@ export function listAdminAudit(filters: Partial<AdminAuditFilters> & Pick<AdminA
   const merged: AdminAuditFilters = { ...EMPTY_ADMIN_AUDIT_FILTERS, ...filters };
   const { startDate, endDate } = periodRange(merged.period, liveToday());
   const query = merged.q.trim().toLowerCase();
-  return applyRetention([...extras, ...seed()]).filter((row) => {
+  return applyRetention([...remoteEntries, ...extras, ...seed()]).filter((row) => {
     if (!inDateRange(row.at, startDate, endDate)) return false;
     if (merged.organisationId !== "all" && row.organisationId !== merged.organisationId) return false;
     if (merged.user !== "all" && row.actor !== merged.user) return false;
@@ -220,7 +283,7 @@ export function listAdminAudit(filters: Partial<AdminAuditFilters> & Pick<AdminA
 
 export function listAllAdminAudit() {
   ensureLoaded();
-  return applyRetention([...extras, ...seed()]);
+  return applyRetention([...remoteEntries, ...extras, ...seed()]);
 }
 
 export function parseAdminAuditFilters(params: URLSearchParams | null): AdminAuditFilters {

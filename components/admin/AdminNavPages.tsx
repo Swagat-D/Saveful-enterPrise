@@ -9,9 +9,8 @@ import {
   buildAdminOverview,
   formatEnterpriseId,
   getOrganisation,
-  listListings,
-  listCollections,
   listLiveEnterprises,
+  listNetworkActivity,
   listOrgUsers,
   listOrganisations,
   orgTypeLabel,
@@ -19,9 +18,9 @@ import {
   refreshEnterpriseUsers,
   useAdminVersion,
 } from "@/lib/admin";
-import { listAdminAudit, useAdminAuditVersion } from "@/lib/adminAudit";
+import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { formatDisplayDate } from "@/lib/dates";
-import { IMPACT, formatCount, formatKg } from "@/lib/impact";
+import { IMPACT, formatCount } from "@/lib/impact";
 import { formatLastActivity } from "@/lib/networkRules";
 
 export function AdminUsers() {
@@ -130,43 +129,21 @@ export function AdminUsers() {
 
 export function AdminActivity() {
   useAdminAuditVersion();
+  const version = useAdminVersion();
   const { filters, update, reset, query } = useAdminFilters();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const rows = useMemo(() => {
-    const listings = listListings()
-      .filter((row) => filters.organisationId === "all" || row.orgId === filters.organisationId)
-      .map((row) => ({
-        id: `listing-${row.id}`,
-        at: row.createdAt,
-        type: "Listing",
-        title: `${row.code} ${row.status.replaceAll("_", " ")}`,
-        detail: `${row.food} · ${formatKg(row.quantityKg)}`,
-        orgId: row.orgId,
-        href: `/admin/listings/${row.id}${query}`,
-      }));
-    const collections = listCollections()
-      .filter((row) => filters.organisationId === "all" || row.orgId === filters.organisationId || row.recipientOrgId === filters.organisationId)
-      .map((row) => ({
-        id: `collection-${row.id}`,
-        at: row.occurredAt,
-        type: "Collection",
-        title: `${row.code} ${row.status.replaceAll("_", " ")}`,
-        detail: `${row.food} went to ${row.recipientName}`,
-        orgId: row.orgId,
-        href: `/admin/collections/${row.id}${query}`,
-      }));
-    const audit = listAdminAudit({ q: "", period: filters.period, organisationId: filters.organisationId, page: 1 }).map((row) => ({
-      id: `audit-${row.id}`,
+    return listNetworkActivity(filters).map((row) => ({
+      id: row.id,
       at: row.at,
-      type: "Alert",
-      title: row.action,
+      type: row.kind,
+      title: row.kind,
       detail: row.detail,
       orgId: row.organisationId,
-      href: `/admin/audit${query}`,
+      href: row.href ? `${row.href}${row.href.includes("?") ? "" : query}` : `/admin/organisations/${row.organisationId}${query}`,
     }));
-    return [...listings, ...collections, ...audit].sort((a, b) => b.at.localeCompare(a.at));
-  }, [filters.organisationId, filters.period, query]);
+  }, [filters, query, version]);
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(page, pageCount);
   const paged = rows.slice((current - 1) * pageSize, current * pageSize);
@@ -176,10 +153,13 @@ export function AdminActivity() {
       workspace
       crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
       title="Activity"
-      hint="Listings, collections, and Saveful Admin changes across the network."
+      hint="Sites, users, listings, collections, and admin changes across the network."
     >
       <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
       <AdminSection title="Recent events">
+        {rows.length === 0 ? (
+          <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">No activity in this period.</p>
+        ) : null}
         <ul>
           {paged.map((row) => (
             <li key={row.id} className="border-b border-gray-50 last:border-0">

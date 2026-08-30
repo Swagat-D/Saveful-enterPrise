@@ -8,6 +8,7 @@ export type AccountStatus = "Active";
 
 export type OrganizationProfile = {
   name: string;
+  organisationId?: string;
   enterpriseId: string;
   contactName: string;
   contactEmail: string;
@@ -123,6 +124,7 @@ function normalize(raw: Partial<OrganizationProfile> | null): OrganizationProfil
     timezone,
     currency: raw?.currency && isCurrency(raw.currency) ? raw.currency : DEFAULT_ORGANIZATION.currency,
     units: raw?.units && isUnits(raw.units) ? raw.units : DEFAULT_ORGANIZATION.units,
+    organisationId: raw?.organisationId ?? DEFAULT_ORGANIZATION.organisationId,
     enterpriseId: raw?.enterpriseId ?? DEFAULT_ORGANIZATION.enterpriseId,
     accountStatus: raw?.accountStatus ?? DEFAULT_ORGANIZATION.accountStatus,
     contractStart: raw?.contractStart ?? DEFAULT_ORGANIZATION.contractStart,

@@ -37,7 +37,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || isAdminSession(user)) return;
     void ensureLiveSession().then((live) => {
-      if (live) void refreshEnterpriseWorkspace().catch(() => undefined);
+      if (live) void refreshEnterpriseWorkspace({ session: live }).catch(() => undefined);
     });
   }, [user]);
 
