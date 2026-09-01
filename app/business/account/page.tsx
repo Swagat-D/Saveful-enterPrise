@@ -277,7 +277,7 @@ function AccountInner() {
             type="button"
             onClick={() => {
               logoutBusiness();
-              router.replace("/business");
+              router.replace("/");
             }}
             className="h-12 w-full rounded-2xl border border-black/[0.04] bg-white font-saveful-semibold text-saveful-green"
           >
@@ -288,7 +288,7 @@ function AccountInner() {
             onClick={() => {
               if (window.confirm("Are you sure you want to delete your account?")) {
                 logoutBusiness();
-                router.replace("/business");
+                router.replace("/");
               }
             }}
             className="h-12 w-full rounded-2xl border border-black/[0.04] bg-white font-saveful-semibold text-saveful-green"

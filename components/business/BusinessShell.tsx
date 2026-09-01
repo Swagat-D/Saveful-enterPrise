@@ -41,7 +41,7 @@ export function BusinessShell({ children }: { children: React.ReactNode }) {
     if (!ready || publicPath) return;
     const session = subscribed ?? getBusinessSession();
     if (!session) {
-      router.replace("/login?portal=business");
+      router.replace("/");
       return;
     }
     void ensureLiveBusinessSession();
@@ -71,7 +71,7 @@ export function BusinessShell({ children }: { children: React.ReactNode }) {
           links: getBusinessSidebarLinks(user),
           onLogout: () => {
             logoutBusiness();
-            router.replace("/business");
+            router.replace("/");
           },
         }}
       >

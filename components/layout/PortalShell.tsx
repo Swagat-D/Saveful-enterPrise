@@ -75,7 +75,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         links: getEnterpriseSidebarLinks(user),
         onLogout: () => {
           logout();
-          router.push("/login");
+          router.replace("/");
         },
       }}
     >

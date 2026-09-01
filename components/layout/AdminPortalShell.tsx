@@ -75,7 +75,7 @@ export function AdminPortalShell({ children }: { children: React.ReactNode }) {
         links: getAdminSidebarLinks(),
         onLogout: () => {
           logout();
-          router.push("/login");
+          router.replace("/");
         },
       }}
     >
