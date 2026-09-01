@@ -3,6 +3,7 @@ import {
   ensureDefaultHqSite,
   isBusinessMultiHeadOffice,
   isVirtualHqSiteId,
+  parseLiveSiteId,
   pickDefaultSite,
   pickDefaultSiteId,
   sitesFromOrganisationPayload,
@@ -95,10 +96,7 @@ function getListingSiteId(authUser: any): number | null {
     if (fromProfile) return fromProfile;
   }
   const site = profile?.sites?.[0] ?? profile?.site;
-  const id = site?.id;
-  if (id === null || id === undefined || id === "") return null;
-  const parsed = Number(id);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  return parseLiveSiteId(site?.id);
 }
 
 export async function listingAuthUser(user: BusinessUser | null): Promise<BusinessUser | null> {
@@ -125,10 +123,7 @@ export async function resolveListingSiteId(authUser: any): Promise<number | null
   if (fromOrg) return fromOrg;
 
   const site = Array.isArray(sites) ? sites[0] : null;
-  const id = site?.id;
-  if (id === null || id === undefined || id === "") return null;
-  const parsed = Number(id);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  return parseLiveSiteId(site?.id);
 }
 
 export function getSitePickupCoords(authUser: any): { lat: number; lng: number } | null {

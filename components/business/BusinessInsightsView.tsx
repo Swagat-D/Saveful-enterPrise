@@ -357,7 +357,7 @@ export function BusinessInsightsView() {
               />
               <Tooltip
                 contentStyle={CHART_TOOLTIP}
-                formatter={(value: number) => [value, activeMetric?.label ?? "Value"]}
+                formatter={(value) => [Number(value ?? 0), activeMetric?.label ?? "Value"]}
               />
               <Area type="monotone" dataKey="value" stroke={CHART_COLORS.green} fill="url(#businessImpactFill)" strokeWidth={2.25} />
             </AreaChart>
