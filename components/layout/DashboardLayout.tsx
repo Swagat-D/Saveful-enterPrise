@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { Sidebar, SidebarBody, SidebarLink, collectNavHrefs } from "./sidebar";
 import { AppHeader } from "./AppHeader";
+import { LogOut } from "lucide-react";
 import { motion } from "motion/react";
 import Image from "next/image";
 import { DashboardLayoutProps } from "@/types/sidebar";
@@ -20,12 +21,21 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
           setOpen={setOpen}
           animate={false}
           persistent
-          brandLabel={config.role === "admin" ? "Admin" : "Enterprise"}
+          brandLabel={config.role === "admin" ? "Admin" : config.role === "business" ? "Business" : "Enterprise"}
         >
           <SidebarBody className="justify-between gap-0">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="mb-6 shrink-0 px-2">
-                <Logo href={config.homeHref ?? (config.role === "admin" ? "/admin/dashboard" : "/dashboard")} />
+                <Logo
+                  href={
+                    config.homeHref ??
+                    (config.role === "admin"
+                      ? "/admin/dashboard"
+                      : config.role === "business"
+                        ? "/business/home"
+                        : "/dashboard")
+                  }
+                />
               </div>
 
               <div className="relative mb-6 shrink-0 px-3">
@@ -54,6 +64,19 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
                   ))}
                 </div>
               </div>
+
+              {config.onLogout ? (
+                <div className="shrink-0 border-t border-saveful-purple/15 px-1 pt-3">
+                  <button
+                    type="button"
+                    onClick={config.onLogout}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-saveful-semibold text-sm text-red-600 transition hover:bg-red-50"
+                  >
+                    <LogOut className="h-5 w-5 shrink-0" />
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
             </div>
 
           </SidebarBody>
@@ -63,12 +86,22 @@ export function DashboardLayout({ config, children }: DashboardLayoutProps) {
             <AppHeader
               userName={config.userName}
               userEmail={config.userEmail}
-              roleLabel={config.roleLabel || (config.role === "admin" ? "Platform admin" : "Enterprise admin")}
+              roleLabel={
+                config.roleLabel ||
+                (config.role === "admin" ? "Platform admin" : config.role === "business" ? "Business" : "Enterprise admin")
+              }
               organization={config.organization}
               organizationLogo={config.organizationLogo}
-              portalCaption={config.portalCaption ?? (config.role === "admin" ? "Admin" : "Enterprise")}
-              profileHref={config.profileHref ?? (config.role === "admin" ? "/admin/account" : "/account")}
+              portalCaption={
+                config.portalCaption ??
+                (config.role === "admin" ? "Admin" : config.role === "business" ? "Business" : "Enterprise")
+              }
+              profileHref={
+                config.profileHref ??
+                (config.role === "admin" ? "/admin/account" : config.role === "business" ? "/business/account" : "/account")
+              }
               onLogout={config.onLogout}
+              showAppDownload={config.showAppDownload ?? config.role === "business"}
             />
           </div>
           <div className="relative z-0 min-h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-saveful-purple/30 scrollbar-track-transparent hover:scrollbar-thumb-saveful-purple/50">

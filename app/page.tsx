@@ -3,10 +3,17 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth";
+import { useBusinessSession } from "@/lib/businessAuth";
+
+const btnPrimary =
+  "inline-flex items-center justify-center rounded-xl bg-saveful-green px-5 py-3 font-saveful-semibold text-white transition hover:bg-green-700";
+const btnSecondary =
+  "inline-flex items-center justify-center rounded-xl border border-saveful-green/20 bg-white px-5 py-3 font-saveful-semibold text-saveful-green transition hover:bg-saveful-cream/70";
 
 export default function HomePage() {
   const router = useRouter();
   const session = useSession();
+  const business = useBusinessSession();
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-br from-saveful-cream/40 via-white to-saveful-cream/60 px-4 py-8 md:px-8 md:py-12">
@@ -57,32 +64,41 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={() =>
-                router.push(
-                  session?.portal === "admin"
-                    ? "/admin/dashboard"
-                    : session
-                      ? "/dashboard"
-                      : "/login?portal=enterprise",
-                )
-              }
-              className="inline-flex items-center justify-center rounded-xl bg-saveful-green px-5 py-3 font-saveful-semibold text-white transition hover:bg-green-700"
-            >
-              {session?.portal === "admin" ? "Open admin portal" : session ? "Open Enterprise" : "Sign in to Enterprise"}
-            </button>
-            {!session || session.portal !== "admin" ? (
+          {session || business ? (
+            <div className="mt-8">
               <button
                 type="button"
-                onClick={() => router.push("/login?portal=admin")}
-                className="inline-flex items-center justify-center rounded-xl border border-saveful-green/20 bg-white px-5 py-3 font-saveful-semibold text-saveful-green transition hover:bg-saveful-cream/70"
+                onClick={() =>
+                  router.push(
+                    session?.portal === "admin"
+                      ? "/admin/dashboard"
+                      : session
+                        ? "/dashboard"
+                        : "/business/home",
+                  )
+                }
+                className={btnPrimary}
               >
-                Admin sign in
+                {session?.portal === "admin"
+                  ? "Open admin portal"
+                  : session
+                    ? "Open Enterprise"
+                    : "Open Business"}
               </button>
-            ) : null}
-          </div>
+            </div>
+          ) : (
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <button type="button" onClick={() => router.push("/login?portal=enterprise")} className={btnPrimary}>
+                Enterprise
+              </button>
+              <button type="button" onClick={() => router.push("/login?portal=business")} className={btnSecondary}>
+                Business
+              </button>
+              <button type="button" onClick={() => router.push("/login?portal=admin")} className={btnSecondary}>
+                Admin
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </main>

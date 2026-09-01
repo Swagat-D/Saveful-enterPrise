@@ -1,9 +1,27 @@
 import { useSyncExternalStore } from "react";
 import { ACCESS_TOKEN_KEY, ApiError, getAuthProfile, loginWithPassword, onUnauthorized } from "@/lib/api";
+import {
+  clearSessionKeys,
+  ENTERPRISE_PASS_KEY,
+  ENTERPRISE_USER_KEY,
+  notifyPortalSession,
+  persistSessionRecord,
+  readAccessToken,
+  readSessionUserRaw,
+  subscribePortalSession,
+} from "@/lib/portalSession";
 import type { AdminLoginCredentials, LoginCredentials, PortalKind, UserRole } from "@/types/auth";
 import type { AccessScope, EnterpriseRole } from "@/types/enterprise";
 import { mapEnterpriseRole } from "@/lib/enterpriseRole";
 import { roleAllowsEnterprise } from "@/lib/users";
+
+function isEnterpriseAccount(input: {
+  enterpriseRole?: string | null;
+  planName?: string | null;
+}) {
+  if ((input.planName ?? "").toUpperCase() === "ENTERPRISE") return true;
+  return Boolean((input.enterpriseRole ?? "").trim());
+}
 
 export type SessionUser = {
   id: string;
@@ -20,8 +38,8 @@ export type SessionUser = {
 
 const ROLE: UserRole = "restaurant_multi";
 const TOKEN_KEY = ACCESS_TOKEN_KEY;
-const USER_KEY = "enterprise_user";
-const PASS_KEY = "enterprise_password";
+const USER_KEY = ENTERPRISE_USER_KEY;
+const PASS_KEY = ENTERPRISE_PASS_KEY;
 const PLATFORM_ADMIN = "PLATFORM_ADMIN";
 
 const displayNameFromEmail = (email: string) => {
@@ -33,34 +51,19 @@ const displayNameFromEmail = (email: string) => {
     .join(" ");
 };
 
-function tokenExpiryMs(token: string) {
-  try {
-    const part = token.split(".")[1];
-    if (!part) return null;
-    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(json) as { exp?: number };
-    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
-  } catch {
-    return null;
-  }
-}
-
 function clearStoredSession() {
-  window.localStorage.removeItem(TOKEN_KEY);
-  window.localStorage.removeItem(USER_KEY);
-  window.localStorage.removeItem(PASS_KEY);
+  clearSessionKeys();
   sessionCache = null;
   sessionRawCache = null;
 }
 
 export function getStoredToken() {
-  if (typeof window === "undefined") return null;
-  const token = window.localStorage.getItem(TOKEN_KEY);
-  if (!token || token === "dev-session") return null;
-  const exp = tokenExpiryMs(token);
-  if (exp != null && exp <= Date.now()) {
-    clearStoredSession();
-    return null;
+  const token = readAccessToken();
+  if (!token && typeof window !== "undefined" && readSessionUserRaw()) {
+    window.localStorage.removeItem(USER_KEY);
+    window.localStorage.removeItem(PASS_KEY);
+    sessionCache = null;
+    sessionRawCache = null;
   }
   return token;
 }
@@ -71,7 +74,7 @@ let sessionRawCache: string | null = null;
 export function getSession(): SessionUser | null {
   if (typeof window === "undefined") return null;
   const token = getStoredToken();
-  const rawUser = window.localStorage.getItem(USER_KEY);
+  const rawUser = readSessionUserRaw();
   if (!token || !rawUser) {
     sessionCache = null;
     sessionRawCache = null;
@@ -83,7 +86,12 @@ export function getSession(): SessionUser | null {
   }
 
   try {
-    const parsed = JSON.parse(rawUser) as SessionUser;
+    const parsed = JSON.parse(rawUser) as SessionUser & { portal?: string };
+    if (parsed.portal === "business") {
+      sessionCache = null;
+      sessionRawCache = rawUser;
+      return null;
+    }
     const user: SessionUser = {
       ...parsed,
       portal: parsed.portal === "admin" ? "admin" : "enterprise",
@@ -130,17 +138,21 @@ export async function login(credentials: LoginCredentials) {
   window.localStorage.setItem(TOKEN_KEY, data.accessToken);
 
   try {
-    let organisationName = data.organisation?.name;
-    let enterpriseRole = mapEnterpriseRole(data.role?.enterpriseRole, data.role?.orgRole);
-
-    if (!organisationName || !data.role?.enterpriseRole) {
-      const profile = await getAuthProfile();
-      if (profile.user.platformRole === PLATFORM_ADMIN) {
-        throw new Error("This is a Saveful admin account. Sign in through the Admin portal.");
-      }
-      organisationName = profile.organisation?.name ?? organisationName;
-      enterpriseRole = mapEnterpriseRole(profile.role.enterpriseRole, profile.role.orgRole);
+    const profile = await getAuthProfile();
+    if (profile.user.platformRole === PLATFORM_ADMIN) {
+      throw new Error("This is a Saveful admin account. Sign in through the Admin portal.");
     }
+    if (
+      !isEnterpriseAccount({
+        enterpriseRole: profile.role.enterpriseRole ?? data.role?.enterpriseRole,
+        planName: profile.subscription?.plan?.name,
+      })
+    ) {
+      throw new Error("Restaurant and farm accounts sign in through the Business portal.");
+    }
+
+    const organisationName = profile.organisation?.name ?? data.organisation?.name;
+    const enterpriseRole = mapEnterpriseRole(profile.role.enterpriseRole ?? data.role?.enterpriseRole, null);
 
     if (!organisationName) {
       throw new Error("This account is not linked to an Enterprise organisation yet.");
@@ -160,6 +172,7 @@ export async function login(credentials: LoginCredentials) {
     return user;
   } catch (err) {
     window.localStorage.removeItem(TOKEN_KEY);
+    emitSession();
     throw err;
   }
 }
@@ -230,13 +243,7 @@ export async function loginAdmin(credentials: AdminLoginCredentials) {
 }
 
 function persistSession(user: SessionUser, options: { token: string; password?: string }) {
-  window.localStorage.setItem(TOKEN_KEY, options.token);
-  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
-  if (options.password) {
-    window.localStorage.setItem(PASS_KEY, options.password);
-  } else {
-    window.localStorage.removeItem(PASS_KEY);
-  }
+  persistSessionRecord(user, options.token, options.password);
   sessionCache = user;
   sessionRawCache = JSON.stringify(user);
   emitSession();
@@ -252,7 +259,7 @@ export function isAdminSession(user: SessionUser | null) {
 }
 
 export function isEnterpriseSession(user: SessionUser | null) {
-  return Boolean(user && user.portal !== "admin");
+  return Boolean(user && user.portal === "enterprise");
 }
 
 export function logout() {
@@ -276,7 +283,7 @@ export async function ensureLiveSession() {
     }
     return user;
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+    if (error instanceof ApiError && error.status === 401) {
       logout();
       return null;
     }
@@ -304,6 +311,7 @@ const sessionListeners = new Set<() => void>();
 
 function emitSession() {
   sessionListeners.forEach((listener) => listener());
+  notifyPortalSession();
 }
 
 export function updateSession(patch: Partial<SessionUser>) {
@@ -319,10 +327,10 @@ export function updateSession(patch: Partial<SessionUser>) {
 
 const subscribeToStorage = (onStoreChange: () => void) => {
   sessionListeners.add(onStoreChange);
-  window.addEventListener("storage", onStoreChange);
+  const unsub = subscribePortalSession(onStoreChange);
   return () => {
     sessionListeners.delete(onStoreChange);
-    window.removeEventListener("storage", onStoreChange);
+    unsub();
   };
 };
 

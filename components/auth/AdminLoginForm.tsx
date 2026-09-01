@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import type { AdminLoginCredentials } from "@/types/auth";
@@ -83,14 +84,15 @@ export function AdminLoginForm({
               onChange={(event) => setPassword(event.target.value)}
               required
               disabled={isLoading}
-              className="pr-12"
+              className="pr-20"
               autoComplete="current-password"
             />
             <button
               type="button"
               onClick={() => setShowPassword((value) => !value)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 pr-4 text-[#6B6B6B] hover:text-[#2D5F4F]"
+              className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#2D5F4F]"
             >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               {showPassword ? "Hide" : "Show"}
             </button>
           </div>

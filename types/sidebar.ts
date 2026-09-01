@@ -8,7 +8,7 @@ export interface SidebarLink {
 }
 
 export interface SidebarConfig {
-  role: "enterprise" | "admin";
+  role: "enterprise" | "admin" | "business";
   userName: string;
   userEmail: string;
   organization?: string;
@@ -19,6 +19,7 @@ export interface SidebarConfig {
   profileHref?: string;
   links: SidebarLink[];
   onLogout?: () => void;
+  showAppDownload?: boolean;
 }
 
 export interface DashboardLayoutProps {

@@ -1,13 +1,14 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Building2, Shield } from "lucide-react";
+import { Building2, Shield, Store } from "lucide-react";
 import { AdminLoginForm } from "@/components/auth/AdminLoginForm";
 import { AuthLoginForm } from "@/components/auth/AuthLoginForm";
 import { LoginBackdrop } from "@/components/auth/LoginBackdrop";
-import { login, loginAdmin } from "@/lib/auth";
+import { homePath, login, loginAdmin, useSession } from "@/lib/auth";
+import { loginBusiness, useBusinessSession } from "@/lib/businessAuth";
 import type { PortalKind } from "@/types/auth";
 
 export default function LoginPage() {
@@ -23,8 +24,25 @@ function LoginScreen() {
   const searchParams = useSearchParams();
   const [portal, setPortal] = useState<PortalKind | null>(() => {
     const value = searchParams.get("portal");
-    return value === "admin" || value === "enterprise" ? value : null;
+    return value === "admin" || value === "enterprise" || value === "business" ? value : null;
   });
+
+  const session = useSession();
+  const business = useBusinessSession();
+
+  useEffect(() => {
+    if (portal === "business" && business) {
+      router.replace("/business/home");
+      return;
+    }
+    if (portal === "enterprise" && session?.portal === "enterprise") {
+      router.replace(homePath(session));
+      return;
+    }
+    if (portal === "admin" && session?.portal === "admin") {
+      router.replace(homePath(session));
+    }
+  }, [business, portal, router, session]);
 
   const selectPortal = (next: PortalKind | null) => {
     setPortal(next);
@@ -52,6 +70,25 @@ function LoginScreen() {
               onSubmit: async (credentials) => {
                 await login(credentials);
                 router.push("/dashboard");
+              },
+            }}
+          />
+        ) : null}
+
+        {portal === "business" ? (
+          <AuthLoginForm
+            config={{
+              title: "Welcome back",
+              subtitle: "Sign in to manage your organisation, sites and impact.",
+              emailPlaceholder: "you@yourbusiness.com",
+              badge: "Business",
+              registerPrompt: "Don't have an account?",
+              registerActionLabel: "Register now",
+              onRegister: () => router.push("/business/register"),
+              onBack: () => selectPortal(null),
+              onSubmit: async (credentials) => {
+                await loginBusiness(credentials.email, credentials.password);
+                router.replace("/business/home");
               },
             }}
           />
@@ -98,6 +135,21 @@ function PortalPicker({ onSelect }: { onSelect: (portal: PortalKind) => void }) 
             <span className="block font-saveful-semibold text-sm text-gray-900">Enterprise</span>
             <span className="mt-0.5 block font-saveful text-xs text-gray-500">
               For organisations managing sites, listings and impact.
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelect("business")}
+          className="flex w-full items-start gap-3 rounded-2xl border border-black/[0.06] bg-[#F7F6F2] px-4 py-4 text-left transition hover:border-saveful-green/30 hover:bg-white"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-saveful-green/10 text-saveful-green">
+            <Store className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block font-saveful-semibold text-sm text-gray-900">Business</span>
+            <span className="mt-0.5 block font-saveful text-xs text-gray-500">
+              For restaurants, farms and surplus providers.
             </span>
           </span>
         </button>

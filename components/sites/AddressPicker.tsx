@@ -245,7 +245,7 @@ export function AddressPicker({
         <iframe
           title="Pickup map"
           src={mapSrc}
-          className={cn("w-full border-0", compact ? "h-48 md:h-56" : "h-56 md:h-72 lg:h-80")}
+          className={cn("w-full border-0", compact ? "h-52 sm:h-60 lg:h-64" : "h-56 md:h-72 lg:h-80")}
         />
       </div>
       <p className="font-saveful text-[11px] uppercase tracking-wide text-gray-400">

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import { Bell, Building2, ChevronDown, LogOut, UserRound } from "lucide-react";
+import { StoreBadges } from "@/components/business/StoreBadges";
 import { useSession } from "@/lib/auth";
 import { listInbox, useNotificationInboxVersion } from "@/lib/notifications";
 import { profileFromSession } from "@/lib/profile";
@@ -18,6 +19,7 @@ export function AppHeader({
   profileHref = "/account",
   onLogout,
   compact = false,
+  showAppDownload = false,
 }: {
   userName: string;
   userEmail: string;
@@ -28,6 +30,7 @@ export function AppHeader({
   profileHref?: string;
   onLogout?: () => void;
   compact?: boolean;
+  showAppDownload?: boolean;
 }) {
   const initials = userName
     .split(" ")
@@ -39,8 +42,8 @@ export function AppHeader({
   return (
     <header
       className={cn(
-        "flex items-center justify-between gap-3 border-b border-black/[0.04] bg-white/90 px-4 backdrop-blur-sm sm:px-6",
-        compact ? "h-14" : "h-16",
+        "flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-black/[0.04] bg-white/90 px-4 backdrop-blur-sm sm:px-6",
+        compact ? "min-h-14 py-2" : "min-h-16 py-2",
       )}
     >
       <div className="flex min-w-0 items-center gap-2.5">
@@ -64,8 +67,17 @@ export function AppHeader({
         </div>
       </div>
 
+      {showAppDownload ? (
+        <div className="order-3 flex w-full min-w-0 items-center justify-center gap-2 md:order-none md:w-auto md:flex-1">
+          <p className="hidden font-saveful text-xs text-gray-500 sm:block">
+            Download the app for a better experience
+          </p>
+          <StoreBadges compact />
+        </div>
+      ) : null}
+
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        {portalCaption !== "Admin" ? <NotificationsMenu /> : null}
+        {portalCaption !== "Admin" && portalCaption !== "Business" ? <NotificationsMenu /> : null}
         <UserMenu
           initials={initials}
           userName={userName}

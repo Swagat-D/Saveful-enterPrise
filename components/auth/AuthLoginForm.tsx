@@ -1,12 +1,24 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { cn } from "@/lib/utils";
 import { ApiError, requestPasswordReset, resetPasswordWithOtp } from "@/lib/api";
 import type { LoginFormConfig, LoginCredentials } from "@/types/auth";
+
+function toUserFacingAuthError(err: unknown) {
+  const message = err instanceof Error ? err.message.trim() : "";
+  if (
+    !message ||
+    /TURBOPACK|is not a function|is not a constructor|Cannot read propert/i.test(message)
+  ) {
+    return "Sign in failed. Please try again.";
+  }
+  return message;
+}
 
 function passwordRules(password: string) {
   return [
@@ -25,6 +37,19 @@ function BottomGradient() {
       <span className="absolute inset-x-0 -bottom-px block h-px w-full bg-gradient-to-r from-transparent via-[#A68FD9] to-transparent opacity-0 transition duration-500 group-hover/btn:opacity-100" />
       <span className="absolute inset-x-10 -bottom-px mx-auto block h-px w-1/2 bg-gradient-to-r from-transparent via-[#F7931E] to-transparent opacity-0 blur-sm transition duration-500 group-hover/btn:opacity-100" />
     </>
+  );
+}
+
+function PasswordToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#2D5F4F]"
+    >
+      {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      {show ? "Hide" : "Show"}
+    </button>
   );
 }
 
@@ -75,6 +100,8 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
   const [error, setError] = useState("");
   const [info, setInfo] = useState(config.initialInfo ?? "");
   const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -84,7 +111,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
     try {
       await config.onSubmit(credentials);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(toUserFacingAuthError(err));
     } finally {
       setIsLoading(false);
     }
@@ -146,15 +173,9 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
                   }
                   required
                   disabled={isLoading}
-                  className="pr-12"
+                  className="pr-20"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 pr-4 text-[#6B6B6B] hover:text-[#2D5F4F]"
-                >
-                  {showPassword ? "Hide" : "Show"}
-                </button>
+                <PasswordToggle show={showPassword} onToggle={() => setShowPassword((value) => !value)} />
               </div>
             </LabelInputContainer>
             <div className="flex items-center justify-between text-sm">
@@ -212,7 +233,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
                 if (err instanceof ApiError && err.status === 404) {
                   setError("No active account for that email. If you were invited, open the activation link in your email first.");
                 } else {
-                  setError(err instanceof Error ? err.message : "Could not send a reset code.");
+                  setError(toUserFacingAuthError(err));
                 }
               } finally {
                 setIsLoading(false);
@@ -310,7 +331,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
               });
               setView("forgot-success");
             } catch (err) {
-              setError(err instanceof Error ? err.message : "Could not reset your password.");
+              setError(toUserFacingAuthError(err));
             } finally {
               setIsLoading(false);
             }
@@ -318,13 +339,17 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
         >
           <h2 className="text-center text-2xl font-bold text-[#1a1a1a]">Set New Password</h2>
           <Banner tone="error" message={error} />
-          <Input
-            type="password"
-            placeholder="Enter new password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-          />
+          <div className="relative">
+            <Input
+              type={showNewPassword ? "text" : "password"}
+              placeholder="Enter new password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              className="pr-20"
+            />
+            <PasswordToggle show={showNewPassword} onToggle={() => setShowNewPassword((value) => !value)} />
+          </div>
           <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-[#6B6B6B]">
             {passwordRules(newPassword).map((rule) => (
               <li key={rule.id} className={rule.ok ? "text-saveful-green" : undefined}>
@@ -332,13 +357,17 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
               </li>
             ))}
           </ul>
-          <Input
-            type="password"
-            placeholder="Confirm new password"
-            value={confirmNewPassword}
-            onChange={(e) => setConfirmNewPassword(e.target.value)}
-            required
-          />
+          <div className="relative">
+            <Input
+              type={showConfirmNewPassword ? "text" : "password"}
+              placeholder="Confirm new password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              required
+              className="pr-20"
+            />
+            <PasswordToggle show={showConfirmNewPassword} onToggle={() => setShowConfirmNewPassword((value) => !value)} />
+          </div>
           <button
             className="h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white disabled:opacity-50"
             disabled={isLoading}
@@ -362,13 +391,26 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
         </div>
       ) : null}
 
+      {config.onRegister && view === "login" ? (
+        <p className="mt-6 text-center text-sm text-[#6B6B6B]">
+          {config.registerPrompt ?? "Don't have an account?"}{" "}
+          <button
+            type="button"
+            onClick={config.onRegister}
+            className="font-semibold text-[#2D5F4F] hover:underline"
+          >
+            {config.registerActionLabel ?? "Register now"}
+          </button>
+        </p>
+      ) : null}
+
       {config.onBack && view === "login" ? (
         <button
           type="button"
           onClick={config.onBack}
           className="mt-6 mx-auto block text-sm text-[#6B6B6B] hover:text-[#2D5F4F]"
         >
-          Choose a different portal
+          {config.backLabel ?? "Choose a different portal"}
         </button>
       ) : null}
 

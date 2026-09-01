@@ -1,6 +1,6 @@
 export type UserRole = "restaurant_multi";
 
-export type PortalKind = "enterprise" | "admin";
+export type PortalKind = "enterprise" | "admin" | "business";
 
 export interface LoginCredentials {
   email: string;
@@ -21,5 +21,9 @@ export interface LoginFormConfig {
   showLogo?: boolean;
   badge?: string;
   onBack?: () => void;
+  backLabel?: string;
+  onRegister?: () => void;
+  registerPrompt?: string;
+  registerActionLabel?: string;
   onSubmit: (credentials: LoginCredentials) => Promise<void> | void;
 }

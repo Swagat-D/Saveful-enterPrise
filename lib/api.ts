@@ -1,8 +1,10 @@
+import { readEnterpriseToken } from "@/lib/portalSession";
+
 export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://s4b.saveful.app/api/v1"
 ).replace(/\/$/, "");
 
-export const ACCESS_TOKEN_KEY = "enterprise_token";
+export { ACCESS_TOKEN_KEY } from "@/lib/portalSession";
 
 export class ApiError extends Error {
   status: number;
@@ -40,13 +42,17 @@ export type AuthLoginResponse = {
 
 export type AuthProfileResponse = {
   user: PlatformUser & { phoneNumber?: string | null };
-  organisation: { id: number; name: string } | null;
+  organisation: { id: number; name: string; type?: string } | null;
   role: {
     platformRole: string;
     orgRole: string | null;
     enterpriseRole?: string | null;
     siteRole: string | null;
   };
+  subscription?: {
+    plan?: { name?: string | null; displayName?: string | null };
+    status?: string | null;
+  } | null;
 };
 
 export type InvitationPreview = {
@@ -454,10 +460,7 @@ function messageFromBody(body: unknown, fallback: string) {
 }
 
 export function getAccessToken() {
-  if (typeof window === "undefined") return null;
-  const token = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!token || token === "dev-session") return null;
-  return token;
+  return readEnterpriseToken();
 }
 
 let unauthorizedHandler: (() => void) | null = null;
@@ -833,8 +836,24 @@ export type ApiFoodListing = {
   remainingQtyKg?: number;
   status: string;
   createdAt: string;
+  updatedAt?: string;
+  collectedAt?: string;
+  claimStatus?: string;
+  pickupAddress?: string;
+  pickupPostcode?: string;
+  pickupLat?: number;
+  pickupLng?: number;
+  bestBefore?: string;
   pickupFromTime?: string;
   pickupByTime?: string;
+  needsRefrigeration?: boolean;
+  needsAmbient?: boolean;
+  needsFreezer?: boolean;
+  needsHot?: boolean;
+  needsReheating?: boolean;
+  isSafeForDonation?: boolean;
+  allergens?: string[];
+  photoUrls?: string[];
   foodItems?: ApiFoodItem[];
   foodClaims?: ApiFoodClaim[];
 };
