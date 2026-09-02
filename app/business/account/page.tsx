@@ -3,9 +3,26 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronRight, Minus, Plus } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  CircleHelp,
+  CreditCard,
+  FileText,
+  ImageIcon,
+  LifeBuoy,
+  LogOut,
+  Shield,
+  Trash2,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { BusinessGate } from "@/components/business/BusinessGate";
-import { PortalPageHeader, PortalPageShell, PortalPanel } from "@/components/ui/Portal";
+import { PortalPageHeader, PortalPageShell } from "@/components/ui/Portal";
+import { businessRoleLabel } from "@/config/businessSidebar";
+import { cn } from "@/lib/utils";
 import { AddressPicker, type PickedLocation } from "@/components/sites/AddressPicker";
 import { ApiError, requestPasswordReset } from "@/lib/api";
 import {
@@ -146,141 +163,212 @@ function AccountInner() {
       await updateBusinessOrganisation(user.organisationId, form);
     });
 
+  const initials = user.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
   return (
     <PortalPageShell>
-      <PortalPageHeader
-        eyebrow="Account"
-        title={user.name}
-        description={since ? `Saveful for Business since ${since}` : "Saveful for Business"}
-      />
+      <PortalPageHeader eyebrow="Account" title="Your account" description="Manage your profile, business details, and support." />
 
-      <PortalPanel title="Need a hand?" subtitle="Questions about listings, sites or billing — we can help.">
-        <a
-          href="https://www.saveful.com/contact"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-11 items-center rounded-xl border border-black/[0.06] bg-white px-5 font-saveful-semibold text-sm text-gray-800 transition hover:border-saveful-green/30 hover:text-saveful-green"
-        >
-          Contact support
-        </a>
-      </PortalPanel>
-
-      <div className="space-y-3">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
+        <section className="flex items-center gap-4 rounded-2xl border border-black/[0.04] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
+          {user.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={user.logoUrl} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-black/5" />
+          ) : (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-saveful-green/10 font-saveful-bold text-lg text-saveful-green">
+              {initials || "S"}
+            </div>
+          )}
+          <div className="min-w-0">
+            <h2 className="font-saveful-bold text-xl text-gray-900">{user.name}</h2>
+            <p className="mt-0.5 truncate font-saveful text-sm text-gray-500">
+              {user.organization}
+              {since ? ` · since ${since}` : ""}
+            </p>
+            <span className="mt-2 inline-flex rounded-full bg-[#F0F8F3] px-2.5 py-0.5 font-saveful-semibold text-[11px] text-saveful-green">
+              {businessRoleLabel(user)}
+            </span>
+          </div>
+        </section>
 
         {error ? (
-          <p className="rounded-2xl bg-amber-50 px-4 py-3 font-saveful text-sm text-amber-800">{error}</p>
+          <p className="rounded-xl bg-amber-50 px-4 py-3 font-saveful text-sm text-amber-800">{error}</p>
         ) : null}
         {notice ? (
-          <p className="rounded-2xl bg-saveful-green/10 px-4 py-3 font-saveful text-sm text-saveful-green">{notice}</p>
+          <p className="rounded-xl bg-saveful-green/10 px-4 py-3 font-saveful text-sm text-saveful-green">{notice}</p>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-black/[0.04] bg-white">
-          <Accordion title="Personal Details" open={open === "personal"} onToggle={() => toggle("personal")}>
-            <Field label="First Name" value={user.firstName} readOnly />
-            <Field label="Last Name" value={user.lastName} readOnly />
-            <Field label="Email" value={user.email} readOnly />
-            <label className="block">
-              <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Mobile number (optional)</span>
-              <input value={mobile} onChange={(event) => setMobile(event.target.value)} className={fieldClass} />
-            </label>
-            <div>
-              <p className="font-saveful-semibold text-sm text-gray-800">Password</p>
-              <button
-                type="button"
-                onClick={() =>
-                  void requestPasswordReset(user.email).then(
-                    () => setNotice("We sent a reset code to your email."),
-                    (err) => setError(err instanceof Error ? err.message : "Could not start password reset."),
-                  )
-                }
-                className="mt-1 inline-flex items-center gap-1 font-saveful text-sm text-saveful-green"
-              >
-                Change Password <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-            <SaveButton busy={saving === "personal"} onClick={() => void savePersonal()} />
-          </Accordion>
-
-          <Accordion title="Notifications" open={open === "notifications"} onToggle={() => toggle("notifications")}>
-            <p className="font-saveful text-sm leading-relaxed text-gray-500">
-              Collection and claim alerts are sent in the Saveful app. Download the app for a better experience and to
-              manage notification permissions.
-            </p>
-          </Accordion>
-
-          <Accordion
-            title={isFarm ? "Farm Details" : "Business Details"}
-            open={open === "business"}
-            onToggle={() => toggle("business")}
-          >
-            <Field label="Name" value={user.organization} readOnly />
-            <div>
-              <p className="mb-1.5 font-saveful-semibold text-sm text-gray-800">Address / Location</p>
-              <p className="mb-2 font-saveful text-xs text-gray-500">
-                Update address with map search so latitude and longitude stay accurate for pickups.
-              </p>
-              <AddressPicker
-                value={place}
-                onChange={(next) => {
-                  setPlace(next);
-                  setAddress(next.address);
-                }}
-                compact
-              />
-            </div>
-            {!isFarm ? (
+        <section className="space-y-2">
+          <p className="px-1 font-saveful text-[11px] uppercase tracking-[0.16em] text-gray-400">Your details</p>
+          <div className="overflow-hidden rounded-2xl border border-black/[0.04] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <Accordion
+              title="Personal Details"
+              hint="Name, email, mobile and password"
+              icon={<UserRound className="h-4 w-4" />}
+              open={open === "personal"}
+              onToggle={() => toggle("personal")}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="First Name" value={user.firstName} readOnly />
+                <Field label="Last Name" value={user.lastName} readOnly />
+              </div>
+              <Field label="Email" value={user.email} readOnly />
               <label className="block">
-                <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Registration No.</span>
-                <input value={registration} onChange={(event) => setRegistration(event.target.value)} className={fieldClass} />
+                <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Mobile number (optional)</span>
+                <input value={mobile} onChange={(event) => setMobile(event.target.value)} className={fieldClass} />
               </label>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-saveful-semibold text-sm text-gray-800">Password</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void requestPasswordReset(user.email).then(
+                        () => setNotice("We sent a reset code to your email."),
+                        (err) => setError(err instanceof Error ? err.message : "Could not start password reset."),
+                      )
+                    }
+                    className="mt-1 inline-flex items-center gap-1 font-saveful-semibold text-sm text-saveful-green hover:underline"
+                  >
+                    Change password <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                <SaveButton busy={saving === "personal"} onClick={() => void savePersonal()} />
+              </div>
+            </Accordion>
+
+            <Accordion
+              title="Notifications"
+              hint="Collection and claim alerts"
+              icon={<Bell className="h-4 w-4" />}
+              open={open === "notifications"}
+              onToggle={() => toggle("notifications")}
+            >
+              <p className="font-saveful text-sm leading-relaxed text-gray-500">
+                Collection and claim alerts are sent in the Saveful app. Download the app for a better experience and to
+                manage notification permissions.
+              </p>
+            </Accordion>
+
+            <Accordion
+              title={isFarm ? "Farm Details" : "Business Details"}
+              hint="Address, venue and registration"
+              icon={<Building2 className="h-4 w-4" />}
+              open={open === "business"}
+              onToggle={() => toggle("business")}
+            >
+              <Field label="Name" value={user.organization} readOnly />
+              <div>
+                <p className="mb-1.5 font-saveful-semibold text-sm text-gray-800">Address / Location</p>
+                <p className="mb-2 font-saveful text-xs text-gray-500">
+                  Update address with map search so latitude and longitude stay accurate for pickups.
+                </p>
+                <AddressPicker
+                  value={place}
+                  onChange={(next) => {
+                    setPlace(next);
+                    setAddress(next.address);
+                  }}
+                  compact
+                />
+              </div>
+              {!isFarm ? (
+                <label className="block">
+                  <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Registration No.</span>
+                  <input value={registration} onChange={(event) => setRegistration(event.target.value)} className={fieldClass} />
+                </label>
+              ) : null}
+              <label className="block">
+                <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Venue Type</span>
+                <select value={venueType} onChange={(event) => setVenueType(event.target.value)} className={fieldClass}>
+                  <option value="">Select…</option>
+                  {venues.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <SaveButton busy={saving === "business"} onClick={() => void saveBusiness()} />
+            </Accordion>
+
+            <Accordion
+              title="Branding & logo"
+              hint="How your business appears"
+              icon={<ImageIcon className="h-4 w-4" />}
+              open={open === "extra"}
+              onToggle={() => toggle("extra")}
+              last
+            >
+              <label className="block">
+                <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Branding</span>
+                <input value={branding} onChange={(event) => setBranding(event.target.value)} className={fieldClass} />
+              </label>
+              <BusinessLogoField file={logo} existingUrl={user.logoUrl} onFile={setLogo} />
+              <SaveButton busy={saving === "extra"} onClick={() => void saveExtra()} />
+            </Accordion>
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <p className="px-1 font-saveful text-[11px] uppercase tracking-[0.16em] text-gray-400">Workspace</p>
+          <div className="overflow-hidden rounded-2xl border border-black/[0.04] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <RowLink href="/business/access" label="Manage Access" hint="Invite and remove site access" icon={<Users className="h-4 w-4" />} />
+            {!isBusinessLocationUser(user) ? (
+              <RowLink href="/business/plans" label="Plans" hint="Billing and subscription" icon={<CreditCard className="h-4 w-4" />} />
             ) : null}
-            <label className="block">
-              <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Venue Type</span>
-              <select value={venueType} onChange={(event) => setVenueType(event.target.value)} className={fieldClass}>
-                <option value="">Select…</option>
-                {venues.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <SaveButton busy={saving === "business"} onClick={() => void saveBusiness()} />
-          </Accordion>
+            <RowLink href="https://www.saveful.com/privacy-policy" label="Privacy Policy" hint="How we use your data" icon={<Shield className="h-4 w-4" />} external />
+            <RowLink href="https://www.saveful.com/saveful-for-business-terms-conditions" label="Terms of Service" hint="Your agreement with Saveful" icon={<FileText className="h-4 w-4" />} external />
+            <RowLink href="https://www.saveful.com/faq#saveful-for-business-faq" label="FAQ" hint="Common questions" icon={<CircleHelp className="h-4 w-4" />} external last />
+          </div>
+        </section>
 
-          <Accordion title="Extra Info (Branding + Logo)" open={open === "extra"} onToggle={() => toggle("extra")} last>
-            <label className="block">
-              <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">Branding</span>
-              <input value={branding} onChange={(event) => setBranding(event.target.value)} className={fieldClass} />
-            </label>
-            <BusinessLogoField
-              file={logo}
-              existingUrl={user.logoUrl}
-              onFile={setLogo}
-            />
-            <SaveButton busy={saving === "extra"} onClick={() => void saveExtra()} />
-          </Accordion>
-        </div>
+        <section className="rounded-2xl border border-saveful-green/15 bg-[#F3F8F5] p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-saveful-green shadow-sm ring-1 ring-saveful-green/10">
+              <LifeBuoy className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-saveful-bold text-base text-gray-900">Need a hand?</h3>
+              <p className="mt-1 font-saveful text-sm leading-relaxed text-gray-600">
+                Questions about listings, sites or billing — please review the{" "}
+                <a
+                  href="https://www.saveful.com/faq#saveful-for-business-faq"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-saveful-semibold text-saveful-green hover:underline"
+                >
+                  FAQs
+                </a>
+                . If you still have any further questions we can help.
+              </p>
+              <a
+                href="https://www.saveful.com/contact"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex h-10 items-center rounded-xl bg-saveful-green px-4 font-saveful-semibold text-sm text-white transition hover:bg-[#264f42]"
+              >
+                Contact support
+              </a>
+            </div>
+          </div>
+        </section>
 
-        <div className="overflow-hidden rounded-2xl border border-black/[0.04] bg-white">
-          {isRestaurant && isMulti ? (
-            <RowLink href="/business/access" label="Manage Access" />
-          ) : null}
-          {!isBusinessLocationUser(user) ? <RowLink href="/business/plans" label="Plans" /> : null}
-          <RowLink href="https://www.saveful.com/privacy-policy" label="Privacy Policy" external />
-          <RowLink href="https://www.saveful.com/saveful-for-business-terms-conditions" label="Terms of Service" external />
-          <RowLink href="https://www.saveful.com/faq#saveful-for-business-faq" label="FAQ" external last />
-        </div>
-
-        <div className="space-y-2 pt-1">
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pb-2">
           <button
             type="button"
             onClick={() => {
               logoutBusiness();
               router.replace("/");
             }}
-            className="h-12 w-full rounded-2xl border border-black/[0.04] bg-white font-saveful-semibold text-saveful-green"
+            className="inline-flex items-center gap-1.5 font-saveful-semibold text-sm text-saveful-green hover:underline"
           >
+            <LogOut className="h-3.5 w-3.5" />
             Log out
           </button>
           <button
@@ -291,8 +379,9 @@ function AccountInner() {
                 router.replace("/");
               }
             }}
-            className="h-12 w-full rounded-2xl border border-black/[0.04] bg-white font-saveful-semibold text-saveful-green"
+            className="inline-flex items-center gap-1.5 font-saveful text-sm text-gray-400 hover:text-red-600"
           >
+            <Trash2 className="h-3.5 w-3.5" />
             Delete my account
           </button>
         </div>
@@ -303,12 +392,16 @@ function AccountInner() {
 
 function Accordion({
   title,
+  hint,
+  icon,
   open,
   onToggle,
   children,
   last,
 }: {
   title: string;
+  hint?: string;
+  icon: ReactNode;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -316,11 +409,21 @@ function Accordion({
 }) {
   return (
     <div className={last ? "" : "border-b border-[#F0EBE3]"}>
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between px-5 py-4 text-left">
-        <span className="font-saveful-semibold text-sm text-gray-900">{title}</span>
-        {open ? <Minus className="h-4 w-4 text-gray-400" /> : <Plus className="h-4 w-4 text-gray-400" />}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-[#F7F6F2]/80 sm:px-5"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0F8F3] text-saveful-green">
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-saveful-semibold text-sm text-gray-900">{title}</span>
+          {hint ? <span className="mt-0.5 block font-saveful text-xs text-gray-400">{hint}</span> : null}
+        </span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-gray-400 transition", open && "rotate-180 text-saveful-green")} />
       </button>
-      {open ? <div className="space-y-3.5 px-5 pb-5">{children}</div> : null}
+      {open ? <div className="space-y-3.5 px-4 pb-5 pt-1 sm:px-5">{children}</div> : null}
     </div>
   );
 }
@@ -340,7 +443,7 @@ function SaveButton({ busy, onClick }: { busy: boolean; onClick: () => void }) {
       type="button"
       disabled={busy}
       onClick={onClick}
-      className="h-11 w-full rounded-xl bg-saveful-green font-saveful-semibold text-white disabled:opacity-50"
+      className="h-10 rounded-xl bg-saveful-green px-5 font-saveful-semibold text-sm text-white disabled:opacity-50 sm:ml-auto"
     >
       {busy ? "Saving…" : "Save"}
     </button>
@@ -350,19 +453,32 @@ function SaveButton({ busy, onClick }: { busy: boolean; onClick: () => void }) {
 function RowLink({
   href,
   label,
+  hint,
+  icon,
   external,
   last,
 }: {
   href: string;
   label: string;
+  hint?: string;
+  icon: ReactNode;
   external?: boolean;
   last?: boolean;
 }) {
-  const className = `flex items-center justify-between px-5 py-4 font-saveful text-sm text-gray-900 ${last ? "" : "border-b border-[#F0EBE3]"}`;
+  const className = cn(
+    "flex items-center gap-3 px-4 py-3.5 transition hover:bg-[#F7F6F2]/80 sm:px-5",
+    !last && "border-b border-[#F0EBE3]",
+  );
   const inner = (
     <>
-      {label}
-      <ChevronRight className="h-4 w-4 text-gray-400" />
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F7F6F2] text-saveful-green">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-saveful-semibold text-sm text-gray-900">{label}</span>
+        {hint ? <span className="mt-0.5 block font-saveful text-xs text-gray-400">{hint}</span> : null}
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
     </>
   );
   if (external) {

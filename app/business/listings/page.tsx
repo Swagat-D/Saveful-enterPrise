@@ -2,20 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Clock3, Plus, X } from "lucide-react";
+import { Clock3, Plus } from "lucide-react";
 import { BusinessGate } from "@/components/business/BusinessGate";
 import { LISTING_ICONS, ListingIcon } from "@/components/business/ListingIcon";
 import { ListingCard } from "@/components/business/ListingCard";
+import { ListingItemsModal } from "@/components/business/ListingItemsModal";
 import { PortalPageHeader, PortalPageShell } from "@/components/ui/Portal";
 import { Button } from "@/components/ui/button";
 import type { ApiFoodItem, ApiFoodListing } from "@/lib/api";
 import { cancelBusinessListing, getBusinessListing, listBusinessListings, listBusinessSiteListings } from "@/lib/businessApi";
 import { useBusinessSession } from "@/lib/businessAuth";
-import { ensureDefaultHqSite, isBusinessMultiHeadOffice, pickDefaultSiteId } from "@/lib/businessHqSite";
+import { isBusinessMultiHeadOffice, parseLiveSiteId, pickDefaultSiteId } from "@/lib/businessHqSite";
 import {
   LISTING_STATUS_PRIORITY,
   compareListingsByNewest,
-  formatKg,
   isAnimalListing,
   isListingActive,
   isPeopleListing,
@@ -57,14 +57,14 @@ function ListingsInner() {
   const [detailItems, setDetailItems] = useState<ApiFoodItem[] | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!user) return;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     setError("");
     const hq = isBusinessMultiHeadOffice(user) || user.role === "restaurant_multi";
     try {
       if (hq) {
-        const hqId = pickDefaultSiteId(await ensureDefaultHqSite(user));
+        const hqId = pickDefaultSiteId(user.profile?.sites) ?? parseLiveSiteId(user.siteId);
         const all = listingsFromPayload(await listBusinessListings(user.organisationId));
         setRows(hqId == null ? all : all.filter((row) => Number(row.siteId) === hqId));
       } else {
@@ -74,7 +74,7 @@ function ListingsInner() {
       setError(err instanceof Error ? err.message : "Could not load listings.");
       setRows([]);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [user]);
 
@@ -226,7 +226,12 @@ function ListingsInner() {
                       if (!window.confirm("Are you sure you want to cancel this listing? This cannot be undone.")) return;
                       setCancellingId(listing.id);
                       void cancelBusinessListing(listing.id)
-                        .then(() => load())
+                        .then(() => {
+                          setRows((prev) =>
+                            prev.map((row) => (row.id === listing.id ? { ...row, status: "CANCELLED" } : row)),
+                          );
+                          void load({ silent: true });
+                        })
                         .catch((err) => setError(err instanceof Error ? err.message : "Could not cancel listing."))
                         .finally(() => setCancellingId(null));
                     }
@@ -238,38 +243,12 @@ function ListingsInner() {
       )}
 
       {itemsOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={() => setItemsOpen(null)}>
-          <div className="absolute inset-0 bg-black/45" />
-          <div
-            role="dialog"
-            className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-saveful-bold text-lg text-gray-900">Food items</h2>
-              <button type="button" onClick={() => setItemsOpen(null)} className="rounded-lg p-1 text-gray-400 hover:bg-[#F7F6F2]">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {detailLoading ? (
-              <p className="font-saveful text-sm text-gray-500">Loading breakdown…</p>
-            ) : (
-              <ul className="space-y-2">
-                {(detailItems ?? []).map((item) => (
-                  <li key={`${item.id}-${item.name}`} className="flex items-center justify-between rounded-xl bg-[#F7F6F2] px-3 py-2">
-                    <span className="font-saveful text-sm text-gray-800">{item.name}</span>
-                    <span className="font-saveful-semibold text-sm text-gray-900">
-                      {formatKg(Number(item.remainingQtyKg ?? item.totalQtyKg ?? 0))} kg
-                    </span>
-                  </li>
-                ))}
-                {(detailItems ?? []).length === 0 ? (
-                  <li className="font-saveful text-sm text-gray-500">No food items on this listing.</li>
-                ) : null}
-              </ul>
-            )}
-          </div>
-        </div>
+        <ListingItemsModal
+          listing={itemsOpen}
+          items={detailItems ?? itemsOpen.foodItems ?? []}
+          loading={detailLoading}
+          onClose={() => setItemsOpen(null)}
+        />
       ) : null}
     </PortalPageShell>
   );

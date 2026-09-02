@@ -1,18 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock3,
+  MapPin,
   MessageCircle,
   Navigation,
   Phone,
   Star,
   UserRound,
+  X,
 } from "lucide-react";
-import { LISTING_ICONS, ListingIcon } from "@/components/business/ListingIcon";
+import { LISTING_ICONS, ListingIcon, foodItemIcon } from "@/components/business/ListingIcon";
 import { PostPickupSurveyModal } from "@/components/business/PostPickupSurveyModal";
 import { PortalPageHeader, PortalPageShell } from "@/components/ui/Portal";
 import { listBusinessListings } from "@/lib/businessApi";
@@ -107,10 +110,73 @@ function RatingSummary({
 
 function CardHeadline({ primary, secondary }: { primary: string; secondary: string }) {
   return (
-    <div>
-      <h3 className="font-saveful-semibold text-base text-gray-900">{primary}</h3>
-      <p className="font-saveful text-sm text-gray-500">{secondary}</p>
+    <div className="min-w-0">
+      <h3 className="font-saveful-semibold text-[16px] leading-snug text-gray-900">{primary}</h3>
+      <p className="font-saveful text-[13px] leading-snug text-gray-500">{secondary}</p>
     </div>
+  );
+}
+
+function DetailTile({
+  theme,
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  theme: UpdateTheme;
+  icon: string;
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[#EFE8DC] bg-[#FAFAF8] px-2.5 py-2">
+      <span
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]"
+        style={{ backgroundColor: theme.statusBg }}
+      >
+        <ListingIcon src={icon} className="h-5 w-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="font-saveful-semibold text-[9px] uppercase tracking-[0.5px] text-gray-400">{label}</p>
+        <p className="truncate font-saveful-semibold text-[13px] leading-tight text-gray-900">{value}</p>
+        {sub ? <p className="truncate font-saveful text-[11px] text-gray-500">{sub}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function cardWeight(item: RestaurantUpdate) {
+  if (item.cardType === "feedback") return 2;
+  if (item.cardType === "claimed") return 6;
+  const rated = item.providerRating != null || item.claimantRating != null;
+  const needsRate = Boolean(item.needsProviderFeedback);
+  return 3 + (rated ? 2 : 0) + (needsRate ? 1 : 0);
+}
+
+function packUpdateColumns(items: RestaurantUpdate[]) {
+  const columns: [RestaurantUpdate[], RestaurantUpdate[]] = [[], []];
+  const heights = [0, 0];
+  for (const item of items) {
+    const target = heights[0] <= heights[1] ? 0 : 1;
+    columns[target].push(item);
+    heights[target] += cardWeight(item);
+  }
+  return columns;
+}
+
+function cardShell(theme: UpdateTheme, audience: UpdateAudience, children: ReactNode) {
+  return (
+    <article
+      className="overflow-hidden rounded-[14px] border bg-white"
+      style={{
+        borderColor: theme.border,
+        backgroundColor: audience === "animals" ? theme.lightBg : "#fff",
+      }}
+    >
+      <div className="flex flex-col gap-3 p-4">{children}</div>
+    </article>
   );
 }
 
@@ -198,74 +264,66 @@ export function BusinessUpdatesView() {
     const assigneeCall = contactHref("tel", item.assigneePhone);
     const assigneeMsg = contactHref("sms", item.assigneePhone);
 
-    return (
-      <article
-        className="rounded-2xl border bg-white p-4 shadow-sm sm:p-5"
-        style={{
-          borderColor: theme.border,
-          backgroundColor: item.audience === "animals" ? theme.lightBg : "#fff",
-        }}
-      >
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-md px-2 py-1 font-saveful-semibold text-[11px] uppercase" style={{ backgroundColor: theme.statusBg, color: theme.accent }}>
+    return cardShell(
+      theme,
+      item.audience,
+      <>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className="rounded-md px-2.5 py-1 font-saveful-semibold text-[10px] uppercase tracking-[0.4px]"
+            style={{ backgroundColor: theme.statusBg, color: theme.accent }}
+          >
             Claimed
           </span>
-          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-saveful-semibold text-[11px] uppercase" style={{ backgroundColor: theme.statusBg, color: theme.accent }}>
-            <ListingIcon src={theme.categoryIcon} className="h-3.5 w-3.5" />
+          <span
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-saveful-semibold text-[10px] uppercase tracking-[0.4px]"
+            style={{ backgroundColor: theme.statusBg, color: theme.accent }}
+          >
+            <ListingIcon src={theme.categoryIcon} className="h-3 w-3" />
             {theme.categoryLabel}
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-saveful-semibold text-[11px] uppercase" style={{ borderColor: `${theme.accent}80`, color: theme.accent }}>
+          <span
+            className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-saveful-semibold text-[10px] uppercase tracking-[0.4px]"
+            style={{ borderColor: `${theme.accent}80`, color: theme.accent }}
+          >
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: theme.accent }} />
             {statusLabel}
           </span>
         </div>
 
-        <div className="mt-3">
-          <CardHeadline primary={item.claimerName ?? "Someone"} secondary="claimed your listing" />
-        </div>
+        <CardHeadline primary={item.claimerName ?? "Someone"} secondary="claimed your listing" />
 
-        <div className="mt-3 space-y-1.5">
+        <div className="space-y-1">
           {item.location ? (
-            <p className="flex items-center gap-1.5 font-saveful text-sm text-gray-500">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: theme.accent }} />
-              {item.location}
+            <p className="flex items-start gap-1.5 font-saveful text-[13px] text-gray-500">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: theme.accent }} />
+              <span className="min-w-0 leading-snug">{item.location}</span>
             </p>
           ) : null}
-          <p className="flex items-center gap-1.5 font-saveful text-sm text-gray-500">
+          <p className="flex items-center gap-1.5 font-saveful text-[13px] text-gray-500">
             {item.assigneeLabel === "Farmer" ? (
-              <UserRound className="h-3.5 w-3.5" style={{ color: theme.accent }} />
+              <UserRound className="h-3.5 w-3.5 shrink-0" style={{ color: theme.accent }} />
             ) : (
-              <Navigation className="h-3.5 w-3.5" style={{ color: theme.accent }} />
+              <Navigation className="h-3.5 w-3.5 shrink-0" style={{ color: theme.accent }} />
             )}
-            {item.assigneeName ? `${item.assigneeLabel}: ${item.assigneeName}` : `${item.assigneeLabel} not assigned yet`}
+            <span className="truncate">
+              {item.assigneeName ? `${item.assigneeLabel}: ${item.assigneeName}` : `${item.assigneeLabel} not assigned yet`}
+            </span>
           </p>
         </div>
 
-        <div className="my-4 h-px bg-[#EFE8DC]" />
+        <div className="h-px bg-[#EFE8DC]" />
 
-        <div className="grid gap-3 sm:grid-cols-[1.6fr_1fr_auto]">
-          <div className="flex items-center gap-3 rounded-xl bg-white/70 px-3 py-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: theme.statusBg }}>
-              <ListingIcon src={LISTING_ICONS.calendar} className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-saveful text-[10px] uppercase tracking-[0.14em] text-gray-400">Collection</p>
-              <p className="font-saveful-semibold text-sm text-gray-900">
-                {hasCollectionWindow ? formatCollectionDate(item.pickupFrom!) : "Window TBC"}
-              </p>
-              {hasCollectionWindow ? (
-                <p className="font-saveful text-xs text-gray-500">{formatCollectionTimeRange(item.pickupFrom!, item.pickupTo!)}</p>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-white/70 px-3 py-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: theme.statusBg }}>
-              <ListingIcon src={LISTING_ICONS.items} className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-saveful text-[10px] uppercase tracking-[0.14em] text-gray-400">Quantity</p>
-              <p className="font-saveful-semibold text-sm text-gray-900">{item.quantityKg} kg</p>
-            </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+            <DetailTile
+              theme={theme}
+              icon={LISTING_ICONS.calendar}
+              label="Collection"
+              value={hasCollectionWindow ? formatCollectionDate(item.pickupFrom!) : "Window TBC"}
+              sub={hasCollectionWindow ? formatCollectionTimeRange(item.pickupFrom!, item.pickupTo!) : undefined}
+            />
+            <DetailTile theme={theme} icon={LISTING_ICONS.items} label="Quantity" value={`${item.quantityKg} kg`} />
           </div>
           <button
             type="button"
@@ -273,7 +331,7 @@ export function BusinessUpdatesView() {
               setSelectedItems(item.items || []);
               setDetailsModalVisible(true);
             }}
-            className="inline-flex items-center justify-center gap-1 rounded-xl border px-3 py-2 font-saveful-semibold text-sm"
+            className="inline-flex items-center justify-center gap-1 rounded-[10px] border-[1.5px] px-3 py-2.5 font-saveful-semibold text-sm sm:w-[8.5rem] sm:shrink-0"
             style={{ borderColor: `${theme.accent}80`, color: theme.accent }}
           >
             View Items
@@ -281,32 +339,32 @@ export function BusinessUpdatesView() {
           </button>
         </div>
 
-        <div className="my-4 h-px bg-[#EFE8DC]" />
+        <div className="h-px bg-[#EFE8DC]" />
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="font-saveful text-[10px] uppercase tracking-[0.14em] text-gray-400">{claimerLabel}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <p className="font-saveful-semibold text-[10px] uppercase tracking-[0.8px] text-gray-400">{claimerLabel}</p>
+            <div className="mt-1.5 flex gap-1.5">
               <ContactAction href={claimerCall} label="Call" accent={theme.accent} icon={<Phone className="h-3.5 w-3.5" />} />
               <ContactAction href={claimerMsg} label="Msg" accent={theme.accent} icon={<MessageCircle className="h-3.5 w-3.5" />} />
             </div>
           </div>
-          <div>
-            <p className="font-saveful text-[10px] uppercase tracking-[0.14em] text-gray-400">{assigneeLabel}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+          <div className="min-w-0 border-l border-[#EFE8DC] pl-3">
+            <p className="font-saveful-semibold text-[10px] uppercase tracking-[0.8px] text-gray-400">{assigneeLabel}</p>
+            <div className="mt-1.5 flex gap-1.5">
               <ContactAction href={assigneeCall} label="Call" accent={theme.accent} icon={<Phone className="h-3.5 w-3.5" />} />
               <ContactAction href={assigneeMsg} label="Msg" accent={theme.accent} icon={<MessageCircle className="h-3.5 w-3.5" />} />
             </div>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.statusBg }}>
-          <Clock3 className="h-4 w-4" style={{ color: theme.accent }} />
+        <div className="flex items-center gap-2 rounded-[10px] px-3 py-2.5" style={{ backgroundColor: theme.statusBg }}>
+          <Clock3 className="h-4 w-4 shrink-0" style={{ color: theme.accent }} />
           <p className="font-saveful-semibold text-sm" style={{ color: theme.accent }}>
             Claimed — waiting for pickup
           </p>
         </div>
-      </article>
+      </>,
     );
   };
 
@@ -314,39 +372,36 @@ export function BusinessUpdatesView() {
     const theme = getTheme(item.audience);
     const completed = surveyCompletedIds.includes(item.id);
 
-    return (
-      <article
-        className="rounded-2xl border p-4 shadow-sm sm:p-5"
-        style={{
-          borderColor: theme.border,
-          backgroundColor: item.audience === "animals" ? theme.lightBg : "#fff",
-        }}
-      >
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-md bg-[#E8F1FB] px-2 py-1 font-saveful-semibold text-[11px] uppercase text-[#2F6FED]">
+    return cardShell(
+      theme,
+      item.audience,
+      <>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-md bg-[#E8F1FB] px-2.5 py-1 font-saveful-semibold text-[10px] uppercase tracking-[0.4px] text-[#2F6FED]">
             Action needed
           </span>
-          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-saveful-semibold text-[11px] uppercase" style={{ backgroundColor: theme.statusBg, color: theme.accent }}>
-            <ListingIcon src={theme.categoryIcon} className="h-3.5 w-3.5" />
+          <span
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-saveful-semibold text-[10px] uppercase tracking-[0.4px]"
+            style={{ backgroundColor: theme.statusBg, color: theme.accent }}
+          >
+            <ListingIcon src={theme.categoryIcon} className="h-3 w-3" />
             {theme.categoryLabel}
           </span>
         </div>
-        <div className="mt-3">
-          <CardHeadline
-            primary={item.claimerName}
-            secondary="collected your listing — please rate this collection"
-          />
-        </div>
+        <CardHeadline
+          primary={item.claimerName}
+          secondary="collected your listing — please rate this collection"
+        />
         <button
           type="button"
           disabled={completed}
           onClick={() => openProviderSurvey(item, "yes")}
-          className="mt-4 w-full rounded-xl py-3 font-saveful-semibold text-white disabled:opacity-50"
+          className="w-full rounded-xl py-3 font-saveful-semibold text-white disabled:opacity-50"
           style={{ backgroundColor: theme.accent }}
         >
           Rate now
         </button>
-      </article>
+      </>,
     );
   };
 
@@ -362,96 +417,98 @@ export function BusinessUpdatesView() {
       !surveyCompletedIds.includes(item.id) &&
       !surveyCompletedIds.includes(`feedback-${item.claimId}`);
 
-    return (
-      <article
-        className="rounded-2xl border p-4 shadow-sm sm:p-5"
-        style={{
-          borderColor: theme.border,
-          backgroundColor: item.audience === "animals" ? theme.lightBg : "#fff",
-        }}
-      >
-        <div className="flex flex-wrap gap-2">
-          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-saveful-semibold text-[11px] uppercase" style={{ backgroundColor: theme.statusBg, color: theme.accent }}>
+    return cardShell(
+      theme,
+      item.audience,
+      <>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-saveful-semibold text-[10px] uppercase tracking-[0.4px]"
+            style={{ backgroundColor: theme.statusBg, color: theme.accent }}
+          >
             <CheckCircle2 className="h-3 w-3" />
             Collected
           </span>
-          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-saveful-semibold text-[11px] uppercase" style={{ backgroundColor: theme.statusBg, color: theme.accent }}>
-            <ListingIcon src={theme.categoryIcon} className="h-3.5 w-3.5" />
+          <span
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-saveful-semibold text-[10px] uppercase tracking-[0.4px]"
+            style={{ backgroundColor: theme.statusBg, color: theme.accent }}
+          >
+            <ListingIcon src={theme.categoryIcon} className="h-3 w-3" />
             {theme.categoryLabel}
           </span>
         </div>
 
-        <div className="mt-3">
-          <CardHeadline primary="Listing collected" secondary="Your surplus was picked up successfully" />
-        </div>
+        <CardHeadline primary="Listing collected" secondary="Your surplus was picked up successfully" />
 
         {item.providerRating != null || item.claimantRating != null ? (
-          <div className="mt-3 space-y-1.5">
+          <div className="space-y-1.5">
             <RatingSummary rating={item.providerRating} variant="star" label="Your rating" note={item.ratingNote} color={theme.accent} />
             <RatingSummary rating={item.claimantRating} variant="apple" label="Partner rating" />
           </div>
         ) : null}
 
-        <div className="my-4 h-px bg-[#EFE8DC]" />
+        <div className="h-px bg-[#EFE8DC]" />
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: theme.statusBg }}>
-              <ListingIcon src={LISTING_ICONS.calendar} className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-saveful text-[10px] uppercase tracking-[0.14em] text-gray-400">Collected on</p>
-              <p className="font-saveful-semibold text-sm text-gray-900">
-                {item.collectedDate ? formatCollectedDate(item.collectedDate) : "—"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: theme.statusBg }}>
-              <ListingIcon src={LISTING_ICONS.items} className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="font-saveful text-[10px] uppercase tracking-[0.14em] text-gray-400">
-                {item.audience === "animals" ? "Feed" : "Food"}
-              </p>
-              <p className="font-saveful-semibold text-sm text-gray-900">{item.quantityKg} kg</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl border px-3 py-2" style={{ backgroundColor: theme.lightBg, borderColor: `${theme.accent}35` }}>
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: theme.statusBg }}>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <DetailTile
+            theme={theme}
+            icon={LISTING_ICONS.calendar}
+            label="Collected on"
+            value={item.collectedDate ? formatCollectedDate(item.collectedDate) : "—"}
+          />
+          <DetailTile
+            theme={theme}
+            icon={LISTING_ICONS.items}
+            label={item.audience === "animals" ? "Feed" : "Food"}
+            value={`${item.quantityKg} kg`}
+          />
+          <div
+            className="col-span-2 flex min-w-0 items-center gap-2 rounded-[10px] border px-2.5 py-2 sm:col-span-1"
+            style={{ backgroundColor: theme.lightBg, borderColor: `${theme.accent}35` }}
+          >
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]"
+              style={{ backgroundColor: theme.statusBg }}
+            >
               <ListingIcon src={impactIcon} className="h-5 w-5" />
             </span>
-            <div>
-              <p className="font-saveful-semibold text-sm" style={{ color: theme.accent }}>{impactValue}</p>
-              <p className="font-saveful text-[10px] uppercase tracking-[0.14em]" style={{ color: theme.accent }}>{impactLabel}</p>
+            <div className="min-w-0">
+              <p className="truncate font-saveful-semibold text-[13px]" style={{ color: theme.accent }}>
+                {impactValue}
+              </p>
+              <p className="font-saveful-semibold text-[9px] uppercase tracking-[0.5px]" style={{ color: theme.accent }}>
+                {impactLabel}
+              </p>
             </div>
           </div>
         </div>
 
-        {askForRating ? (
+        <div className="space-y-3">
+          {askForRating ? (
+            <button
+              type="button"
+              onClick={() => openProviderSurvey(item, "yes")}
+              className="w-full rounded-xl py-3 font-saveful-semibold text-white"
+              style={{ backgroundColor: theme.accent }}
+            >
+              Rate this collection
+            </button>
+          ) : null}
+
           <button
             type="button"
-            onClick={() => openProviderSurvey(item, "yes")}
-            className="mt-4 w-full rounded-xl py-3 font-saveful-semibold text-white"
-            style={{ backgroundColor: theme.accent }}
+            onClick={() => {
+              setSelectedImpact(item);
+              setImpactModalVisible(true);
+            }}
+            className="inline-flex items-center gap-1 font-saveful-semibold text-sm"
+            style={{ color: theme.accent }}
           >
-            Rate this collection
+            Impact details
+            <ChevronRight className="h-4 w-4" />
           </button>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedImpact(item);
-            setImpactModalVisible(true);
-          }}
-          className="mt-3 inline-flex items-center gap-1 font-saveful-semibold text-sm"
-          style={{ color: theme.accent }}
-        >
-          Impact details
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </article>
+        </div>
+      </>,
     );
   };
 
@@ -469,41 +526,42 @@ export function BusinessUpdatesView() {
         description="Track claims, pickups, and collections in one place."
       />
 
-      <div className="rounded-2xl border border-black/[0.04] bg-white px-4 py-3 font-saveful text-sm text-gray-600 shadow-sm">
-        {updates.length} active update{updates.length !== 1 ? "s" : ""} · {peopleCount} people · {animalCount} animals
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["all", "All", updates.length, null],
-            ["people", "For People", peopleCount, PEOPLE_THEME.categoryIcon],
-            ["animals", "For Animals", animalCount, ANIMAL_THEME.categoryIcon],
-          ] as const
-        ).map(([key, label, count, icon]) => {
-          const active = updateFilter === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setUpdateFilter(key)}
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 font-saveful-semibold text-sm transition",
-                active
-                  ? key === "animals"
-                    ? "border-orange-300 bg-[#FFF6EC] text-orange-800"
-                    : "border-[#3A7E52]/30 bg-[#E8F6EC] text-[#3A7E52]"
-                  : "border-black/[0.06] bg-white text-gray-600 hover:bg-[#F7F6F2]",
-              )}
-            >
-              {icon ? <ListingIcon src={icon} className="h-4 w-4" /> : null}
-              {label}
-              <span className={cn("rounded-full px-1.5 text-xs tabular-nums", active ? "bg-white/70" : "bg-[#F7F6F2] text-gray-400")}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="font-saveful text-sm text-gray-600">
+          {updates.length} active update{updates.length !== 1 ? "s" : ""} · {peopleCount} people · {animalCount} animals
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["all", "All", updates.length, null],
+              ["people", "For People", peopleCount, PEOPLE_THEME.categoryIcon],
+              ["animals", "For Animals", animalCount, ANIMAL_THEME.categoryIcon],
+            ] as const
+          ).map(([key, label, count, icon]) => {
+            const active = updateFilter === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setUpdateFilter(key)}
+                className={cn(
+                  "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 font-saveful-semibold text-sm transition",
+                  active
+                    ? key === "animals"
+                      ? "border-orange-300 bg-[#FFF6EC] text-orange-800"
+                      : "border-[#3A7E52]/30 bg-[#E8F6EC] text-[#3A7E52]"
+                    : "border-black/[0.06] bg-white text-gray-600 hover:bg-[#F7F6F2]",
+                )}
+              >
+                {icon ? <ListingIcon src={icon} className="h-4 w-4" /> : null}
+                {label}
+                <span className={cn("rounded-full px-1.5 text-xs tabular-nums", active ? "bg-white/70" : "bg-[#F7F6F2] text-gray-400")}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {loading && updates.length === 0 ? (
@@ -511,33 +569,46 @@ export function BusinessUpdatesView() {
           <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#E8E2D6] border-t-[#3A7E52]" />
         </div>
       ) : sections.length === 0 ? (
-        <div className="rounded-2xl bg-white px-6 py-16 text-center shadow-sm ring-1 ring-black/[0.04]">
-          <p className="font-saveful-semibold text-gray-700">{loadError ? "Could not load updates" : "No updates yet"}</p>
-          <p className="mt-1 font-saveful text-sm text-gray-500">
-            {loadError ?? "When your listings are claimed or collected, they'll appear here."}
-          </p>
-          {loadError ? (
-            <button
-              type="button"
-              onClick={() => {
-                setLoading(true);
-                void loadUpdates();
-              }}
-              className="mt-4 rounded-xl bg-[#3A7E52] px-4 py-2 font-saveful-semibold text-sm text-white"
-            >
-              Try again
-            </button>
-          ) : null}
+        <div className="flex min-h-[36vh] items-center justify-center">
+          <div className="w-full max-w-xl rounded-2xl bg-white px-6 py-16 text-center shadow-sm ring-1 ring-black/[0.04]">
+            <p className="font-saveful-semibold text-gray-700">{loadError ? "Could not load updates" : "No updates yet"}</p>
+            <p className="mt-1 font-saveful text-sm text-gray-500">
+              {loadError ?? "When your listings are claimed or collected, they'll appear here."}
+            </p>
+            {loadError ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setLoading(true);
+                  void loadUpdates();
+                }}
+                className="mt-4 rounded-xl bg-[#3A7E52] px-4 py-2 font-saveful-semibold text-sm text-white"
+              >
+                Try again
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="w-full space-y-7">
           {sections.map((section) => (
-            <section key={section.title} className="space-y-3">
-              <h2 className="font-saveful-semibold text-xs uppercase tracking-[0.16em] text-gray-400">{section.title}</h2>
-              <div className="space-y-3">
-                {section.data.map((item) => (
-                  <div key={item.id}>{renderCard(item)}</div>
-                ))}
+            <section key={section.title} className="w-full space-y-2.5">
+              <h2 className="font-saveful-semibold text-sm text-gray-900">{section.title === "TODAY" ? "Today" : section.title === "YESTERDAY" ? "Yesterday" : "Earlier"}</h2>
+              <div>
+                <div className="space-y-4 md:hidden">
+                  {section.data.map((item) => (
+                    <div key={item.id}>{renderCard(item)}</div>
+                  ))}
+                </div>
+                <div className="hidden md:grid md:grid-cols-2 md:items-start md:gap-4">
+                  {packUpdateColumns(section.data).map((column, index) => (
+                    <div key={column[0]?.id ?? index} className="space-y-4">
+                      {column.map((item) => (
+                        <div key={item.id}>{renderCard(item)}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             </section>
           ))}
@@ -564,25 +635,24 @@ export function BusinessUpdatesView() {
       />
 
       {detailsModalVisible ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-saveful-semibold text-lg text-gray-900">Food Items</h2>
-              <button type="button" onClick={() => setDetailsModalVisible(false)} className="font-saveful text-sm text-gray-500">
-                Close
-              </button>
-            </div>
-            <div className="space-y-3">
+        <UpdatesPortalSheet title="Food Items" onClose={() => setDetailsModalVisible(false)}>
+          {selectedItems.length ? (
+            <ul>
               {selectedItems.map((food, index) => (
-                <div key={`${food.name}-${index}`} className="flex items-center gap-3 border-b border-[#F0EBE0] pb-3 last:border-0">
-                  <span className="h-2 w-2 rounded-full bg-[#3A7E52]" />
-                  <p className="flex-1 font-saveful text-sm text-gray-900">{food.name}</p>
-                  <p className="font-saveful-semibold text-sm text-gray-500">{food.qty}</p>
-                </div>
+                <li
+                  key={`${food.name}-${index}`}
+                  className="flex items-center gap-3 border-b border-[#F3F0E8] py-2.5 last:border-0"
+                >
+                  <ListingIcon src={foodItemIcon(food.name)} className="h-7 w-7 shrink-0" />
+                  <p className="min-w-0 flex-1 font-saveful-semibold text-sm text-gray-900">{food.name}</p>
+                  <p className="font-saveful-semibold text-sm text-gray-600">{food.qty}</p>
+                </li>
               ))}
-            </div>
-          </div>
-        </div>
+            </ul>
+          ) : (
+            <p className="py-6 text-center font-saveful text-sm text-gray-500">No items available</p>
+          )}
+        </UpdatesPortalSheet>
       ) : null}
 
       {impactModalVisible && selectedImpact ? (
@@ -603,7 +673,8 @@ function ContactAction({
   accent: string;
   icon: ReactNode;
 }) {
-  const className = "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-saveful-semibold text-xs uppercase";
+  const className =
+    "inline-flex flex-1 items-center justify-center gap-1 rounded-lg border-[1.5px] bg-white px-2 py-2 font-saveful-semibold text-[10px] uppercase tracking-[0.4px]";
   if (!href) {
     return (
       <span className={cn(className, "cursor-not-allowed opacity-40")} style={{ borderColor: `${accent}70`, color: accent }}>
@@ -620,20 +691,63 @@ function ContactAction({
   );
 }
 
+function UpdatesPortalSheet({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4">
+      <button type="button" aria-label="Close" className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white px-5 pb-6 pt-3 shadow-2xl sm:rounded-2xl sm:px-6 sm:pb-5 sm:pt-5"
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#E8E2D6] sm:hidden" />
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-saveful-bold text-lg text-gray-900">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EBEBEB] text-gray-700 hover:bg-[#E0E0E0]"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="h-px bg-[#EDE8DC]" />
+        <div className="mt-3">{children}</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function ImpactDetailsModal({ item, onClose }: { item: RestaurantUpdate; onClose: () => void }) {
   const theme = getTheme(item.audience);
   const meals = item.mealsCreated ?? estimateMealsSaved(item.quantityKg);
   const co2 = item.co2Avoided ?? Math.round(item.quantityKg * 4);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-saveful-semibold text-lg text-gray-900">Impact Details</h2>
-          <button type="button" onClick={onClose} className="font-saveful text-sm text-gray-500">
-            Close
-          </button>
-        </div>
+    <UpdatesPortalSheet title="Impact Details" onClose={onClose}>
         <div className="space-y-3.5">
           <div className="inline-flex items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: theme.statusBg }}>
             <ListingIcon src={theme.categoryIcon} className="h-4 w-4" />
@@ -666,7 +780,6 @@ function ImpactDetailsModal({ item, onClose }: { item: RestaurantUpdate; onClose
             </p>
           </div>
         </div>
-      </div>
-    </div>
+    </UpdatesPortalSheet>
   );
 }

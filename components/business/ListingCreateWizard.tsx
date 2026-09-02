@@ -88,6 +88,7 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
   const [confirmedSafe, setConfirmedSafe] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [formError, setFormError] = useState("");
 
   const needsPlan = Boolean(entitlements?.billingRequired && !entitlements.entitled);
@@ -156,6 +157,7 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
   };
 
   const onSubmit = async () => {
+    if (savingRef.current) return;
     if (needsPlan) {
       router.push("/business/plans");
       return;
@@ -168,38 +170,40 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
       });
       return;
     }
-    const authUser = await listingAuthUser(user);
-    const resolvedSiteId = await resolveListingSiteId(authUser);
-    if (!resolvedSiteId) {
-      setFormError(
-        isBusinessMultiHeadOffice(authUser) || authUser?.role === "restaurant_multi"
-          ? "Your head office site is not ready yet."
-          : "Please set up your business site first.",
-      );
-      return;
-    }
-    const coords = getSitePickupCoords(authUser);
-    if (!coords) {
-      setErrors({
-        location: farm
-          ? "Your site location is not set. Set your farm address on the map from Home."
-          : "Your site location is not set. Set your business address on the map from Home.",
-      });
-      setStep(2);
-      return;
-    }
-    const best = fromDateInput(bestBefore);
-    const from = fromDateTimeLocal(pickupFrom);
-    const to = fromDateTimeLocal(pickupTo);
-    const dateErrors = getListingDateErrors(best, from, to);
-    if (hasListingDateErrors(dateErrors) || !best || !from || !to) {
-      setErrors(dateErrors);
-      setStep(2);
-      return;
-    }
+
+    savingRef.current = true;
     setSaving(true);
     setFormError("");
     try {
+      const authUser = await listingAuthUser(user);
+      const resolvedSiteId = await resolveListingSiteId(authUser);
+      if (!resolvedSiteId) {
+        setFormError(
+          isBusinessMultiHeadOffice(authUser) || authUser?.role === "restaurant_multi"
+            ? "Your head office site is not ready yet."
+            : "Please set up your business site first.",
+        );
+        return;
+      }
+      const coords = getSitePickupCoords(authUser);
+      if (!coords) {
+        setErrors({
+          location: farm
+            ? "Your site location is not set. Set your farm address on the map from Home."
+            : "Your site location is not set. Set your business address on the map from Home.",
+        });
+        setStep(2);
+        return;
+      }
+      const best = fromDateInput(bestBefore);
+      const from = fromDateTimeLocal(pickupFrom);
+      const to = fromDateTimeLocal(pickupTo);
+      const dateErrors = getListingDateErrors(best, from, to);
+      if (hasListingDateErrors(dateErrors) || !best || !from || !to) {
+        setErrors(dateErrors);
+        setStep(2);
+        return;
+      }
       const selectedFarm = farmStorage;
       await createBusinessListing({
         siteId: resolvedSiteId,
@@ -232,6 +236,7 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
     } catch (err) {
       setFormError(err instanceof ApiError || err instanceof Error ? err.message : "Could not create listing.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -730,6 +735,7 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
             <button
               type="button"
               disabled={saving || (step === 3 && needsPlan)}
+              aria-busy={saving}
               onClick={() => (step < 3 ? continueFrom(step) : void onSubmit())}
               className={cn("inline-flex h-11 items-center justify-center rounded-xl px-6 font-saveful-bold text-sm text-white disabled:opacity-50", accentFill)}
             >

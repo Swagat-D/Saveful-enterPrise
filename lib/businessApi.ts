@@ -41,7 +41,7 @@ export async function businessFetch<T>(path: string, options: FetchOptions = {})
     if (token) nextHeaders.set("Authorization", `Bearer ${token}`);
   }
 
-  const requestInit: RequestInit = { ...rest };
+  const requestInit: RequestInit = { cache: "no-store", ...rest };
   if ([...nextHeaders.keys()].length > 0) {
     requestInit.headers = nextHeaders;
   }
@@ -308,7 +308,7 @@ export function createBusinessSite(input: {
 }
 
 export function listBusinessListings(orgId: number) {
-  return businessFetch<unknown>(`/food-listings/org/${orgId}?page=1&limit=200`, { auth: true });
+  return businessFetch<unknown>(`/food-listings/org/${orgId}?page=1&limit=200&fresh=1`, { auth: true });
 }
 
 export function listBusinessSiteListings() {
@@ -416,6 +416,36 @@ export function inviteSiteManager(
     auth: true,
     body: JSON.stringify(input),
   });
+}
+
+export function addBusinessStaff(
+  siteId: number,
+  input: { firstName: string; lastName: string; email: string; password: string; phoneNumber?: string },
+) {
+  return businessFetch<{ message: string }>(`/sites/${siteId}/staff`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export type BusinessSiteStaffRow = {
+  userId: number;
+  siteRole?: string;
+  user?: {
+    id?: number;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phoneNumber?: string;
+  };
+};
+
+export function listBusinessSiteStaff(siteId: number) {
+  return businessFetch<BusinessSiteStaffRow[] | { staff?: BusinessSiteStaffRow[] }>(
+    `/sites/${siteId}/staff`,
+    { auth: true },
+  );
 }
 
 export function updateBusinessProfile(phoneNumber: string) {

@@ -170,6 +170,18 @@ export function resolveListingStatus(listing: ApiFoodListing): ListingStatus {
   else if (["collected", "completed", "verified"].includes(claimStatus)) resolved = "COLLECTED";
   else if (["pending", "confirmed", "claimed"].includes(claimStatus)) resolved = "CLAIMED";
 
+  // Collection is stored on the claim. Listing rows often stay PARTIAL/CLAIMED.
+  if (
+    (resolved === "ACTIVE" || resolved === "PARTIAL" || resolved === "CLAIMED") &&
+    listingHasCollectedClaim(listing)
+  ) {
+    const collectedKg = getCollectedClaimKg(listing);
+    const totalKg = getTotalKg(listing);
+    if (resolved === "CLAIMED" || getRemainingKg(listing) <= 0 || collectedKg + 0.001 >= totalKg) {
+      resolved = "COLLECTED";
+    }
+  }
+
   if ((resolved === "ACTIVE" || resolved === "PARTIAL") && isListingTimeWindowClosed(listing)) {
     return "EXPIRED";
   }
@@ -220,9 +232,10 @@ export function getCollectedClaimKg(listing: ApiFoodListing) {
   );
   if (collected.length === 0) return 0;
   const fromClaims = collected.reduce((sum, claim) => {
+    const qty = Number((claim as { qtyKg?: number }).qtyKg);
+    if (Number.isFinite(qty)) return sum + qty;
     const items = claim.claimItems ?? [];
-    const itemKg = items.reduce((itemSum, item) => itemSum + Number(item.qtyKg || 0), 0);
-    return sum + itemKg;
+    return sum + items.reduce((itemSum, item) => itemSum + Number(item.qtyKg || 0), 0);
   }, 0);
   return fromClaims > 0 ? fromClaims : getTotalKg(listing);
 }

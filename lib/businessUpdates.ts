@@ -110,15 +110,23 @@ function claimItems(claim: Record<string, unknown>, listing: Record<string, unkn
   });
 }
 
+function joinAddress(address?: string | null, postcode?: unknown): string | null {
+  const line = String(address || "").trim();
+  const code = String(postcode || "").trim();
+  if (!line && !code) return null;
+  if (!code) return line || null;
+  if (!line) return code;
+  if (line.includes(code)) return line;
+  return `${line}, ${code}`;
+}
+
 function locationLabel(claim: Record<string, unknown>, listing: Record<string, unknown>): string | null {
   const site = claim.claimantSite as { address?: string; postcode?: string } | undefined;
-  if (site?.address) {
-    return [site.address, site.postcode].filter(Boolean).join(", ");
-  }
+  if (site?.address) return joinAddress(site.address, site.postcode);
   const org = claim.claimantOrg as { address?: string } | undefined;
   if (org?.address) return String(org.address);
   if (typeof listing.pickupAddress === "string" && listing.pickupAddress) {
-    return [listing.pickupAddress, listing.pickupPostcode].filter(Boolean).join(", ");
+    return joinAddress(listing.pickupAddress, listing.pickupPostcode);
   }
   return null;
 }

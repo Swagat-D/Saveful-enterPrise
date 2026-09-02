@@ -249,18 +249,7 @@ export async function ensureDefaultHqSite(user: BusinessUser): Promise<BusinessS
     const fromOrg = (orgPayload.sites ?? []).filter((site) => parseLiveSiteId(site.id));
     const fromProfile = sitesFromProfile(profile);
     const live = fromOrg.length > 0 ? fromOrg : fromProfile;
-    if (live.length > 0) {
-      const defaultSite = pickDefaultSite(live);
-      if (defaultSite) {
-        const owner = getHqOwnerContact(user);
-        await updateBusinessSite(defaultSite.id, {
-          contactName: owner.name,
-          contactEmail: owner.email || undefined,
-          phoneNumber: owner.mobile || undefined,
-        }).catch(() => undefined);
-      }
-      return live;
-    }
+    if (live.length > 0) return live;
 
     if (!isBusinessMultiHeadOffice(user)) return live;
 
