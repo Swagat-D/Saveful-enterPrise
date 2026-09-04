@@ -90,13 +90,13 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
 
       {view === "login" ? (
         <>
-          <div className="mb-8 text-center">
-            <h1 className="font-saveful-bold text-[1.75rem] leading-tight text-[#1a1a1a] sm:text-[2rem]">
+          <div className="mb-5 text-center">
+            <h1 className="font-saveful-bold text-[1.6rem] leading-tight text-[#1a1a1a] sm:text-[1.75rem]">
               {config.title}
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-gray-500">{config.subtitle}</p>
+            <p className="mt-1.5 text-sm leading-snug text-gray-500">{config.subtitle}</p>
           </div>
-          <form className="space-y-5" onSubmit={handleLoginSubmit}>
+          <form className="space-y-3.5" onSubmit={handleLoginSubmit}>
             <LoginBanner tone="error" message={error} />
             <LoginBanner tone={config.initialInfo ? "success" : "info"} message={info} />
             <LoginField
@@ -151,14 +151,14 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
 
       {view === "forgot" ? (
         <>
-          <div className="mb-8 text-center">
-            <h1 className="font-saveful-bold text-[1.75rem] text-[#1a1a1a]">Request OTP</h1>
+          <div className="mb-5 text-center">
+            <h1 className="font-saveful-bold text-[1.6rem] text-[#1a1a1a]">Request OTP</h1>
             <p className="mt-2 text-sm text-gray-500">
               Enter your registered email and we’ll send a verification code.
             </p>
           </div>
           <form
-            className="space-y-5"
+            className="space-y-3.5"
             onSubmit={async (e) => {
               e.preventDefault();
               setError("");
@@ -325,7 +325,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
       ) : null}
 
       {view === "login" ? (
-        <div className="mt-8 space-y-3 text-center text-sm text-gray-500">
+        <div className="mt-5 space-y-2 text-center text-sm text-gray-500">
           {config.helperText ? <p>{config.helperText}</p> : null}
           {config.onRegister ? (
             <p>

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 export function LoginCard({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-[420px] rounded-[2rem] border border-saveful-green/35 bg-white px-8 py-10 sm:px-11 sm:py-12">
+    <div className="mx-auto w-full max-w-[420px] rounded-[2rem] border border-saveful-green/35 bg-white px-7 py-7 sm:px-8 sm:py-8">
       {children}
     </div>
   );
@@ -13,7 +13,7 @@ export function LoginCard({ children }: { children: ReactNode }) {
 
 export function LoginBrand({ badge }: { badge: string }) {
   return (
-    <div className="mb-8 text-center">
+    <div className="mb-5 text-center">
       <div className="flex justify-center">
         <Image
           src="/logo.png"
@@ -21,10 +21,10 @@ export function LoginBrand({ badge }: { badge: string }) {
           width={220}
           height={56}
           priority
-          className="h-12 w-auto object-contain sm:h-14"
+          className="h-10 w-auto object-contain sm:h-12"
         />
       </div>
-      <div className="mt-5 inline-flex rounded-md bg-[#D8E4DC] px-3 py-1 text-[11px] font-saveful-semibold uppercase tracking-[0.16em] text-saveful-green">
+      <div className="mt-3 inline-flex rounded-md bg-[#D8E4DC] px-3 py-1 text-[11px] font-saveful-semibold uppercase tracking-[0.16em] text-saveful-green">
         {badge}
       </div>
     </div>
@@ -42,7 +42,7 @@ export function LoginField({
   trailing?: ReactNode;
 }) {
   return (
-    <div className="flex w-full flex-col gap-2">
+    <div className="flex w-full flex-col gap-1.5">
       <label htmlFor={id} className="font-saveful-semibold text-sm text-[#1a1a1a]">
         {label}
       </label>
@@ -50,7 +50,7 @@ export function LoginField({
         <input
           id={id}
           className={cn(
-            "h-12 w-full rounded-lg border border-black/[0.08] bg-[#F3F2EE] px-3.5 text-[15px] text-[#1a1a1a] outline-none transition placeholder:text-gray-400 focus:border-saveful-green/40 focus:bg-white disabled:cursor-not-allowed disabled:opacity-50",
+            "h-11 w-full rounded-lg border border-black/[0.08] bg-[#F3F2EE] px-3.5 text-[15px] text-[#1a1a1a] outline-none transition placeholder:text-gray-400 focus:border-saveful-green/40 focus:bg-white disabled:cursor-not-allowed disabled:opacity-50",
             trailing ? "pr-10" : null,
             className,
           )}
@@ -75,7 +75,7 @@ export function LoginSubmit({
     <button
       type="submit"
       disabled={disabled}
-      className="h-12 w-full rounded-xl bg-saveful-green font-saveful-semibold text-white transition hover:bg-[#244d40] disabled:opacity-50"
+      className="h-11 w-full rounded-xl bg-saveful-green font-saveful-semibold text-white transition hover:bg-[#244d40] disabled:opacity-50"
     >
       {children}
     </button>
@@ -110,7 +110,7 @@ export function LoginTextLink({
 
 export function LoginFooter() {
   return (
-    <div className="mt-10 text-center text-[11px] leading-relaxed text-gray-500">
+    <div className="mt-6 text-center text-[11px] leading-relaxed text-gray-500">
       <p>Protected by Saveful Security</p>
       <p className="mt-1">
         <a

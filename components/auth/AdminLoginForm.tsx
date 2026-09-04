@@ -21,16 +21,16 @@ export function AdminLoginForm({
   return (
     <LoginCard>
       <LoginBrand badge="Admin" />
-      <div className="mb-8 text-center">
-        <h1 className="font-saveful-bold text-[1.75rem] leading-tight text-[#1a1a1a] sm:text-[2rem]">
+      <div className="mb-5 text-center">
+        <h1 className="font-saveful-bold text-[1.6rem] leading-tight text-[#1a1a1a] sm:text-[1.75rem]">
           Welcome back
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-gray-500">
+        <p className="mt-1.5 text-sm leading-snug text-gray-500">
           Sign in to access the admin workspace.
         </p>
       </div>
       <form
-        className="space-y-5"
+        className="space-y-3.5"
         onSubmit={async (event) => {
           event.preventDefault();
           setError("");
@@ -80,7 +80,7 @@ export function AdminLoginForm({
         <LoginSubmit disabled={isLoading}>{isLoading ? "Signing in..." : "Sign in"}</LoginSubmit>
       </form>
       {onBack ? (
-        <p className="mt-8 text-center text-sm text-gray-500">
+        <p className="mt-5 text-center text-sm text-gray-500">
           Not an admin?{" "}
           <LoginTextLink onClick={onBack} arrow="back">
             Back to portal selection
