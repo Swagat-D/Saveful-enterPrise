@@ -1,13 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
-import Image from "next/image";
+import { useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Label } from "../ui/label";
-import { Input } from "../ui/input";
-import { cn } from "@/lib/utils";
 import { ApiError, requestPasswordReset, resetPasswordWithOtp } from "@/lib/api";
 import type { LoginFormConfig, LoginCredentials } from "@/types/auth";
+import {
+  LoginBanner,
+  LoginBrand,
+  LoginCard,
+  LoginField,
+  LoginFooter,
+  LoginSubmit,
+  LoginTextLink,
+} from "./loginChrome";
 
 function toUserFacingAuthError(err: unknown) {
   const message = err instanceof Error ? err.message.trim() : "";
@@ -31,56 +36,16 @@ function passwordRules(password: string) {
 
 type View = "login" | "forgot" | "verify-otp" | "reset-password" | "forgot-success";
 
-function BottomGradient() {
-  return (
-    <>
-      <span className="absolute inset-x-0 -bottom-px block h-px w-full bg-gradient-to-r from-transparent via-[#A68FD9] to-transparent opacity-0 transition duration-500 group-hover/btn:opacity-100" />
-      <span className="absolute inset-x-10 -bottom-px mx-auto block h-px w-1/2 bg-gradient-to-r from-transparent via-[#F7931E] to-transparent opacity-0 blur-sm transition duration-500 group-hover/btn:opacity-100" />
-    </>
-  );
-}
-
 function PasswordToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
       onClick={onToggle}
-      className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#2D5F4F]"
+      className="text-gray-500 hover:text-saveful-green"
+      aria-label={show ? "Hide password" : "Show password"}
     >
       {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      {show ? "Hide" : "Show"}
     </button>
-  );
-}
-
-function LabelInputContainer({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return <div className={cn("flex w-full flex-col space-y-2", className)}>{children}</div>;
-}
-
-function Banner({
-  tone,
-  message,
-}: {
-  tone: "error" | "info" | "success";
-  message: string;
-}) {
-  if (!message) return null;
-  const style =
-    tone === "error"
-      ? "border-red-500 bg-red-50 text-red-700"
-      : tone === "success"
-        ? "border-saveful-green bg-saveful-green/[0.08] text-saveful-green"
-        : "border-blue-500 bg-blue-50 text-blue-700";
-  return (
-    <div className={cn("flex items-start gap-3 rounded-xl border-l-4 p-4", style)}>
-      <p className="text-sm font-medium">{message}</p>
-    </div>
   );
 }
 
@@ -103,7 +68,7 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
-  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLoginSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setInfo("");
@@ -120,71 +85,52 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
   const resetReady = passwordRules(newPassword).every((rule) => rule.ok);
 
   return (
-    <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-3xl bg-white p-8 shadow-2xl md:p-10">
-      <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-[#A68FD9]/10" />
-      <div className="pointer-events-none absolute -bottom-12 -left-12 h-24 w-24 rounded-full bg-[#E8B4D9]/10" />
-
-      {showLogo ? (
-        <div className="mb-8 flex justify-center">
-          <div className="relative h-16 w-40">
-            <Image src="/logo.png" alt="Saveful Logo" fill sizes="160px" className="object-contain" priority />
-          </div>
-        </div>
-      ) : null}
-      <div className="mb-6 flex justify-center">
-        <div className="inline-flex items-center gap-2 rounded-full bg-[#2D5F4F]/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#2D5F4F]">
-          <div className="h-2 w-2 rounded-full bg-[#2D5F4F]" />
-          {badge}
-        </div>
-      </div>
+    <LoginCard>
+      {showLogo ? <LoginBrand badge={badge} /> : null}
 
       {view === "login" ? (
         <>
           <div className="mb-8 text-center">
-            <h2 className="mb-2 text-2xl font-bold text-[#1a1a1a] md:text-3xl">{config.title}</h2>
-            <p className="text-sm text-[#6B6B6B]">{config.subtitle}</p>
+            <h1 className="font-saveful-bold text-[1.75rem] leading-tight text-[#1a1a1a] sm:text-[2rem]">
+              {config.title}
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-gray-500">{config.subtitle}</p>
           </div>
-          <form className="space-y-6" onSubmit={handleLoginSubmit}>
-            <Banner tone="error" message={error} />
-            <Banner tone={config.initialInfo ? "success" : "info"} message={info} />
-            <LabelInputContainer>
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                placeholder={config.emailPlaceholder || "Enter your email"}
-                type="email"
-                value={credentials.email}
-                onChange={(e) => setCredentials((prev) => ({ ...prev, email: e.target.value }))}
-                required
-                disabled={isLoading}
-                className="pl-4"
-              />
-            </LabelInputContainer>
-            <LabelInputContainer>
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  placeholder="••••••••"
-                  type={showPassword ? "text" : "password"}
-                  value={credentials.password}
-                  onChange={(e) =>
-                    setCredentials((prev) => ({ ...prev, password: e.target.value }))
-                  }
-                  required
-                  disabled={isLoading}
-                  className="pr-20"
-                />
+          <form className="space-y-5" onSubmit={handleLoginSubmit}>
+            <LoginBanner tone="error" message={error} />
+            <LoginBanner tone={config.initialInfo ? "success" : "info"} message={info} />
+            <LoginField
+              id="email"
+              label="Email address"
+              placeholder={config.emailPlaceholder || "Enter your email"}
+              type="email"
+              value={credentials.email}
+              onChange={(e) => setCredentials((prev) => ({ ...prev, email: e.target.value }))}
+              required
+              disabled={isLoading}
+              autoComplete="email"
+            />
+            <LoginField
+              id="password"
+              label="Password"
+              placeholder="••••••••"
+              type={showPassword ? "text" : "password"}
+              value={credentials.password}
+              onChange={(e) => setCredentials((prev) => ({ ...prev, password: e.target.value }))}
+              required
+              disabled={isLoading}
+              autoComplete="current-password"
+              trailing={
                 <PasswordToggle show={showPassword} onToggle={() => setShowPassword((value) => !value)} />
-              </div>
-            </LabelInputContainer>
+              }
+            />
             <div className="flex items-center justify-between text-sm">
-              <label className="flex cursor-pointer items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-gray-500">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-[#2D5F4F] focus:ring-[#2D5F4F]"
+                  className="h-4 w-4 rounded border-gray-300 text-saveful-green focus:ring-saveful-green"
                 />
-                <span className="text-[#6B6B6B]">Remember me</span>
+                Remember me
               </label>
               <button
                 type="button"
@@ -193,19 +139,12 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
                   setForgotEmail(credentials.email);
                   setView("forgot");
                 }}
-                className="font-medium text-[#2D5F4F] hover:text-[#4A8070]"
+                className="font-saveful-semibold text-saveful-green underline-offset-4 transition duration-200 hover:text-[#1f4438] hover:underline"
               >
                 Forgot password?
               </button>
             </div>
-            <button
-              className="group/btn relative block h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white shadow-lg transition hover:scale-[1.02] disabled:opacity-50"
-              type="submit"
-              disabled={isLoading}
-            >
-              {isLoading ? "Signing in..." : "Sign in"}
-              <BottomGradient />
-            </button>
+            <LoginSubmit disabled={isLoading}>{isLoading ? "Signing in..." : "Sign in"}</LoginSubmit>
           </form>
         </>
       ) : null}
@@ -213,13 +152,13 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
       {view === "forgot" ? (
         <>
           <div className="mb-8 text-center">
-            <h2 className="mb-2 text-2xl font-bold text-[#1a1a1a]">Request OTP</h2>
-            <p className="text-sm text-[#6B6B6B]">
+            <h1 className="font-saveful-bold text-[1.75rem] text-[#1a1a1a]">Request OTP</h1>
+            <p className="mt-2 text-sm text-gray-500">
               Enter your registered email and we’ll send a verification code.
             </p>
           </div>
           <form
-            className="space-y-6"
+            className="space-y-5"
             onSubmit={async (e) => {
               e.preventDefault();
               setError("");
@@ -231,7 +170,9 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
                 setView("verify-otp");
               } catch (err) {
                 if (err instanceof ApiError && err.status === 404) {
-                  setError("No active account for that email. If you were invited, open the activation link in your email first.");
+                  setError(
+                    "No active account for that email. If you were invited, open the activation link in your email first.",
+                  );
                 } else {
                   setError(toUserFacingAuthError(err));
                 }
@@ -240,41 +181,30 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
               }
             }}
           >
-            <Banner tone="error" message={error} />
-            <Banner tone="info" message={info} />
-            <LabelInputContainer>
-              <Label htmlFor="forgot-email">Email Address</Label>
-              <Input
-                id="forgot-email"
-                type="email"
-                value={forgotEmail}
-                onChange={(e) => setForgotEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </LabelInputContainer>
-            <button
-              className="group/btn relative block h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white"
-              type="submit"
+            <LoginBanner tone="error" message={error} />
+            <LoginBanner tone="info" message={info} />
+            <LoginField
+              id="forgot-email"
+              label="Email address"
+              type="email"
+              value={forgotEmail}
+              onChange={(e) => setForgotEmail(e.target.value)}
+              required
               disabled={isLoading}
-            >
-              {isLoading ? "Sending..." : "Send OTP"}
-              <BottomGradient />
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("login")}
-              className="mx-auto block text-sm text-[#6B6B6B] hover:text-[#2D5F4F]"
-            >
-              Back to sign in
-            </button>
+            />
+            <LoginSubmit disabled={isLoading}>{isLoading ? "Sending..." : "Send OTP"}</LoginSubmit>
+            <div className="text-center">
+              <LoginTextLink onClick={() => setView("login")} arrow="back">
+                Back to sign in
+              </LoginTextLink>
+            </div>
           </form>
         </>
       ) : null}
 
       {view === "verify-otp" ? (
         <form
-          className="space-y-6"
+          className="space-y-5"
           onSubmit={async (e) => {
             e.preventDefault();
             setError("");
@@ -286,31 +216,29 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
           }}
         >
           <div className="mb-2 text-center">
-            <h2 className="mb-2 text-2xl font-bold text-[#1a1a1a]">Verify OTP</h2>
-            <p className="text-sm text-[#6B6B6B]">
-              Enter the 6-digit OTP sent to {forgotEmail}.
-            </p>
+            <h1 className="font-saveful-bold text-[1.75rem] text-[#1a1a1a]">Verify OTP</h1>
+            <p className="mt-2 text-sm text-gray-500">Enter the 6-digit OTP sent to {forgotEmail}.</p>
           </div>
-          <Banner tone="info" message={info} />
-          <Input
+          <LoginBanner tone="info" message={info} />
+          <LoginBanner tone="error" message={error} />
+          <LoginField
+            id="otp"
+            label="Verification code"
             value={otpCode}
             onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             maxLength={6}
             className="text-center text-lg tracking-[0.3em]"
             required
           />
-          <button
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white"
-            disabled={isLoading || otpCode.length !== 6}
-          >
+          <LoginSubmit disabled={isLoading || otpCode.length !== 6}>
             {isLoading ? "Verifying..." : "Verify OTP"}
-          </button>
+          </LoginSubmit>
         </form>
       ) : null}
 
       {view === "reset-password" ? (
         <form
-          className="space-y-6"
+          className="space-y-5"
           onSubmit={async (e) => {
             e.preventDefault();
             setError("");
@@ -337,96 +265,88 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
             }
           }}
         >
-          <h2 className="text-center text-2xl font-bold text-[#1a1a1a]">Set New Password</h2>
-          <Banner tone="error" message={error} />
-          <div className="relative">
-            <Input
-              type={showNewPassword ? "text" : "password"}
-              placeholder="Enter new password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              className="pr-20"
-            />
-            <PasswordToggle show={showNewPassword} onToggle={() => setShowNewPassword((value) => !value)} />
-          </div>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-[#6B6B6B]">
+          <h1 className="text-center font-saveful-bold text-[1.75rem] text-[#1a1a1a]">
+            Set New Password
+          </h1>
+          <LoginBanner tone="error" message={error} />
+          <LoginField
+            id="new-password"
+            label="New password"
+            type={showNewPassword ? "text" : "password"}
+            placeholder="Enter new password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+            trailing={
+              <PasswordToggle
+                show={showNewPassword}
+                onToggle={() => setShowNewPassword((value) => !value)}
+              />
+            }
+          />
+          <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500">
             {passwordRules(newPassword).map((rule) => (
               <li key={rule.id} className={rule.ok ? "text-saveful-green" : undefined}>
                 {rule.ok ? "✓" : "○"} {rule.label}
               </li>
             ))}
           </ul>
-          <div className="relative">
-            <Input
-              type={showConfirmNewPassword ? "text" : "password"}
-              placeholder="Confirm new password"
-              value={confirmNewPassword}
-              onChange={(e) => setConfirmNewPassword(e.target.value)}
-              required
-              className="pr-20"
-            />
-            <PasswordToggle show={showConfirmNewPassword} onToggle={() => setShowConfirmNewPassword((value) => !value)} />
-          </div>
-          <button
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white disabled:opacity-50"
-            disabled={isLoading}
-          >
-            {isLoading ? "Resetting..." : "Reset Password"}
-          </button>
+          <LoginField
+            id="confirm-password"
+            label="Confirm password"
+            type={showConfirmNewPassword ? "text" : "password"}
+            placeholder="Confirm new password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            required
+            trailing={
+              <PasswordToggle
+                show={showConfirmNewPassword}
+                onToggle={() => setShowConfirmNewPassword((value) => !value)}
+              />
+            }
+          />
+          <LoginSubmit disabled={isLoading}>{isLoading ? "Resetting..." : "Reset Password"}</LoginSubmit>
         </form>
       ) : null}
 
       {view === "forgot-success" ? (
-        <div className="py-4 text-center">
-          <h2 className="mb-2 text-2xl font-bold text-[#1a1a1a]">Password updated</h2>
-          <p className="mb-8 text-sm text-[#6B6B6B]">You can now sign in with your new password.</p>
+        <div className="py-2 text-center">
+          <h1 className="mb-2 font-saveful-bold text-[1.75rem] text-[#1a1a1a]">Password updated</h1>
+          <p className="mb-8 text-sm text-gray-500">You can now sign in with your new password.</p>
           <button
             type="button"
             onClick={() => setView("login")}
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[#2D5F4F] to-[#4A8070] font-semibold text-white"
+            className="h-12 w-full rounded-xl bg-saveful-green font-saveful-semibold text-white transition hover:bg-[#244d40]"
           >
             Back to sign in
           </button>
         </div>
       ) : null}
 
-      {config.onRegister && view === "login" ? (
-        <p className="mt-6 text-center text-sm text-[#6B6B6B]">
-          {config.registerPrompt ?? "Don't have an account?"}{" "}
-          <button
-            type="button"
-            onClick={config.onRegister}
-            className="font-semibold text-[#2D5F4F] hover:underline"
-          >
-            {config.registerActionLabel ?? "Register now"}
-          </button>
-        </p>
+      {view === "login" ? (
+        <div className="mt-8 space-y-3 text-center text-sm text-gray-500">
+          {config.helperText ? <p>{config.helperText}</p> : null}
+          {config.onRegister ? (
+            <p>
+              {config.registerPrompt ?? "Don't have an account?"}{" "}
+              <LoginTextLink onClick={config.onRegister} arrow="forward">
+                {config.registerActionLabel ?? "Get started"}
+              </LoginTextLink>
+            </p>
+          ) : null}
+          {config.onBack ? (
+            <p>
+              {config.backPrompt ? `${config.backPrompt} ` : null}
+              <LoginTextLink onClick={config.onBack} arrow="back">
+                {config.backLabel ?? "Back to portal selection"}
+              </LoginTextLink>
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
-      {config.onBack && view === "login" ? (
-        <button
-          type="button"
-          onClick={config.onBack}
-          className="mt-6 mx-auto block text-sm text-[#6B6B6B] hover:text-[#2D5F4F]"
-        >
-          {config.backLabel ?? "Choose a different portal"}
-        </button>
-      ) : null}
-
-      <div className="mt-8 text-center">
-        <p className="text-xs text-[#6B6B6B]">
-          As well as protected by Saveful Security ·<br />
-          <a href="https://www.saveful.com/saveful-for-business-terms-conditions" 
-            target="_blank" 
-            className="font-medium text-[#2D5F4F] hover:underline">
-            Terms and Conditions {". "}
-          </a>
-          <a href="https://www.saveful.com/privacy-policy" target="_blank" className="font-medium text-[#2D5F4F] hover:underline">
-            Privacy Policy {" "}
-          </a>
-        </p>
-      </div>
-    </div>
+      <LoginFooter />
+    </LoginCard>
   );
 }

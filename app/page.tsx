@@ -5,102 +5,95 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth";
 import { useBusinessSession } from "@/lib/businessAuth";
 
-const btnPrimary =
-  "inline-flex items-center justify-center rounded-xl bg-saveful-green px-5 py-3 font-saveful-semibold text-white transition hover:bg-green-700";
-const btnSecondary =
-  "inline-flex items-center justify-center rounded-xl border border-saveful-green/20 bg-white px-5 py-3 font-saveful-semibold text-saveful-green transition hover:bg-saveful-cream/70";
-
 export default function HomePage() {
   const router = useRouter();
   const session = useSession();
   const business = useBusinessSession();
+  const enterpriseOpen = Boolean(session && session.portal !== "admin");
+  const adminOpen = session?.portal === "admin";
+  const businessOpen = Boolean(business);
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-br from-saveful-cream/40 via-white to-saveful-cream/60 px-4 py-8 md:px-8 md:py-12">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 -top-16 h-72 w-72 rounded-full bg-saveful-orange/15 blur-3xl" />
-        <div className="absolute -right-16 top-24 h-80 w-80 rounded-full bg-saveful-green/15 blur-3xl" />
-        <div className="absolute bottom-0 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-saveful-purple/10 blur-3xl" />
-      </div>
+    <main className="min-h-screen bg-white px-5 py-8 sm:px-8 sm:py-10 lg:px-12">
+      <div className="mx-auto w-full max-w-5xl">
+        <div className="flex items-end gap-3">
+          <Image
+            src="/logo.png"
+            alt="Saveful for Business"
+            width={220}
+            height={56}
+            priority
+            className="h-12 w-auto object-contain sm:h-14"
+          />
+        </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-5xl">
-        <section className="overflow-hidden rounded-3xl border border-white/50 bg-white/85 p-8 shadow-xl backdrop-blur-md md:p-12">
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-saveful-green/10 bg-white p-2 shadow-sm">
-              <Image
-                src="/logo.png"
-                alt="Saveful logo"
-                width={140}
-                height={52}
-                priority
-                className="h-auto w-auto object-contain"
-              />
-            </div>
-            <span className="rounded-full bg-saveful-green/10 px-3 py-1 font-saveful-semibold text-xs text-saveful-green">
-              Saveful for Business
-            </span>
-          </div>
+        <h1 className="mt-10 font-saveful-bold text-[2rem] leading-tight text-saveful-green sm:mt-12 sm:text-4xl lg:text-[2.75rem] lg:leading-[1.15]">
+          <span className="whitespace-nowrap">One platform. The right workspace</span>
+          <br />
+          for you.
+        </h1>
+        <p className="mt-3 font-saveful text-base text-gray-900 sm:text-lg">
+          Choose how you use Saveful for Business to continue.
+        </p>
 
-          <h1 className="max-w-2xl font-saveful-bold text-4xl leading-tight text-saveful-green md:text-5xl">
-            One workspace for your entire organisation
-          </h1>
-          <p className="mt-4 max-w-xl font-saveful text-base text-gray-600 md:text-lg">
-            Manage sites, users, surplus food recovery and impact across your organisation - all in one place
-          </p>
+        <div className="mt-10 grid gap-5 md:grid-cols-2 md:gap-6">
+          <WorkspaceCard
+            title="Enterprise organisation"
+            audience="For team members of an Enterprise organisation already set up with Saveful."
+            detail="Manage sites, users, recovery and organisation-wide impact."
+            action={enterpriseOpen ? "Continue →" : "Enterprise sign in →"}
+            onClick={() => router.push(enterpriseOpen ? "/dashboard" : "/login?portal=enterprise")}
+          />
+          <WorkspaceCard
+            title="Have surplus food?"
+            audience="For businesses and organisations with surplus food to put to good use."
+            detail="List surplus, manage collections and track your impact."
+            action={businessOpen ? "Continue →" : "Sign in or get started →"}
+            onClick={() => router.push(businessOpen ? "/business/home" : "/login?portal=business")}
+          />
+        </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {[
-              { title: "Network", copy: "Manage sites, organisational structure and access." },
-              { title: "Recovery", copy: "See surplus listings, collections and recovery pathways across your network." },
-              { title: "Insights", copy: "Measure food recovered, value saved and impact across your organisation." },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="rounded-2xl border border-saveful-green/10 bg-saveful-cream/50 p-4"
-              >
-                <p className="font-saveful-semibold text-sm text-saveful-green">{item.title}</p>
-                <p className="mt-1 font-saveful text-sm text-gray-600">{item.copy}</p>
-              </div>
-            ))}
-          </div>
-
-          {session || business ? (
-            <div className="mt-8">
-              <button
-                type="button"
-                onClick={() =>
-                  router.push(
-                    session?.portal === "admin"
-                      ? "/admin/dashboard"
-                      : session
-                        ? "/dashboard"
-                        : "/business/home",
-                  )
-                }
-                className={btnPrimary}
-              >
-                {session?.portal === "admin"
-                  ? "Open admin portal"
-                  : session
-                    ? "Open Enterprise"
-                    : "Open Business"}
-              </button>
-            </div>
-          ) : (
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              <button type="button" onClick={() => router.push("/login?portal=enterprise")} className={btnPrimary}>
-                Enterprise
-              </button>
-              <button type="button" onClick={() => router.push("/login?portal=business")} className={btnSecondary}>
-                Business
-              </button>
-              <button type="button" onClick={() => router.push("/login?portal=admin")} className={btnSecondary}>
-                Admin
-              </button>
-            </div>
-          )}
-        </section>
+        <button
+          type="button"
+          onClick={() => router.push(adminOpen ? "/admin/dashboard" : "/login?portal=admin")}
+          className="mt-8 font-saveful-semibold text-sm text-saveful-green underline-offset-4 transition hover:text-[#1f4438] hover:underline sm:text-base"
+        >
+          {adminOpen ? "Continue to admin →" : "Saveful team member? Admin Sign in →"}
+        </button>
       </div>
     </main>
+  );
+}
+
+function WorkspaceCard({
+  title,
+  audience,
+  detail,
+  action,
+  onClick,
+}: {
+  title: string;
+  audience: string;
+  detail: string;
+  action: string;
+  onClick: () => void;
+}) {
+  return (
+    <article className="flex min-h-[16rem] flex-col rounded-[1.75rem] bg-[#F4F1EA] p-6 sm:min-h-[18rem] sm:p-8">
+      <h2 className="whitespace-nowrap font-saveful-bold text-xl text-saveful-green sm:text-2xl">{title}</h2>
+      <p className="mt-3 font-saveful-semibold text-sm leading-relaxed text-saveful-green sm:text-[15px]">
+        {audience}
+      </p>
+      <p className="mt-3 font-saveful text-sm leading-relaxed text-[#6B6358] sm:text-[15px]">{detail}</p>
+      <div className="mt-auto pt-8">
+        <button
+          type="button"
+          onClick={onClick}
+          className="inline-flex h-11 items-center rounded-full border border-saveful-green bg-transparent px-5 font-saveful-semibold text-sm text-saveful-green transition hover:bg-saveful-green hover:text-white"
+        >
+          {action}
+        </button>
+      </div>
+    </article>
   );
 }

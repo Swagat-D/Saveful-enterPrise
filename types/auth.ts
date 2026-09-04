@@ -21,7 +21,9 @@ export interface LoginFormConfig {
   showLogo?: boolean;
   badge?: string;
   onBack?: () => void;
+  backPrompt?: string;
   backLabel?: string;
+  helperText?: string;
   onRegister?: () => void;
   registerPrompt?: string;
   registerActionLabel?: string;
