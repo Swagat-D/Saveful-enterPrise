@@ -203,6 +203,7 @@ export type DirectoryUser = {
   lastActiveAt: string | null;
   invitedAt: string | null;
   inviteToken: string | null;
+  invitationId?: number | null;
 };
 
 export type NetworkFilters = {

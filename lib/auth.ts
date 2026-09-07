@@ -1,5 +1,15 @@
 import { useSyncExternalStore } from "react";
-import { ACCESS_TOKEN_KEY, ApiError, getAuthProfile, loginWithPassword, onUnauthorized } from "@/lib/api";
+import {
+  ACCESS_TOKEN_KEY,
+  ApiError,
+  getAuthProfile,
+  getOrganisationSites,
+  listEnterpriseMembers,
+  loginWithPassword,
+  onUnauthorized,
+  type ApiEnterpriseUser,
+  type ApiSiteRow,
+} from "@/lib/api";
 import {
   clearSessionKeys,
   ENTERPRISE_PASS_KEY,
@@ -12,7 +22,7 @@ import {
 } from "@/lib/portalSession";
 import type { AdminLoginCredentials, LoginCredentials, PortalKind, UserRole } from "@/types/auth";
 import type { AccessScope, EnterpriseRole } from "@/types/enterprise";
-import { mapEnterpriseRole } from "@/lib/enterpriseRole";
+import { accessScopeFromUserScope, mapEnterpriseRole, scopeFromApi } from "@/lib/enterpriseRole";
 import { roleAllowsEnterprise } from "@/lib/users";
 
 function isEnterpriseAccount(input: {
@@ -167,6 +177,7 @@ export async function login(credentials: LoginCredentials) {
       portal: "enterprise",
       enterpriseRole,
       isHeadAdmin: roleAllowsEnterprise(enterpriseRole),
+      scope: await resolveEnterpriseScope(String(data.user.id), data.user.email, enterpriseRole),
     };
     persistSession(user, { token: data.accessToken });
     return user;
@@ -249,9 +260,74 @@ function persistSession(user: SessionUser, options: { token: string; password?: 
   emitSession();
 }
 
+function memberRows(payload: unknown): ApiEnterpriseUser[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const record = payload as { rows?: unknown; users?: unknown };
+    if (Array.isArray(record.rows)) return record.rows as ApiEnterpriseUser[];
+    if (Array.isArray(record.users)) return record.users as ApiEnterpriseUser[];
+  }
+  return [];
+}
+
+function siteRowsFromPayload(payload: Awaited<ReturnType<typeof getOrganisationSites>> | null): ApiSiteRow[] {
+  if (!payload) return [];
+  return payload.sites ?? (payload.site ? [payload.site] : []);
+}
+
+async function resolveEnterpriseScope(
+  userId: string,
+  email: string,
+  role: NonNullable<SessionUser["enterpriseRole"]>,
+): Promise<SessionUser["scope"]> {
+  if (role === "enterprise_super_admin" || role === "enterprise_admin") {
+    return { groupIds: null, territoryIds: null, clusterIds: null, siteIds: null };
+  }
+
+  const [membersPayload, sitesPayload] = await Promise.all([
+    listEnterpriseMembers().catch(() => null),
+    getOrganisationSites().catch(() => null),
+  ]);
+
+  const self = memberRows(membersPayload).find(
+    (row) => String(row.id) === userId || row.email?.toLowerCase() === email.toLowerCase(),
+  );
+  const fromGrants = accessScopeFromUserScope(scopeFromApi(role, self?.scopes));
+  const managedIds = siteRowsFromPayload(sitesPayload)
+    .filter((row) =>
+      (row.managers ?? []).some(
+        (manager) => String(manager.userId) === userId || manager.user?.email?.toLowerCase() === email.toLowerCase(),
+      ),
+    )
+    .map((row) => String(row.id));
+
+  const siteIds = [...new Set([...(fromGrants.siteIds ?? []), ...managedIds])];
+  if (role === "site_admin" && siteIds.length === 0) {
+    return {
+      groupIds: fromGrants.groupIds ?? [],
+      territoryIds: fromGrants.territoryIds ?? [],
+      clusterIds: fromGrants.clusterIds ?? [],
+      siteIds: siteRowsFromPayload(sitesPayload).map((row) => String(row.id)),
+    };
+  }
+
+  return {
+    groupIds: fromGrants.groupIds ?? [],
+    territoryIds: fromGrants.territoryIds ?? [],
+    clusterIds: fromGrants.clusterIds ?? [],
+    siteIds,
+  };
+}
+
 export function homePath(user: SessionUser | null) {
   if (!user) return "/login";
-  return user.portal === "admin" ? "/admin/dashboard" : "/dashboard";
+  if (user.portal === "admin") return "/admin/dashboard";
+  if (user.enterpriseRole === "site_admin") {
+    const siteIds = user.scope?.siteIds?.filter(Boolean) ?? [];
+    if (siteIds.length === 1) return `/sites/${siteIds[0]}`;
+    return "/sites";
+  }
+  return "/dashboard";
 }
 
 export function isAdminSession(user: SessionUser | null) {

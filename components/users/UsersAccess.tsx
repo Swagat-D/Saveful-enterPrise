@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MoreHorizontal, Plus, Search } from "lucide-react";
@@ -51,6 +52,8 @@ export function UsersAccess() {
   const paged = rows.slice((page - 1) * filters.pageSize, page * filters.pageSize);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"ok" | "error">("ok");
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || user.portal === "admin") return;
@@ -70,6 +73,24 @@ export function UsersAccess() {
   };
 
   const filterCount = [filters.role !== "all", filters.scope !== "all", filters.status !== "all"].filter(Boolean).length;
+
+  const handleResend = (person: DirectoryUser) => {
+    if (resendingId) return;
+    void (async () => {
+      setResendingId(person.id);
+      setNotice("");
+      const result = await resendInvitation(person.id, user?.name || "Enterprise user");
+      setMenuId(null);
+      setNoticeTone(result.ok ? "ok" : "error");
+      setNotice(
+        result.ok
+          ? `Invitation resent to ${person.email}. The previous activation link no longer works.`
+          : result.error,
+      );
+      if (result.ok) await refreshEnterpriseWorkspace({ session: user }).catch(() => undefined);
+      setResendingId(null);
+    })();
+  };
 
   return (
     <PortalShell>
@@ -100,7 +121,16 @@ export function UsersAccess() {
           </header>
 
           <div className="space-y-4 p-4 sm:p-5">
-            {notice ? <p className="font-saveful text-sm text-saveful-green">{notice}</p> : null}
+            {notice ? (
+              <p
+                className={cn(
+                  "rounded-xl px-3 py-2 font-saveful text-sm",
+                  noticeTone === "ok" ? "bg-saveful-green/10 text-saveful-green" : "bg-amber-50 text-amber-800",
+                )}
+              >
+                {notice}
+              </p>
+            ) : null}
 
             <WorkspaceSection title="Access snapshot">
               <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-4">
@@ -225,6 +255,17 @@ export function UsersAccess() {
                 </div>
               </div>
 
+              {notice ? (
+                <p
+                  className={cn(
+                    "mx-3.5 mb-2 rounded-xl px-3 py-2 font-saveful text-sm",
+                    noticeTone === "ok" ? "bg-saveful-green/10 text-saveful-green" : "bg-amber-50 text-amber-800",
+                  )}
+                >
+                  {notice}
+                </p>
+              ) : null}
+
               <div className="hidden overflow-x-auto px-3.5 pb-2 lg:block">
                 <table className="min-w-full text-left">
                   <thead>
@@ -264,13 +305,10 @@ export function UsersAccess() {
                             user={person}
                             actor={user?.name || "Enterprise user"}
                             open={menuId === person.id}
+                            busy={resendingId === person.id}
                             permissions={permissions}
-                            onToggle={() => setMenuId((current) => (current === person.id ? null : person.id))}
-                            onResend={() => {
-                              const result = resendInvitation(person.id, user?.name || "Enterprise user");
-                              setMenuId(null);
-                              setNotice(result.ok ? `Invitation resent to ${person.email}. The previous link no longer works.` : result.error);
-                            }}
+                            onOpenChange={(open) => setMenuId(open ? person.id : null)}
+                            onResend={() => handleResend(person)}
                           />
                         </td>
                       </tr>
@@ -297,13 +335,10 @@ export function UsersAccess() {
                         user={person}
                         actor={user?.name || "Enterprise user"}
                         open={menuId === person.id}
+                        busy={resendingId === person.id}
                         permissions={permissions}
-                        onToggle={() => setMenuId((current) => (current === person.id ? null : person.id))}
-                        onResend={() => {
-                          const result = resendInvitation(person.id, user?.name || "Enterprise user");
-                          setMenuId(null);
-                          setNotice(result.ok ? `Invitation resent to ${person.email}. The previous link no longer works.` : result.error);
-                        }}
+                        onOpenChange={(open) => setMenuId(open ? person.id : null)}
+                        onResend={() => handleResend(person)}
                       />
                     </div>
                   </article>
@@ -387,64 +422,143 @@ function RowMenu({
   user,
   actor,
   open,
+  busy,
   permissions,
-  onToggle,
+  onOpenChange,
   onResend,
 }: {
   user: DirectoryUser;
   actor: string;
   open: boolean;
+  busy?: boolean;
   permissions: ReturnType<typeof userPermissions>;
-  onToggle: () => void;
+  onOpenChange: (open: boolean) => void;
   onResend: () => void;
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const place = () => {
+    const button = buttonRef.current;
+    const menu = menuRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) {
+      setPos(null);
+      return;
+    }
+    const width = menu?.offsetWidth || 208;
+    const height = menu?.offsetHeight || 96;
+    const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+    const below = rect.bottom + 6;
+    const top = below + height > window.innerHeight - 8 ? Math.max(8, rect.top - height - 6) : below;
+    setPos({ top, left });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    place();
+    const frame = requestAnimationFrame(place);
+    const onDoc = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      onOpenChangeRef.current(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChangeRef.current(false);
+    };
+    const timer = window.setTimeout(() => {
+      document.addEventListener("mousedown", onDoc, true);
+    }, 0);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      document.removeEventListener("mousedown", onDoc, true);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={onToggle}
+        onClick={() => onOpenChange(!open)}
         className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/[0.06] text-gray-600 hover:bg-[#F7F6F2]"
         aria-label={`${user.name} actions`}
+        aria-expanded={open}
+        aria-haspopup="menu"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
-      {open ? (
-        <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
-          <Link href={`/users/${user.id}`} className="block px-3 py-2 font-saveful text-sm hover:bg-[#F7F6F2]">
-            View / Edit
-          </Link>
-          {permissions.resend && user.status === "invited" ? (
-            <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={onResend}>
-              Resend invitation
-            </button>
-          ) : null}
-          {permissions.deactivate && user.status === "active" ? (
-            <button
-              type="button"
-              className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-              onClick={() => {
-                setUserStatus(user.id, "deactivated", actor);
-                onToggle();
-              }}
+      {open && pos
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              style={{ top: pos.top, left: pos.left }}
+              className="fixed z-[90] w-52 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
             >
-              Deactivate
-            </button>
-          ) : null}
-          {permissions.deactivate && user.status === "deactivated" ? (
-            <button
-              type="button"
-              className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-              onClick={() => {
-                setUserStatus(user.id, "active", actor);
-                onToggle();
-              }}
-            >
-              Reactivate
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+              <Link href={`/users/${user.id}`} className="block px-3 py-2 font-saveful text-sm hover:bg-[#F7F6F2]">
+                View / Edit
+              </Link>
+              {permissions.resend && user.status === "invited" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2] disabled:opacity-60"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onResend();
+                  }}
+                >
+                  {busy ? "Sending…" : "Resend invitation"}
+                </button>
+              ) : null}
+              {permissions.deactivate && user.status === "active" ? (
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
+                  onClick={() => {
+                    setUserStatus(user.id, "deactivated", actor);
+                    onOpenChange(false);
+                  }}
+                >
+                  Deactivate
+                </button>
+              ) : null}
+              {permissions.deactivate && user.status === "deactivated" ? (
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
+                  onClick={() => {
+                    setUserStatus(user.id, "active", actor);
+                    onOpenChange(false);
+                  }}
+                >
+                  Reactivate
+                </button>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth";
+import { homePath, useSession } from "@/lib/auth";
 import { useBusinessSession } from "@/lib/businessAuth";
 
 export default function HomePage() {
@@ -40,7 +40,7 @@ export default function HomePage() {
             audience="For team members of an Enterprise organisation already set up with Saveful."
             detail="Manage sites, users, recovery and organisation-wide impact."
             action={enterpriseOpen ? "Continue →" : "Enterprise sign in →"}
-            onClick={() => router.push(enterpriseOpen ? "/dashboard" : "/login?portal=enterprise")}
+            onClick={() => router.push(enterpriseOpen ? homePath(session) : "/login?portal=enterprise")}
           />
           <WorkspaceCard
             title="Have surplus food?"

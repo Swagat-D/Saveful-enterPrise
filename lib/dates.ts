@@ -71,11 +71,14 @@ export function periodLabel(period: PeriodKey) {
 
 export function formatDisplayDate(iso?: string, month: "short" | "long" = "short") {
   if (!iso) return "—";
-  const [year, monthNum, day] = iso.split("-").map(Number);
-  return new Date(year, (monthNum || 1) - 1, day || 1).toLocaleDateString(organizationLocale(), {
+  const org = getOrganization();
+  const date = iso.includes("T") ? new Date(iso) : new Date(`${iso.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(organizationLocale(org), {
     day: "numeric",
     month,
     year: "numeric",
+    ...(iso.includes("T") ? { timeZone: org.timezone } : {}),
   });
 }
 

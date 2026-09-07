@@ -1,9 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { PortalPageShell } from "@/components/ui/Portal";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { homePath, isAdminSession, useSession } from "@/lib/auth";
 import { roleHas, type RolePermissionId } from "@/lib/permissions";
 
@@ -14,8 +16,15 @@ export function RequireCapability({
   permission: RolePermissionId;
   children: ReactNode;
 }) {
+  const router = useRouter();
   const user = useSession();
-  if (!user) return children;
+
+  useEffect(() => {
+    if (!user || isAdminSession(user) || roleHas(user, permission)) return;
+    router.replace(homePath(user));
+  }, [permission, router, user]);
+
+  if (!user) return <SavefulPageLoader message="Checking access…" />;
   if (isAdminSession(user)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAF7F0]">
@@ -37,10 +46,10 @@ export function RequireCapability({
             role or scope change.
           </p>
           <Link
-            href="/dashboard"
+            href={homePath(user)}
             className="mt-5 inline-flex h-9 items-center rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
           >
-            Back to dashboard
+            Back to your workspace
           </Link>
         </section>
       </PortalPageShell>

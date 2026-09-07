@@ -413,7 +413,7 @@ function OverviewTab({
             </div>
           </dl>
           <dl className="space-y-2">
-            <SupportRow label="Created" value={formatDisplayDate(model.createdAt)} />
+            <SupportRow label="Created" value={formatDisplayDate(model.createdAt ?? undefined)} />
             <SupportRow label="Last activity" value={model.lastActivityAt ? formatLastActivity(model.lastActivityAt) : "Never"} />
             <SupportRow label="Last login / site users" value={model.lastUserActivityAt ? formatLastActivity(model.lastUserActivityAt) : "—"} />
             <SupportRow label="Site ID" value={directory.siteCode} />
@@ -437,7 +437,7 @@ function OverviewTab({
               <ul className="space-y-1.5">
                 {model.audit.slice(0, 3).map((row) => (
                   <li key={row.id} className="font-saveful text-sm text-gray-700">
-                    {row.action} · {formatDisplayDate(row.at.slice(0, 10))}
+                    {row.action} · {formatDisplayDate(row.at)}
                   </li>
                 ))}
               </ul>

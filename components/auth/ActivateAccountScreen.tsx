@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Building2, Check, Eye, EyeOff, Lock, MapPin, Shield } from "lucide-react";
+import { StoreBadges } from "@/components/business/StoreBadges";
 import { acceptInvitation, ApiError, type InvitationPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -60,13 +61,17 @@ export function ActivateAccountScreen({
 
   const goToSignIn = () => router.replace(signInHref);
 
+  const showAppDownload = Boolean(
+    preview?.siteName || /site\s*admin/i.test(preview?.role ?? ""),
+  );
+
   useEffect(() => {
-    if (!done) return;
+    if (!done || showAppDownload) return;
     const timer = window.setTimeout(() => {
       router.replace(signInHref);
     }, 2200);
     return () => window.clearTimeout(timer);
-  }, [done, router, signInHref]);
+  }, [done, router, showAppDownload, signInHref]);
 
   const rules = passwordRules(password);
   const passwordReady = rules.every((rule) => rule.ok);
@@ -249,6 +254,17 @@ export function ActivateAccountScreen({
                   You can now sign in to {preview?.siteName ?? preview?.enterprise ?? "your account"} with the password
                   you just created.
                 </p>
+                {showAppDownload ? (
+                  <div className="mt-4 rounded-xl bg-[#F7F6F2] px-4 py-3">
+                    <p className="font-saveful-semibold text-sm text-gray-900">Download the Saveful app</p>
+                    <p className="mt-1 font-saveful text-xs leading-relaxed text-gray-500">
+                      Use the app on site to list surplus and manage collections. You can also download it after you sign in.
+                    </p>
+                    <div className="mt-3">
+                      <StoreBadges compact />
+                    </div>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={goToSignIn}
@@ -256,7 +272,9 @@ export function ActivateAccountScreen({
                 >
                   Continue to sign in
                 </button>
-                <p className="mt-3 text-center font-saveful text-xs text-gray-400">Taking you to sign in…</p>
+                {showAppDownload ? null : (
+                  <p className="mt-3 text-center font-saveful text-xs text-gray-400">Taking you to sign in…</p>
+                )}
               </div>
             </div>,
             document.body,

@@ -33,35 +33,35 @@ const childIconClass = "h-4 w-4 shrink-0 text-saveful-green";
 
 export const getEnterpriseSidebarLinks = (user: SessionUser | null = null): SidebarLink[] => {
   const links: SidebarLink[] = [];
-  if (!user || roleHas(user, "viewDashboard")) {
+  if (roleHas(user, "viewDashboard")) {
     links.push({
       label: "Dashboard",
       href: "/dashboard",
       icon: <LayoutDashboard className={iconClass} />,
     });
   }
-  if (!user || roleHas(user, "viewSites")) {
+  if (roleHas(user, "viewSites")) {
     links.push({
       label: "Sites",
       href: "/sites",
       icon: <Building2 className={iconClass} />,
     });
   }
-  if (!user || roleHas(user, "manageUsers")) {
+  if (roleHas(user, "manageUsers")) {
     links.push({
       label: "Users & Access",
       href: "/users",
       icon: <Users className={iconClass} />,
     });
   }
-  if (!user || roleHas(user, "viewActivity")) {
+  if (roleHas(user, "viewActivity")) {
     links.push({
       label: "Activity",
       href: "/activity",
       icon: <Activity className={iconClass} />,
     });
   }
-  if (!user || roleHas(user, "viewInsights")) {
+  if (roleHas(user, "viewInsights")) {
     links.push({
       label: "Insights & Reports",
       href: "/insights",
@@ -70,22 +70,22 @@ export const getEnterpriseSidebarLinks = (user: SessionUser | null = null): Side
   }
 
   const settingsChildren: SidebarLink[] = [
-    (!user || roleHas(user, "manageSettings")) && {
+    roleHas(user, "manageSettings") && {
       label: "Organisation Profile",
       href: "/settings/profile",
       icon: <Building2 className={childIconClass} />,
     },
-    (!user || roleHas(user, "manageStructure")) && {
+    roleHas(user, "manageStructure") && {
       label: "Organisation Structure",
       href: "/settings/structure",
       icon: <Network className={childIconClass} />,
     },
-    (!user || roleHas(user, "manageSettings")) && {
+    roleHas(user, "manageSettings") && {
       label: "Roles & Permissions",
       href: "/settings/roles",
       icon: <Shield className={childIconClass} />,
     },
-    (!user || roleHas(user, "manageSettings")) && {
+    roleHas(user, "manageSettings") && {
     label: "Notifications",
       href: "/settings/notifications",
       icon: <Bell className={childIconClass} />,
@@ -99,7 +99,7 @@ export const getEnterpriseSidebarLinks = (user: SessionUser | null = null): Side
       children: settingsChildren,
     });
   }
-  if (!user || roleHas(user, "viewAudit")) {
+  if (roleHas(user, "viewAudit")) {
     links.push({
       label: "Audit Log",
       href: "/audit",

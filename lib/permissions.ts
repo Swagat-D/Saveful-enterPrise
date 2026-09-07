@@ -49,7 +49,7 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
     viewAudit: false,
   },
   site_admin: {
-    viewDashboard: true,
+    viewDashboard: false,
     viewSites: true,
     manageSites: true,
     viewActivity: true,
@@ -65,7 +65,8 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
 
 export function sessionRole(user: SessionUser | null): EnterpriseRole | null {
   if (!user || user.portal === "admin") return null;
-  return user.enterpriseRole ?? (user.isHeadAdmin ? "enterprise_super_admin" : "enterprise_admin");
+  if (user.enterpriseRole) return user.enterpriseRole;
+  return user.isHeadAdmin ? "enterprise_super_admin" : null;
 }
 
 export function capabilitiesForRole(role: EnterpriseRole) {

@@ -92,7 +92,8 @@ export type EnterpriseProfileResponse = {
 };
 
 export type ApiEnterpriseUser = {
-  id: number;
+  id: number | null;
+  invitationId?: number | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -101,6 +102,7 @@ export type ApiEnterpriseUser = {
   status: "ACTIVE" | "INVITED" | "DEACTIVATED" | string;
   lastLoginAt?: string | null;
   joinedAt?: string | null;
+  invitationSentAt?: string | null;
   scopes?: Array<{
     scopeType: string;
     scopeId: number | null;
@@ -113,6 +115,7 @@ export type ApiEnterpriseInvite = {
   firstName: string;
   lastName: string;
   email: string;
+  mobile?: string | null;
   role: string;
   status: "INVITED" | string;
   invitationSentAt: string;
@@ -216,6 +219,42 @@ export function inviteEnterpriseUser(input: {
   );
 }
 
+export function updateEnterpriseUser(
+  userId: number,
+  input: { firstName?: string; lastName?: string; mobile?: string; role?: string },
+) {
+  return apiFetch<{ id: number }>(`/enterprise/users/${userId}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function setEnterpriseUserScopes(
+  userId: number,
+  scopes: Array<{ scopeType: string; scopeId?: number | null }>,
+) {
+  return apiFetch<{ id: number }>(`/enterprise/users/${userId}/scopes`, {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify({ scopes }),
+  });
+}
+
+export function resendEnterpriseInvite(invitationId: number) {
+  return apiFetch<{ message: string }>(`/enterprise/invites/${invitationId}/resend`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export function resendEnterpriseUserInvite(userId: number) {
+  return apiFetch<{ message: string }>(`/enterprise/users/${userId}/resend-invite`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
 export function assignExistingSiteAdmin(siteId: number, userId: number) {
   return apiFetch<{ message: string }>(`/sites/${siteId}/assign-admin`, {
     method: "POST",
@@ -284,6 +323,10 @@ export type AdminApiSiteRow = {
   clusterName?: string | null;
   territoryId?: number | null;
   territoryName?: string | null;
+  managers?: Array<{
+    userId: number;
+    user?: { firstName?: string; lastName?: string; email?: string; phoneNumber?: string };
+  }>;
 };
 
 export async function listAdminSites() {
@@ -694,6 +737,8 @@ export type AdminNetworkUser = EnterpriseMember & {
   organisationId: number;
   organisationName: string;
   enterpriseId?: string | null;
+  scopes?: Array<{ scopeType: string; scopeId?: number | null }>;
+  siteIds?: number[];
 };
 
 export type AdminNetworkInvite = EnterpriseInviteRow & {
@@ -787,7 +832,10 @@ export function getEnterpriseProfile() {
 }
 
 export function listEnterpriseMembers() {
-  return apiFetch<ApiEnterpriseUser[]>("/enterprise/users", { auth: true });
+  return apiFetch<{ rows: ApiEnterpriseUser[]; pagination?: { total: number } } | ApiEnterpriseUser[]>(
+    "/enterprise/users",
+    { auth: true },
+  );
 }
 
 export function listEnterpriseInvites() {

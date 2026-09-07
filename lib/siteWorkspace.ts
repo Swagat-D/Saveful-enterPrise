@@ -21,8 +21,8 @@ export function siteOperations(site: OrganizationSite) {
   const to = site.collectionTo ?? "";
   const hasHours = days.length > 0 && Boolean(from && to);
   return {
-    primaryContact: site.primaryContact || (site.hasManager ? site.managerName : "Not assigned"),
-    siteAdmin: site.hasManager ? site.managerName : "Not assigned",
+    primaryContact: site.managerName || site.primaryContact || "Not assigned",
+    siteAdmin: site.managerName || "Not assigned",
     collectionHours: hasHours ? formatCollectionHours(days, from, to) : "—",
     collectionInstructions: site.collectionInstructions?.trim() || INSTRUCTIONS[site.id] || "—",
   };

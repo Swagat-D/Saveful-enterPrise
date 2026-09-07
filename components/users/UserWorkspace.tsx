@@ -7,6 +7,7 @@ import { Check, ChevronDown, ListTree, Search, Shield, X } from "lucide-react";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { useSession } from "@/lib/auth";
+import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
 import { sessionRole, userPermissions } from "@/lib/permissions";
 import {
   ENTERPRISE_ROLES,
@@ -125,19 +126,26 @@ export function UserWorkspace({
     return { ...scope, enterprise: false };
   };
 
-  const persist = () => {
+  const persist = async () => {
     if (!role) {
       setError("Please select a role.");
       return;
     }
     const nextScope = resolvedScope();
-    const result = saveUser({ firstName, lastName, email, mobile, role, scope: nextScope }, existing?.id, session?.name || "Enterprise user");
+    setSaving(true);
+    setError("");
+    const result = await saveUser(
+      { firstName, lastName, email, mobile, role, scope: nextScope },
+      existing?.id,
+      session?.name || "Enterprise user",
+    );
     if (!result.ok) {
       setError(result.error);
       setConfirm(null);
+      setSaving(false);
       return;
     }
-    setSaving(true);
+    await refreshEnterpriseWorkspace({ session }).catch(() => undefined);
     router.push("/users");
   };
 
@@ -156,7 +164,7 @@ export function UserWorkspace({
         return;
       }
     }
-    persist();
+    void persist();
   };
 
   return (
@@ -377,8 +385,14 @@ export function UserWorkspace({
                 <button
                   type="button"
                   onClick={() => {
-                    const result = resendInvitation(existing.id, session?.name || "Enterprise user");
-                    setNotice(result.ok ? "Invitation resent. The previous activation link no longer works." : result.error);
+                    void (async () => {
+                      const result = await resendInvitation(existing.id, session?.name || "Enterprise user");
+                      setNotice(
+                        result.ok
+                          ? "Invitation resent. The previous activation link no longer works."
+                          : result.error,
+                      );
+                    })();
                   }}
                   className="inline-flex h-10 items-center rounded-xl px-3 font-saveful-semibold text-sm text-saveful-green hover:underline"
                 >
@@ -432,10 +446,11 @@ export function UserWorkspace({
               </button>
               <button
                 type="button"
-                onClick={persist}
-                className="inline-flex h-10 items-center rounded-xl bg-saveful-green px-4 font-saveful-semibold text-sm text-white"
+                onClick={() => void persist()}
+                disabled={saving}
+                className="inline-flex h-10 items-center rounded-xl bg-saveful-green px-4 font-saveful-semibold text-sm text-white disabled:opacity-60"
               >
-                Confirm changes
+                {saving ? "Saving…" : "Confirm changes"}
               </button>
             </div>
           </div>

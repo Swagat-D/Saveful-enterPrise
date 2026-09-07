@@ -204,8 +204,8 @@ export const FARM_VENUES = [
 ];
 
 export const STORE_LINKS = {
-  appStore: "https://apps.apple.com/us/app/saveful/id6460647948",
-  playStore: "https://play.google.com/store/apps/details?id=com.saveful.business.app&hl=en_IN",
+  appStore: "https://apps.apple.com/in/app/saveful-for-business/id6805761562",
+  playStore: "https://play.google.com/store/apps/details?id=com.saveful.business.app",
 };
 
 export function parseBusinessRole(value: string | undefined | null): BusinessRole | null {

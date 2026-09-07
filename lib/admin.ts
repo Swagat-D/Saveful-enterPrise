@@ -10,6 +10,7 @@ import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import { ACTIVITY_LABEL, activityStatus, formatLastActivity, isActivated } from "@/lib/networkRules";
 import { foodInsights, organisationInsights } from "@/lib/insights";
 import { foodCategoryFor, impactOverTime, PATHWAY_LABEL } from "@/lib/networkQuery";
+import { isSiteAdminRole } from "@/lib/enterpriseRole";
 import { activityForSite } from "@/lib/siteWorkspace";
 import { foodRecoveredKg, lookupLabel } from "@/lib/sitesDirectory";
 import type { ActivityStatus, PeriodKey, RecoveryPathway, RecoveryTransaction, SiteLifecycleStatus } from "@/types/enterprise";
@@ -154,6 +155,8 @@ export type AdminSite = {
   territoryLabel?: string;
   clusterLabel?: string;
   activatedAt?: string | null;
+  managerName?: string | null;
+  managerPhone?: string | null;
 };
 
 export type AdminListing = {
@@ -192,6 +195,7 @@ export type AdminOrgUser = {
   status: "Active" | "Invited" | "Deactivated";
   lastActiveAt: string | null;
   joinedAt?: string | null;
+  siteIds?: string[];
 };
 
 export type AdminOrgProfile = {
@@ -484,6 +488,10 @@ function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
     status: row.isActive ? "Active" : "Deactivated",
     lastActivityAt: row.lastActivityAt ?? null,
     createdAt: row.createdAt ?? row.activatedAt ?? null,
+    managerName: row.managers?.[0]
+      ? `${row.managers[0].user?.firstName ?? ""} ${row.managers[0].user?.lastName ?? ""}`.trim() || null
+      : null,
+    managerPhone: row.managers?.[0]?.user?.phoneNumber ?? null,
     siteCode: row.siteCode ?? undefined,
     groupId: row.groupId != null ? String(row.groupId) : null,
     territoryId: row.territoryId != null ? String(row.territoryId) : null,
@@ -539,6 +547,14 @@ function storeOrgUsers(orgId: string, members: AdminNetworkUser[], invitations: 
     status: mapMemberStatus(row.status),
     lastActiveAt: row.lastLoginAt ?? null,
     joinedAt: row.joinedAt ?? row.lastLoginAt ?? null,
+    siteIds: [
+      ...new Set([
+        ...(row.siteIds ?? []).map(String),
+        ...(row.scopes ?? [])
+          .filter((scope) => (scope.scopeType ?? "").toUpperCase() === "SITE" && scope.scopeId != null)
+          .map((scope) => String(scope.scopeId)),
+      ]),
+    ],
   }));
   const seen = new Set(mapped.map((row) => row.email.toLowerCase()));
   const invited: AdminOrgUser[] = invitations
@@ -1944,6 +1960,10 @@ export function buildOrgDetail(orgId: string, period: PeriodKey = "30") {
   };
 }
 
+function isAssignedSiteAdmin(user: AdminOrgUser, siteId: string) {
+  return isSiteAdminRole(user.role) && (user.siteIds?.includes(siteId) ?? false);
+}
+
 export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
   const site = getSite(siteId);
   if (!site) return null;
@@ -2007,7 +2027,7 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
-  const createdAt = harbour?.activatedAt ?? profile.joinedAt;
+  const createdAt = site.createdAt ?? harbour?.createdAt ?? harbour?.activatedAt ?? null;
   const recentSource = [...outbound, ...inbound]
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
     .filter((row) => inDateRange(row.occurredAt, startDate, endDate))
@@ -2128,11 +2148,17 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
           phone: harbour.mobile && harbour.mobile !== "-" ? harbour.mobile : "",
         }
       : {
-          primaryContact: profile.contactName,
-          siteAdmin: users[0]?.name ?? profile.contactName,
+          primaryContact:
+            site.managerName ||
+            listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.name ||
+            "Not assigned",
+          siteAdmin:
+            site.managerName ||
+            listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.name ||
+            "Not assigned",
           collectionHours: "—",
           collectionInstructions: "—",
-          phone: profile.contactPhone,
+          phone: site.managerPhone || "",
         },
   };
 }

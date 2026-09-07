@@ -14,6 +14,16 @@ export function scopeFromUser(user: SessionUser | null): AccessScope {
   if (!user) {
     return { siteIds: [] };
   }
+  if (user.enterpriseRole === "site_admin") {
+    return (
+      user.scope ?? {
+        groupIds: [],
+        territoryIds: [],
+        clusterIds: [],
+        siteIds: [],
+      }
+    );
+  }
   if (user.isHeadAdmin || !user.scope) {
     return {
       groupIds: null,

@@ -22,6 +22,7 @@ import {
   inviteAdminEnterpriseUser,
   listAdminEnterpriseUsers,
   inviteEnterpriseUser,
+  listEnterpriseMembers,
   updateOrganisationSite,
 } from "@/lib/api";
 import {
@@ -66,6 +67,29 @@ type FieldKey =
 
 type AssignableUser = { id: string; name: string; email: string; mobile?: string; role?: string; status?: string };
 type StructureOption = { id: string; name: string };
+
+function isAlreadyMemberError(err: unknown) {
+  const message = err instanceof Error ? err.message : "";
+  return /already a member/i.test(message);
+}
+
+async function memberIdForEmail(
+  email: string,
+  options: { isAdmin: boolean; organisationId: string },
+): Promise<number | null> {
+  const needle = email.trim().toLowerCase();
+  if (options.isAdmin && options.organisationId) {
+    const payload = await listAdminEnterpriseUsers(options.organisationId);
+    const match = (payload.users ?? []).find((row) => row.email?.toLowerCase() === needle && row.id != null);
+    return match?.id ?? null;
+  }
+  const local = listUsers().find((row) => row.email.trim().toLowerCase() === needle && /^\d+$/.test(row.id));
+  if (local) return Number(local.id);
+  const payload = await listEnterpriseMembers();
+  const rows = Array.isArray(payload) ? payload : payload.rows ?? [];
+  const match = rows.find((row) => row.email?.toLowerCase() === needle && row.id != null);
+  return match?.id ?? null;
+}
 
 function initialAdminOrganisationId(preferred?: string) {
   if (preferred && /^\d+$/.test(preferred)) return preferred;
@@ -329,8 +353,8 @@ export function SiteForm({
 
       if (values.adminMode === "invite") {
         const nextEmail = values.inviteEmail.trim().toLowerCase();
-        const sameContact = Boolean(currentEmail && nextEmail === currentEmail);
-        if (!sameContact) {
+        const alreadyThisManager = Boolean(currentManagerId && currentEmail && nextEmail === currentEmail);
+        if (!alreadyThisManager) {
           const invite = {
             firstName: values.inviteFirstName.trim(),
             lastName: values.inviteLastName.trim(),
@@ -340,8 +364,16 @@ export function SiteForm({
             siteAdminForSiteId: savedSiteId,
             scopes: [{ scopeType: "SITE", scopeId: savedSiteId }],
           };
-          if (isAdmin) await inviteAdminEnterpriseUser(organisationId, invite);
-          else await inviteEnterpriseUser(invite);
+          try {
+            if (isAdmin) await inviteAdminEnterpriseUser(organisationId, invite);
+            else await inviteEnterpriseUser(invite);
+          } catch (err) {
+            if (!isAlreadyMemberError(err)) throw err;
+            const userId = await memberIdForEmail(nextEmail, { isAdmin, organisationId });
+            if (!userId) throw err;
+            if (isAdmin) await assignAdminSiteAdmin(organisationId, savedSiteId, userId);
+            else await assignExistingSiteAdmin(savedSiteId, userId);
+          }
         }
       }
 

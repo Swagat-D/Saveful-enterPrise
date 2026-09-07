@@ -19,7 +19,7 @@ import { applyOrganization, getOrganization } from "@/lib/organization";
 import { listUnits, replaceStructure, type OrgStructureUnit } from "@/lib/orgStructure";
 import { mapEnterpriseRole, scopeFromApi } from "@/lib/enterpriseRole";
 import { replaceNetworkSites, replaceNetworkUnits } from "@/lib/network";
-import { getSession, type SessionUser } from "@/lib/auth";
+import { getSession, updateSession, type SessionUser } from "@/lib/auth";
 import { listUsers, replaceUsers } from "@/lib/users";
 import type { DirectoryUser, DirectoryUserStatus, OrganizationSite, Weekday } from "@/types/enterprise";
 
@@ -42,10 +42,16 @@ function memberToUser(row: ApiEnterpriseUser): DirectoryUser | null {
   const firstName = row.firstName?.trim() ?? "";
   const lastName = row.lastName?.trim() ?? "";
   const name = `${firstName} ${lastName}`.trim() || email;
-  if (!email && !name && row.id == null) return null;
+  if (!email && !name && row.id == null && row.invitationId == null) return null;
   const role = mapEnterpriseRole(row.role);
+  const id =
+    row.id != null
+      ? String(row.id)
+      : row.invitationId != null
+        ? `invite-${row.invitationId}`
+        : String(email || name);
   return {
-    id: String(row.id ?? email ?? name),
+    id,
     firstName: firstName || name,
     lastName,
     name,
@@ -55,8 +61,9 @@ function memberToUser(row: ApiEnterpriseUser): DirectoryUser | null {
     scope: scopeFromApi(role, row.scopes),
     status: toStatus(row.status ?? "ACTIVE"),
     lastActiveAt: row.lastLoginAt ?? null,
-    invitedAt: row.joinedAt ?? null,
+    invitedAt: row.invitationSentAt ?? row.joinedAt ?? null,
     inviteToken: null,
+    invitationId: row.invitationId ?? null,
   };
 }
 
@@ -83,7 +90,17 @@ function sessionToUser(session: SessionUser): DirectoryUser {
     email: session.email,
     mobile: "",
     role: session.enterpriseRole ?? "enterprise_super_admin",
-    scope: { enterprise: true },
+    scope: session.scope
+      ? {
+          enterprise: session.scope.siteIds == null && session.isHeadAdmin,
+          groupIds: session.scope.groupIds ?? undefined,
+          territoryIds: session.scope.territoryIds ?? undefined,
+          clusterIds: session.scope.clusterIds ?? undefined,
+          siteIds: session.scope.siteIds ?? undefined,
+        }
+      : session.isHeadAdmin
+        ? { enterprise: true }
+        : { siteIds: [] },
     status: "active",
     lastActiveAt: null,
     invitedAt: null,
@@ -126,13 +143,14 @@ function inviteToUser(row: ApiEnterpriseInvite): DirectoryUser | null {
     lastName,
     name,
     email,
-    mobile: "",
+    mobile: row.mobile ?? "",
     role,
     scope: scopeFromApi(role, row.scopes),
     status: "invited",
     lastActiveAt: null,
     invitedAt: row.invitationSentAt,
     inviteToken: null,
+    invitationId: row.id ?? null,
   };
 }
 
@@ -164,11 +182,12 @@ function toSite(row: ApiSiteRow): OrganizationSite {
   const created = row.createdAt ?? null;
   const contactName = row.contactName && row.contactName !== "not provided" ? row.contactName : "";
   const manager = row.managers?.[0]?.user;
-  const managerName = manager ? `${manager.firstName ?? ""} ${manager.lastName ?? ""}`.trim() : contactName;
+  const assignedName = manager ? `${manager.firstName ?? ""} ${manager.lastName ?? ""}`.trim() : "";
   const managerEmail = manager?.email && manager.email !== "not provided" ? manager.email : "";
   const managerMobile = manager?.phoneNumber && manager.phoneNumber !== "not provided" ? manager.phoneNumber : "";
   const contactEmail = row.contactEmail && row.contactEmail !== "not provided" ? row.contactEmail : "";
   const contactMobile = row.phoneNumber && row.phoneNumber !== "not provided" ? row.phoneNumber : "";
+  const managerName = assignedName || contactName;
   return {
     id: String(row.id),
     siteCode: row.siteCode || `SITE-${String(row.id).padStart(6, "0")}`,
@@ -178,9 +197,9 @@ function toSite(row: ApiSiteRow): OrganizationSite {
     postCode: row.postcode ?? "",
     managerName,
     managerUserId: row.managers?.[0]?.userId != null ? String(row.managers[0].userId) : null,
-    email: contactEmail || managerEmail,
-    mobile: contactMobile || managerMobile,
-    hasManager: Boolean(row.managers?.length || contactName || contactEmail || managerEmail),
+    email: managerEmail || contactEmail,
+    mobile: managerMobile || contactMobile,
+    hasManager: Boolean(row.managers?.length || managerName || managerEmail || contactEmail),
     isDefault: false,
     groupId: row.groupId != null ? String(row.groupId) : null,
     clusterId: row.clusterId != null ? String(row.clusterId) : null,
@@ -206,7 +225,7 @@ function directoryFromLive(
   siteRows: ApiSiteRow[],
   session?: SessionUser | null,
 ) {
-  const members = asList<ApiEnterpriseUser>(membersPayload, ["users", "members", "data"]);
+  const members = asList<ApiEnterpriseUser>(membersPayload, ["rows", "users", "members", "data"]);
   const invites = asList<ApiEnterpriseInvite>(invitesPayload, ["invitations", "invites", "data"]);
   const fromSites = siteRows.flatMap((row) => [
     ...(row.managers ?? []).map((manager) => managerToUser(manager, row.id)),
@@ -391,6 +410,29 @@ export async function refreshEnterpriseWorkspace(options?: { session?: SessionUs
 
   replaceNetworkSites(siteRows.map(toSite));
   applyEnterpriseStructure({ listedGroups, listedClusters, listedTerritories, structure });
+
+  if (session?.enterpriseRole === "site_admin") {
+    const assigned = siteRows
+      .filter((row) =>
+        (row.managers ?? []).some(
+          (manager) =>
+            String(manager.userId) === session.id ||
+            manager.user?.email?.toLowerCase() === session.email.toLowerCase(),
+        ),
+      )
+      .map((row) => String(row.id));
+    const siteIds = assigned.length ? assigned : siteRows.map((row) => String(row.id));
+    if (siteIds.length && JSON.stringify(session.scope?.siteIds ?? []) !== JSON.stringify(siteIds)) {
+      updateSession({
+        scope: {
+          groupIds: session.scope?.groupIds ?? [],
+          territoryIds: session.scope?.territoryIds ?? [],
+          clusterIds: session.scope?.clusterIds ?? [],
+          siteIds,
+        },
+      });
+    }
+  }
 
   const organisationId = auth?.organisation?.id ?? getOrganization().organisationId;
   void refreshEnterpriseActivity(organisationId).catch(() => undefined);

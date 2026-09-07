@@ -67,12 +67,15 @@ function LoginScreen() {
                   ? "This account is already active. Sign in to continue."
                   : "",
               helperText: "Need access to your organisation? Contact your Enterprise Administrator.",
+              registerPrompt: "Don't have an account?",
+              registerActionLabel: "Register now",
+              onRegister: () => router.push("/business/register"),
               backPrompt: "Not an Enterprise user?",
               backLabel: "Back to portal selection",
               onBack: () => router.push("/"),
               onSubmit: async (credentials) => {
-                await login(credentials);
-                router.push("/dashboard");
+                const user = await login(credentials);
+                router.replace(homePath(user));
               },
             }}
           />
@@ -86,7 +89,7 @@ function LoginScreen() {
               emailPlaceholder: "you@yourbusiness.com",
               badge: "Surplus food",
               registerPrompt: "Don't have an account?",
-              registerActionLabel: "Get started",
+              registerActionLabel: "Register now",
               onRegister: () => router.push("/business/register"),
               backPrompt: "Not here to list surplus?",
               backLabel: "Back to portal selection",

@@ -1,9 +1,19 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import {
+  ApiError,
+  inviteEnterpriseUser,
+  listEnterpriseInvites,
+  resendEnterpriseInvite,
+  resendEnterpriseUserInvite,
+  setEnterpriseUserScopes,
+  updateEnterpriseUser,
+} from "@/lib/api";
 import { appendAudit } from "@/lib/audit";
 import { recordNotificationEvent } from "@/lib/notifications";
 import { daysAgoIso } from "@/lib/dates";
+import { siteAdminForSiteId, scopesToApi, toApiRole } from "@/lib/enterpriseRole";
 import { demoClusters, demoGroups, demoNetworkSites, demoTerritories } from "@/lib/network";
 import { listUnits } from "@/lib/orgStructure";
 import { formatLastActivity } from "@/lib/networkRules";
@@ -421,7 +431,66 @@ function hasScope(scope: UserAccessScope) {
   return Boolean(scope.groupIds?.length || scope.territoryIds?.length || scope.clusterIds?.length || scope.siteIds?.length);
 }
 
-export function saveUser(
+function apiErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
+function memberIdFromUserId(id: string) {
+  return /^\d+$/.test(id) ? Number(id) : null;
+}
+
+function invitationIdFromUserId(id: string) {
+  const match = /^invite-(\d+)$/.exec(id);
+  return match ? Number(match[1]) : null;
+}
+
+function applyLocalUserUpdate(
+  existingId: string,
+  next: {
+    firstName: string;
+    lastName: string;
+    name: string;
+    email: string;
+    mobile: string;
+    role: EnterpriseRole;
+    scope: UserAccessScope;
+  },
+  actor: string,
+) {
+  const previous = getUser(existingId);
+  users = users.map((user) => (user.id === existingId ? { ...user, ...next } : user));
+  const change = previous ? describeAccessChange(previous, { role: next.role, scope: next.scope }) : null;
+  const changes = [
+    previous && previous.name !== next.name ? { field: "Name", previous: previous.name, next: next.name } : null,
+    previous && previous.email !== next.email ? { field: "Email", previous: previous.email, next: next.email } : null,
+    previous && previous.mobile !== next.mobile
+      ? { field: "Mobile", previous: previous.mobile || "—", next: next.mobile || "—" }
+      : null,
+    ...(change?.changes ?? []),
+  ].filter((item): item is { field: string; previous: string; next: string } => Boolean(item));
+  appendAudit({
+    actor,
+    action: change ? "Changed role or scope" : "Updated user",
+    area: "users",
+    entity: next.name,
+    detail: `${next.name} · ${roleLabel(next.role)} · ${formatScope(next.scope)}${change ? ` · ${change.detail}` : ""}`,
+    changes,
+  });
+  if (change) {
+    recordNotificationEvent({
+      kind: "access_changed",
+      title: "User access changed",
+      detail: `${next.name} · ${change.detail}`,
+      href: `/users/${existingId}`,
+      siteIds: [...(next.scope.siteIds ?? []), ...(previous?.scope.siteIds ?? [])],
+    });
+  }
+  emit();
+}
+
+export async function saveUser(
   draft: {
     firstName: string;
     lastName: string;
@@ -451,67 +520,68 @@ export function saveUser(
   }
   if (!hasScope(scope)) return { ok: false as const, error: "Assign at least one Group, Territory, Cluster or Site." };
 
-  if (existingId) {
-    const previous = getUser(existingId);
-    users = users.map((user) =>
-      user.id === existingId ? { ...user, firstName, lastName, name, email, mobile, role: draft.role, scope } : user,
-    );
-    const change = previous ? describeAccessChange(previous, { role: draft.role, scope }) : null;
-    const changes = [
-      previous && previous.name !== name ? { field: "Name", previous: previous.name, next: name } : null,
-      previous && previous.email !== email ? { field: "Email", previous: previous.email, next: email } : null,
-      previous && previous.mobile !== mobile ? { field: "Mobile", previous: previous.mobile || "—", next: mobile || "—" } : null,
-      ...(change?.changes ?? []),
-    ].filter((item): item is { field: string; previous: string; next: string } => Boolean(item));
+  const memberId = existingId ? memberIdFromUserId(existingId) : null;
+
+  try {
+    if (existingId && memberId) {
+      await updateEnterpriseUser(memberId, {
+        firstName,
+        lastName,
+        mobile,
+        role: toApiRole(draft.role),
+      });
+      if (!roleAllowsEnterprise(draft.role)) {
+        await setEnterpriseUserScopes(memberId, scopesToApi(scope));
+      }
+      applyLocalUserUpdate(existingId, { firstName, lastName, name, email, mobile, role: draft.role, scope }, actor);
+      return { ok: true as const, id: existingId };
+    }
+
+    const invited = await inviteEnterpriseUser({
+      firstName,
+      lastName,
+      email,
+      mobile: mobile || undefined,
+      role: toApiRole(draft.role),
+      siteAdminForSiteId: siteAdminForSiteId(draft.role, scope),
+      scopes: scopesToApi(scope),
+    });
+    const id = `invite-${invited.invitation.id}`;
+    const user: DirectoryUser = {
+      id,
+      firstName,
+      lastName,
+      name,
+      email,
+      mobile,
+      role: draft.role,
+      scope,
+      status: "invited",
+      lastActiveAt: null,
+      invitedAt: daysAgoIso(0),
+      inviteToken: token(),
+      invitationId: invited.invitation.id,
+    };
+    users = [user, ...users.filter((item) => item.id !== existingId)];
     appendAudit({
       actor,
-      action: change ? "Changed role or scope" : "Updated user",
+      action: existingId ? "Resent invitation" : "User added",
       area: "users",
       entity: name,
-      detail: `${name} · ${roleLabel(draft.role)} · ${formatScope(scope)}${change ? ` · ${change.detail}` : ""}`,
-      changes,
+      detail: `${name} · ${roleLabel(draft.role)} · ${formatScope(scope)}`,
+      changes: [
+        { field: "Role", previous: "—", next: roleLabel(draft.role) },
+        { field: "Scope", previous: "—", next: formatScope(scope) },
+      ],
     });
-    if (change) {
-      recordNotificationEvent({
-        kind: "access_changed",
-        title: "User access changed",
-        detail: `${name} · ${change.detail}`,
-        href: `/users/${existingId}`,
-        siteIds: [...(scope.siteIds ?? []), ...(previous?.scope.siteIds ?? [])],
-      });
-    }
     emit();
-    return { ok: true as const, id: existingId };
+    return { ok: true as const, id };
+  } catch (err) {
+    return {
+      ok: false as const,
+      error: apiErrorMessage(err, existingId ? "The user could not be saved." : "The invitation could not be sent."),
+    };
   }
-
-  const user: DirectoryUser = {
-    id: `u-${Date.now()}`,
-    firstName,
-    lastName,
-    name,
-    email,
-    mobile,
-    role: draft.role,
-    scope,
-    status: "invited",
-    lastActiveAt: null,
-    invitedAt: daysAgoIso(0),
-    inviteToken: token(),
-  };
-  users = [user, ...users];
-  appendAudit({
-    actor,
-    action: "User added",
-    area: "users",
-    entity: name,
-    detail: `${name} · ${roleLabel(draft.role)} · ${formatScope(scope)}`,
-    changes: [
-      { field: "Role", previous: "—", next: roleLabel(draft.role) },
-      { field: "Scope", previous: "—", next: formatScope(scope) },
-    ],
-  });
-  emit();
-  return { ok: true as const, id: user.id };
 }
 
 export function setUserStatus(id: string, status: "active" | "deactivated", actor = "Enterprise user") {
@@ -544,12 +614,64 @@ export function setUserStatus(id: string, status: "active" | "deactivated", acto
   emit();
 }
 
-export function resendInvitation(id: string, actor = "Enterprise user") {
-  const current = getUser(id);
-  if (!current || current.status !== "invited") return { ok: false as const, error: "Only invited users can be resent an invitation." };
+function inviteRows(payload: unknown): Array<{ id?: number; email?: string }> {
+  if (Array.isArray(payload)) return payload as Array<{ id?: number; email?: string }>;
+  if (payload && typeof payload === "object") {
+    const record = payload as { invitations?: unknown; invites?: unknown };
+    if (Array.isArray(record.invitations)) return record.invitations as Array<{ id?: number; email?: string }>;
+    if (Array.isArray(record.invites)) return record.invites as Array<{ id?: number; email?: string }>;
+  }
+  return [];
+}
+
+async function pendingInvitationId(user: DirectoryUser) {
+  if (user.invitationId) return user.invitationId;
+  const fromId = invitationIdFromUserId(user.id);
+  if (fromId) return fromId;
+  const payload = await listEnterpriseInvites().catch(() => null);
+  const match = inviteRows(payload).find((row) => row.email?.trim().toLowerCase() === user.email.trim().toLowerCase());
+  return match?.id ?? null;
+}
+
+function markInvitationResent(id: string, next?: Partial<DirectoryUser>) {
   users = users.map((user) =>
-    user.id === id ? { ...user, invitedAt: daysAgoIso(0), inviteToken: token() } : user,
+    user.id === id ? { ...user, invitedAt: daysAgoIso(0), inviteToken: token(), ...next } : user,
   );
+}
+
+export async function resendInvitation(id: string, actor = "Enterprise user") {
+  const current = getUser(id);
+  if (!current || current.status !== "invited") {
+    return { ok: false as const, error: "Only invited users can be resent an invitation." };
+  }
+
+  try {
+    const invitationId = await pendingInvitationId(current);
+    const memberId = memberIdFromUserId(current.id);
+
+    if (invitationId) {
+      await resendEnterpriseInvite(invitationId);
+      markInvitationResent(id, { invitationId });
+    } else if (memberId) {
+      await resendEnterpriseUserInvite(memberId);
+      markInvitationResent(id);
+    } else {
+      const invited = await inviteEnterpriseUser({
+        firstName: current.firstName,
+        lastName: current.lastName,
+        email: current.email,
+        mobile: current.mobile || undefined,
+        role: toApiRole(current.role),
+        siteAdminForSiteId: siteAdminForSiteId(current.role, current.scope),
+        scopes: scopesToApi(current.scope),
+      });
+      const nextId = `invite-${invited.invitation.id}`;
+      markInvitationResent(id, { id: nextId, invitationId: invited.invitation.id });
+    }
+  } catch (err) {
+    return { ok: false as const, error: apiErrorMessage(err, "The invitation could not be resent.") };
+  }
+
   appendAudit({
     actor,
     action: "Resent invitation",

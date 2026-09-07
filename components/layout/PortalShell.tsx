@@ -73,6 +73,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         organizationLogo: organization.logoDataUrl,
         roleLabel: accessFromSession(user).roleName,
         links: getEnterpriseSidebarLinks(user),
+        homeHref: homePath(user),
+        portalCaption: user.enterpriseRole === "site_admin" ? "Site workspace" : "Enterprise",
+        showAppDownload: user.enterpriseRole === "site_admin",
         onLogout: () => {
           logout();
           router.replace("/");
