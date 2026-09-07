@@ -248,17 +248,21 @@ export function ActivateAccountScreen({
                   <Check className="h-5 w-5" strokeWidth={2.5} />
                 </span>
                 <h2 id="activation-success-title" className="mt-4 font-saveful-bold text-xl text-gray-900">
-                  Account activated
+                  Congratulations - your account is activated
                 </h2>
                 <p className="mt-2 font-saveful text-sm leading-relaxed text-gray-600">
-                  You can now sign in to {preview?.siteName ?? preview?.enterprise ?? "your account"} with the password
-                  you just created.
+                  You can now sign in online to{" "}
+                  {preview?.siteName ?? preview?.enterprise ?? "your account"} with your credentials. You can
+                  continue to operate Saveful for Business via this portal.
                 </p>
                 {showAppDownload ? (
                   <div className="mt-4 rounded-xl bg-[#F7F6F2] px-4 py-3">
-                    <p className="font-saveful-semibold text-sm text-gray-900">Download the Saveful app</p>
+                    <p className="font-saveful-semibold text-sm text-gray-900">
+                      You can also Download the Saveful for Business app
+                    </p>
                     <p className="mt-1 font-saveful text-xs leading-relaxed text-gray-500">
-                      Use the app on site to list surplus and manage collections. You can also download it after you sign in.
+                      Use the app on site to list surplus and add other team members. Any activity via the app
+                      will be registered through the online portal and vice-versa.
                     </p>
                     <div className="mt-3">
                       <StoreBadges compact />

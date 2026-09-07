@@ -313,6 +313,9 @@ export type AdminApiSiteRow = {
   siteName: string;
   siteCode?: string | null;
   address: string;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  phoneNumber?: string | null;
   isActive: boolean;
   createdAt?: string | null;
   activatedAt?: string | null;
@@ -324,7 +327,7 @@ export type AdminApiSiteRow = {
   territoryId?: number | null;
   territoryName?: string | null;
   managers?: Array<{
-    userId: number;
+    userId?: number | null;
     user?: { firstName?: string; lastName?: string; email?: string; phoneNumber?: string };
   }>;
 };
@@ -702,6 +705,9 @@ export type EnterpriseInviteRow = {
   status: "INVITED" | string;
   invitationSentAt?: string;
   expiresAt?: string;
+  siteAdminForSiteId?: number | null;
+  siteIds?: number[];
+  scopes?: Array<{ scopeType: string; scopeId?: number | null }>;
 };
 
 export type EnterpriseDetail = {

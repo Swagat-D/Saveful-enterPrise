@@ -73,6 +73,25 @@ function isAlreadyMemberError(err: unknown) {
   return /already a member/i.test(message);
 }
 
+function isAssignableMemberId(id: string) {
+  return /^\d+$/.test(id);
+}
+
+function isDeactivatedStatus(status?: string) {
+  return /deactivat/i.test(status ?? "");
+}
+
+function memberForEmail(email: string, users: AssignableUser[]) {
+  const needle = email.trim().toLowerCase();
+  if (!needle || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(needle)) return undefined;
+  return users.find(
+    (user) =>
+      isAssignableMemberId(user.id) &&
+      !isDeactivatedStatus(user.status) &&
+      user.email.trim().toLowerCase() === needle,
+  );
+}
+
 async function memberIdForEmail(
   email: string,
   options: { isAdmin: boolean; organisationId: string },
@@ -126,6 +145,7 @@ export function SiteForm({
   });
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [formError, setFormError] = useState("");
+  const [existingMemberNotice, setExistingMemberNotice] = useState("");
   const [draftNotice, setDraftNotice] = useState("");
   const [draftSaving, setDraftSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -164,15 +184,17 @@ export function SiteForm({
       return;
     }
     let cancelled = false;
-    const mapMembers = (members: Array<{ id: number; firstName: string; lastName: string; email: string; mobile?: string | null; roleLabel?: string; role?: string; status?: string }>) =>
-      members.map((member) => ({
-        id: String(member.id),
-        name: `${member.firstName} ${member.lastName}`.trim() || member.email,
-        email: member.email,
-        mobile: member.mobile ?? "",
-        role: member.roleLabel || member.role,
-        status: member.status,
-      }));
+    const mapMembers = (members: Array<{ id?: number | null; firstName: string; lastName: string; email: string; mobile?: string | null; roleLabel?: string; role?: string; status?: string }>) =>
+      members
+        .filter((member) => member.id != null && isAssignableMemberId(String(member.id)))
+        .map((member) => ({
+          id: String(member.id),
+          name: `${member.firstName} ${member.lastName}`.trim() || member.email,
+          email: member.email,
+          mobile: member.mobile ?? "",
+          role: member.roleLabel || member.role,
+          status: member.status,
+        }));
 
     listAdminEnterpriseUsers(organisationId)
       .then((payload) => {
@@ -214,6 +236,22 @@ export function SiteForm({
       cancelled = true;
     };
   }, [isAdmin, organisationId]);
+
+  useEffect(() => {
+    if (values.adminMode !== "invite") return;
+    const existing = memberForEmail(values.inviteEmail, assignableUsers);
+    if (!existing) return;
+    setValues((prev) => ({
+      ...prev,
+      adminMode: "existing",
+      existingUserId: existing.id,
+    }));
+    setExistingMemberNotice(
+      `${existing.name} (${existing.email}) is already in this Enterprise. They are selected as an existing user. No invitation email will be sent — the site will be assigned to them.`,
+    );
+    // Only re-check when the member list loads (e.g. after picking an Enterprise).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- invite field edits are handled in onChange
+  }, [assignableUsers]);
 
   useEffect(() => {
     if (mode !== "edit" || !site || isAdmin) return;
@@ -293,15 +331,20 @@ export function SiteForm({
       next.address = "Choose an address from search or use your location so we can save coordinates.";
     }
     if (values.adminMode === "invite") {
-      if (!values.inviteFirstName.trim()) next.inviteFirstName = "Please enter a first name.";
-      if (!values.inviteLastName.trim()) next.inviteLastName = "Please enter a last name.";
-      if (!values.inviteEmail.trim()) next.inviteEmail = "Please enter an email so we can send the invitation.";
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.inviteEmail.trim())) {
-        next.inviteEmail = "Please enter a valid email address.";
-      }
-      if (!values.inviteMobile.trim()) next.inviteMobile = "Please enter a mobile number.";
-      else if (!/\d{6,}/.test(values.inviteMobile.replace(/\D/g, ""))) {
-        next.inviteMobile = "Please enter a valid mobile number.";
+      const existing = memberForEmail(values.inviteEmail, assignableUsers);
+      if (existing) {
+        next.inviteEmail = `${existing.name} is already in this Enterprise. Choose them under Existing user — no invitation email will be sent.`;
+      } else {
+        if (!values.inviteFirstName.trim()) next.inviteFirstName = "Please enter a first name.";
+        if (!values.inviteLastName.trim()) next.inviteLastName = "Please enter a last name.";
+        if (!values.inviteEmail.trim()) next.inviteEmail = "Please enter an email so we can send the invitation.";
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.inviteEmail.trim())) {
+          next.inviteEmail = "Please enter a valid email address.";
+        }
+        if (!values.inviteMobile.trim()) next.inviteMobile = "Please enter a mobile number.";
+        else if (!/\d{6,}/.test(values.inviteMobile.replace(/\D/g, ""))) {
+          next.inviteMobile = "Please enter a valid mobile number.";
+        }
       }
     }
     if (values.adminMode === "existing" && !values.existingUserId) {
@@ -316,8 +359,38 @@ export function SiteForm({
     return next;
   };
 
+  const adoptExistingMember = (member: AssignableUser) => {
+    setValues((prev) => ({
+      ...prev,
+      adminMode: "existing",
+      existingUserId: member.id,
+    }));
+    setExistingMemberNotice(
+      `${member.name} (${member.email}) is already in this Enterprise. They are selected as an existing user. No invitation email will be sent — the site will be assigned to them.`,
+    );
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.inviteEmail;
+      delete next.inviteFirstName;
+      delete next.inviteLastName;
+      delete next.inviteMobile;
+      delete next.existingUserId;
+      return next;
+    });
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (values.adminMode === "invite") {
+      const existing = memberForEmail(values.inviteEmail, assignableUsers);
+      if (existing) {
+        adoptExistingMember(existing);
+        setFormError(
+          "This email already belongs to a member. Choose them under Existing user. The site has not been created.",
+        );
+        return;
+      }
+    }
     const nextErrors = validate();
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
@@ -326,6 +399,7 @@ export function SiteForm({
 
     setSaving(true);
     setFormError("");
+    setExistingMemberNotice("");
     let savedSiteId = createdSiteId;
     try {
       const payload = siteFormToApiInput(values, {
@@ -518,6 +592,11 @@ export function SiteForm({
                 {draftNotice}
               </p>
             ) : null}
+            {existingMemberNotice ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 font-saveful text-sm text-amber-800">
+                {existingMemberNotice}
+              </p>
+            ) : null}
             <p className="font-saveful text-xs text-gray-500">
               Fields marked <span className="font-saveful-semibold text-red-500">*</span> are required. Everything else is optional.
             </p>
@@ -534,6 +613,7 @@ export function SiteForm({
                         update("territoryId", "");
                         update("clusterId", "");
                         update("existingUserId", "");
+                        setExistingMemberNotice("");
                         clearError("organisationId");
                       }}
                       className={inputClass}
@@ -649,7 +729,17 @@ export function SiteForm({
                     <button
                       key={id}
                       type="button"
-                      onClick={() => update("adminMode", id)}
+                      onClick={() => {
+                        update("adminMode", id);
+                        if (id === "invite") {
+                          const existing = memberForEmail(values.inviteEmail, assignableUsers);
+                          setExistingMemberNotice(
+                            existing
+                              ? `${existing.name} is already in this Enterprise. Change the email to invite someone new, or use Existing user so no invitation is sent.`
+                              : "",
+                          );
+                        }
+                      }}
                       className={cn(
                         "h-8 rounded-lg px-3 font-saveful-semibold text-xs transition",
                         values.adminMode === id
@@ -696,12 +786,22 @@ export function SiteForm({
                         type="email"
                         value={values.inviteEmail}
                         onChange={(event) => {
-                          update("inviteEmail", event.target.value);
+                          const nextEmail = event.target.value;
+                          update("inviteEmail", nextEmail);
                           clearError("inviteEmail");
+                          const existing = memberForEmail(nextEmail, assignableUsers);
+                          if (existing) adoptExistingMember(existing);
+                          else setExistingMemberNotice("");
                         }}
                         placeholder="name@organisation.com"
                         className={inputClass}
                       />
+                      {memberForEmail(values.inviteEmail, assignableUsers) ? (
+                        <p className="mt-1.5 font-saveful text-xs text-amber-700">
+                          This email already belongs to a member. Use Existing user to assign the site
+                          without sending another invitation.
+                        </p>
+                      ) : null}
                     </Field>
                     <Field label="Mobile" htmlFor="inviteMobile" required error={errors.inviteMobile}>
                       <input
@@ -732,6 +832,14 @@ export function SiteForm({
                         onChange={(event) => {
                           update("existingUserId", event.target.value);
                           clearError("existingUserId");
+                          const selected = assignableUsers.find((item) => item.id === event.target.value);
+                          if (selected) {
+                            setExistingMemberNotice(
+                              `${selected.name} is already in this Enterprise. No invitation email will be sent — the site will be assigned to them.`,
+                            );
+                          } else {
+                            setExistingMemberNotice("");
+                          }
                         }}
                         className={inputClass}
                       >
@@ -756,10 +864,15 @@ export function SiteForm({
                       ) : null}
                     </Field>
                     {siteContact ? (
-                      <div className="grid grid-cols-1 gap-3 rounded-xl bg-[#F7F6F2] px-3.5 py-3 sm:grid-cols-3">
-                        <ContactPreview label="Name" value={siteContact.name} />
-                        <ContactPreview label="Email" value={siteContact.email} />
-                        <ContactPreview label="Mobile" value={siteContact.mobile} />
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 gap-3 rounded-xl bg-[#F7F6F2] px-3.5 py-3 sm:grid-cols-3">
+                          <ContactPreview label="Name" value={siteContact.name} />
+                          <ContactPreview label="Email" value={siteContact.email} />
+                          <ContactPreview label="Mobile" value={siteContact.mobile} />
+                        </div>
+                        <p className="font-saveful text-xs text-gray-500">
+                          No invitation email will be sent. This site will be assigned to their existing account.
+                        </p>
                       </div>
                     ) : (
                       <p className="font-saveful text-xs text-gray-500">

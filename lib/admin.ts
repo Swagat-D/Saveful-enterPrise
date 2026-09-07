@@ -157,6 +157,8 @@ export type AdminSite = {
   activatedAt?: string | null;
   managerName?: string | null;
   managerPhone?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
 };
 
 export type AdminListing = {
@@ -479,6 +481,11 @@ export async function refreshOrganisations() {
 }
 
 function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
+  const manager = row.managers?.[0]?.user;
+  const assignedName = manager
+    ? `${manager.firstName ?? ""} ${manager.lastName ?? ""}`.trim()
+    : "";
+  const contactName = row.contactName && row.contactName !== "not provided" ? row.contactName.trim() : "";
   return {
     id: String(row.id),
     orgId: String(row.organisationId),
@@ -488,10 +495,10 @@ function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
     status: row.isActive ? "Active" : "Deactivated",
     lastActivityAt: row.lastActivityAt ?? null,
     createdAt: row.createdAt ?? row.activatedAt ?? null,
-    managerName: row.managers?.[0]
-      ? `${row.managers[0].user?.firstName ?? ""} ${row.managers[0].user?.lastName ?? ""}`.trim() || null
-      : null,
-    managerPhone: row.managers?.[0]?.user?.phoneNumber ?? null,
+    managerName: assignedName || contactName || null,
+    managerPhone: manager?.phoneNumber || row.phoneNumber || null,
+    contactName: contactName || null,
+    contactEmail: row.contactEmail && row.contactEmail !== "not provided" ? row.contactEmail : null,
     siteCode: row.siteCode ?? undefined,
     groupId: row.groupId != null ? String(row.groupId) : null,
     territoryId: row.territoryId != null ? String(row.territoryId) : null,
@@ -568,6 +575,15 @@ function storeOrgUsers(orgId: string, members: AdminNetworkUser[], invitations: 
       status: "Invited" as const,
       lastActiveAt: null,
       joinedAt: row.invitationSentAt ?? null,
+      siteIds: [
+        ...new Set([
+          ...(row.siteIds ?? []).map(String),
+          ...(row.siteAdminForSiteId != null ? [String(row.siteAdminForSiteId)] : []),
+          ...(row.scopes ?? [])
+            .filter((scope) => (scope.scopeType ?? "").toUpperCase() === "SITE" && scope.scopeId != null)
+            .map((scope) => String(scope.scopeId)),
+        ]),
+      ],
     }));
   remoteOrgUsers[orgId] = [...mapped, ...invited];
 }
@@ -2009,16 +2025,25 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
     };
   });
   const users = listOrgUsers(org.id)
-    .filter((row, index) => {
-      if (!harbour) return index < 6;
-      const assigned = demoUsers.find((user) => user.id === row.id)?.siteId;
-      return assigned === site.id || assigned === "all";
+    .filter((row) => {
+      if (harbour) {
+        const assigned = demoUsers.find((user) => user.id === row.id)?.siteId;
+        return assigned === site.id || assigned === "all";
+      }
+      if (row.siteIds?.includes(site.id)) return true;
+      if (site.contactEmail && row.email.toLowerCase() === site.contactEmail.toLowerCase()) return true;
+      return false;
     })
     .map((row) => {
       const assigned = demoUsers.find((user) => user.id === row.id);
+      const enterpriseWide =
+        assigned?.site === "All sites" ||
+        row.role === "Organisation admin" ||
+        row.role === "Head admin" ||
+        /super admin|enterprise admin/i.test(row.role);
       return {
         ...row,
-        scope: assigned?.site === "All sites" || row.role === "Organisation admin" || row.role === "Head admin" ? "All sites" : site.name,
+        scope: enterpriseWide && !row.siteIds?.includes(site.id) ? "All sites" : site.name,
       };
     });
   const lastUserActivityAt =
@@ -2149,12 +2174,14 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
         }
       : {
           primaryContact:
+            site.contactName ||
             site.managerName ||
             listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.name ||
             "Not assigned",
           siteAdmin:
             site.managerName ||
             listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.name ||
+            site.contactName ||
             "Not assigned",
           collectionHours: "—",
           collectionInstructions: "—",
