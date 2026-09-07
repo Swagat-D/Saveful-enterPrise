@@ -146,6 +146,7 @@ export function SiteForm({
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [formError, setFormError] = useState("");
   const [existingMemberNotice, setExistingMemberNotice] = useState("");
+  const [pickingUser, setPickingUser] = useState(false);
   const [draftNotice, setDraftNotice] = useState("");
   const [draftSaving, setDraftSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -246,6 +247,7 @@ export function SiteForm({
       adminMode: "existing",
       existingUserId: existing.id,
     }));
+    setPickingUser(false);
     setExistingMemberNotice(
       `${existing.name} (${existing.email}) is already in this Enterprise. They are selected as an existing user. No invitation email will be sent — the site will be assigned to them.`,
     );
@@ -365,6 +367,7 @@ export function SiteForm({
       adminMode: "existing",
       existingUserId: member.id,
     }));
+    setPickingUser(false);
     setExistingMemberNotice(
       `${member.name} (${member.email}) is already in this Enterprise. They are selected as an existing user. No invitation email will be sent — the site will be assigned to them.`,
     );
@@ -374,6 +377,40 @@ export function SiteForm({
       delete next.inviteFirstName;
       delete next.inviteLastName;
       delete next.inviteMobile;
+      delete next.existingUserId;
+      return next;
+    });
+  };
+
+  const startInviteNewUser = () => {
+    setValues((prev) => ({
+      ...prev,
+      adminMode: "invite",
+      existingUserId: "",
+      inviteFirstName: "",
+      inviteLastName: "",
+      inviteEmail: "",
+      inviteMobile: "",
+    }));
+    setPickingUser(false);
+    setExistingMemberNotice("");
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.inviteEmail;
+      delete next.inviteFirstName;
+      delete next.inviteLastName;
+      delete next.inviteMobile;
+      delete next.existingUserId;
+      return next;
+    });
+  };
+
+  const clearExistingUser = () => {
+    setValues((prev) => ({ ...prev, existingUserId: "" }));
+    setPickingUser(true);
+    setExistingMemberNotice("");
+    setErrors((prev) => {
+      const next = { ...prev };
       delete next.existingUserId;
       return next;
     });
@@ -614,6 +651,7 @@ export function SiteForm({
                         update("clusterId", "");
                         update("existingUserId", "");
                         setExistingMemberNotice("");
+                        setPickingUser(true);
                         clearError("organisationId");
                       }}
                       className={inputClass}
@@ -730,15 +768,12 @@ export function SiteForm({
                       key={id}
                       type="button"
                       onClick={() => {
-                        update("adminMode", id);
                         if (id === "invite") {
-                          const existing = memberForEmail(values.inviteEmail, assignableUsers);
-                          setExistingMemberNotice(
-                            existing
-                              ? `${existing.name} is already in this Enterprise. Change the email to invite someone new, or use Existing user so no invitation is sent.`
-                              : "",
-                          );
+                          startInviteNewUser();
+                          return;
                         }
+                        update("adminMode", id);
+                        setPickingUser(!values.existingUserId);
                       }}
                       className={cn(
                         "h-8 rounded-lg px-3 font-saveful-semibold text-xs transition",
@@ -825,59 +860,104 @@ export function SiteForm({
 
                 {values.adminMode === "existing" ? (
                   <div className="space-y-3">
-                    <Field label="User" htmlFor="existingUserId" required error={errors.existingUserId}>
-                      <select
-                        id="existingUserId"
-                        value={values.existingUserId}
-                        onChange={(event) => {
-                          update("existingUserId", event.target.value);
-                          clearError("existingUserId");
-                          const selected = assignableUsers.find((item) => item.id === event.target.value);
-                          if (selected) {
-                            setExistingMemberNotice(
-                              `${selected.name} is already in this Enterprise. No invitation email will be sent — the site will be assigned to them.`,
-                            );
-                          } else {
-                            setExistingMemberNotice("");
-                          }
-                        }}
-                        className={inputClass}
-                      >
-                        <option value="">Select a user</option>
-                        {assignableUsers.map((member) => (
-                          <option key={member.id} value={member.id} disabled={member.status === "DEACTIVATED"}>
-                            {member.name} · {member.email}
-                            {member.role ? ` · ${member.role}` : ""}
-                            {member.status && member.status !== "ACTIVE" ? ` · ${member.status.toLowerCase()}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      {isAdmin && !organisationId ? (
-                        <p className="mt-1.5 font-saveful text-xs text-gray-500">
-                          Select an Enterprise first to see its users.
-                        </p>
-                      ) : null}
-                      {isAdmin && organisationId && assignableUsers.length === 0 ? (
-                        <p className="mt-1.5 font-saveful text-xs text-gray-500">
-                          No users in this Enterprise yet. Invite a new Site Admin instead.
-                        </p>
-                      ) : null}
-                    </Field>
-                    {siteContact ? (
-                      <div className="space-y-2">
+                    {siteContact && !pickingUser ? (
+                      <div className="space-y-3">
                         <div className="grid grid-cols-1 gap-3 rounded-xl bg-[#F7F6F2] px-3.5 py-3 sm:grid-cols-3">
                           <ContactPreview label="Name" value={siteContact.name} />
                           <ContactPreview label="Email" value={siteContact.email} />
                           <ContactPreview label="Mobile" value={siteContact.mobile} />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPickingUser(true)}
+                            className="h-8 rounded-lg bg-[#F7F6F2] px-3 font-saveful-semibold text-xs text-gray-700 hover:bg-[#EFEDE6]"
+                          >
+                            Change
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearExistingUser}
+                            className="h-8 rounded-lg bg-[#F7F6F2] px-3 font-saveful-semibold text-xs text-gray-700 hover:bg-[#EFEDE6]"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            type="button"
+                            onClick={startInviteNewUser}
+                            className="h-8 rounded-lg bg-saveful-green/10 px-3 font-saveful-semibold text-xs text-saveful-green hover:bg-saveful-green/15"
+                          >
+                            Add new user
+                          </button>
                         </div>
                         <p className="font-saveful text-xs text-gray-500">
                           No invitation email will be sent. This site will be assigned to their existing account.
                         </p>
                       </div>
                     ) : (
-                      <p className="font-saveful text-xs text-gray-500">
-                        Their name, email and mobile become the site contact.
-                      </p>
+                      <>
+                        <Field label="User" htmlFor="existingUserId" required error={errors.existingUserId}>
+                          <select
+                            id="existingUserId"
+                            value={values.existingUserId}
+                            onChange={(event) => {
+                              const nextId = event.target.value;
+                              update("existingUserId", nextId);
+                              clearError("existingUserId");
+                              const selected = assignableUsers.find((item) => item.id === nextId);
+                              if (selected) {
+                                setPickingUser(false);
+                                setExistingMemberNotice(
+                                  `${selected.name} is already in this Enterprise. No invitation email will be sent — the site will be assigned to them.`,
+                                );
+                              } else {
+                                setExistingMemberNotice("");
+                              }
+                            }}
+                            className={inputClass}
+                          >
+                            <option value="">Select a user</option>
+                            {assignableUsers.map((member) => (
+                              <option key={member.id} value={member.id} disabled={member.status === "DEACTIVATED"}>
+                                {member.name} · {member.email}
+                                {member.role ? ` · ${member.role}` : ""}
+                                {member.status && member.status !== "ACTIVE" ? ` · ${member.status.toLowerCase()}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                          {isAdmin && !organisationId ? (
+                            <p className="mt-1.5 font-saveful text-xs text-gray-500">
+                              Select an Enterprise first to see its users.
+                            </p>
+                          ) : null}
+                          {isAdmin && organisationId && assignableUsers.length === 0 ? (
+                            <p className="mt-1.5 font-saveful text-xs text-gray-500">
+                              No users in this Enterprise yet. Invite a new Site Admin instead.
+                            </p>
+                          ) : null}
+                        </Field>
+                        <div className="flex flex-wrap gap-2">
+                          {values.existingUserId ? (
+                            <button
+                              type="button"
+                              onClick={() => setPickingUser(false)}
+                              className="h-8 rounded-lg bg-[#F7F6F2] px-3 font-saveful-semibold text-xs text-gray-700 hover:bg-[#EFEDE6]"
+                            >
+                              Cancel
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={startInviteNewUser}
+                            className="h-8 rounded-lg bg-saveful-green/10 px-3 font-saveful-semibold text-xs text-saveful-green hover:bg-saveful-green/15"
+                          >
+                            Add new user
+                          </button>
+                        </div>
+                        <p className="font-saveful text-xs text-gray-500">
+                          Their name, email and mobile become the site contact.
+                        </p>
+                      </>
                     )}
                   </div>
                 ) : null}

@@ -153,6 +153,7 @@ export function AddressPicker({
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
+              setSearchError("");
               onChange({ ...value, address: event.target.value });
             }}
             onKeyDown={(event) => {

@@ -67,9 +67,6 @@ function LoginScreen() {
                   ? "This account is already active. Sign in to continue."
                   : "",
               helperText: "Need access to your organisation? Contact your Enterprise Administrator.",
-              registerPrompt: "Don't have an account?",
-              registerActionLabel: "Register now",
-              onRegister: () => router.push("/business/register"),
               backPrompt: "Not an Enterprise user?",
               backLabel: "Back to portal selection",
               onBack: () => router.push("/"),
