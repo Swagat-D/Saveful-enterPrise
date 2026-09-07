@@ -418,6 +418,11 @@ function StatusPill({ status }: { status: DirectoryUserStatus }) {
   );
 }
 
+function eventInside(event: Event, ...nodes: Array<HTMLElement | null>) {
+  const path = event.composedPath();
+  return nodes.some((node) => node && path.includes(node));
+}
+
 function RowMenu({
   user,
   actor,
@@ -435,66 +440,63 @@ function RowMenu({
   onOpenChange: (open: boolean) => void;
   onResend: () => void;
 }) {
+  const router = useRouter();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
 
   const place = () => {
     const button = buttonRef.current;
     const menu = menuRef.current;
     if (!button) return;
     const rect = button.getBoundingClientRect();
-    if (rect.width < 1 || rect.height < 1) {
-      setPos(null);
-      return;
-    }
     const width = menu?.offsetWidth || 208;
-    const height = menu?.offsetHeight || 96;
+    const height = menu?.offsetHeight || 88;
     const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
     const below = rect.bottom + 6;
     const top = below + height > window.innerHeight - 8 ? Math.max(8, rect.top - height - 6) : below;
-    setPos({ top, left });
+    setPos((current) => (current.top === top && current.left === left ? current : { top, left }));
   };
 
   useLayoutEffect(() => {
-    if (!open) {
-      setPos(null);
-      return;
-    }
+    if (!open) return;
     place();
     const frame = requestAnimationFrame(place);
-    const onDoc = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (eventInside(event, buttonRef.current, menuRef.current)) return;
       onOpenChangeRef.current(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onOpenChangeRef.current(false);
     };
     const timer = window.setTimeout(() => {
-      document.addEventListener("mousedown", onDoc, true);
-    }, 0);
+      document.addEventListener("pointerdown", onPointerDown);
+    }, 150);
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
     return () => {
       cancelAnimationFrame(frame);
       window.clearTimeout(timer);
-      document.removeEventListener("mousedown", onDoc, true);
+      document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
     };
   }, [open]);
+
+  const itemClass = "block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2] disabled:opacity-60";
 
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => onOpenChange(!open)}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onOpenChange(!open);
+        }}
         className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/[0.06] text-gray-600 hover:bg-[#F7F6F2]"
         aria-label={`${user.name} actions`}
         aria-expanded={open}
@@ -502,25 +504,35 @@ function RowMenu({
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
-      {open && pos
+      {open
         ? createPortal(
             <div
               ref={menuRef}
               role="menu"
               style={{ top: pos.top, left: pos.left }}
-              className="fixed z-[90] w-52 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg"
-              onMouseDown={(event) => event.stopPropagation()}
+              className="fixed z-[100] w-52 rounded-xl border border-gray-100 bg-white py-1 shadow-lg"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => event.stopPropagation()}
             >
-              <Link href={`/users/${user.id}`} className="block px-3 py-2 font-saveful text-sm hover:bg-[#F7F6F2]">
+              <button
+                type="button"
+                role="menuitem"
+                className={itemClass}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onOpenChange(false);
+                  router.push(`/users/${user.id}`);
+                }}
+              >
                 View / Edit
-              </Link>
+              </button>
               {permissions.resend && user.status === "invited" ? (
                 <button
                   type="button"
+                  role="menuitem"
                   disabled={busy}
-                  className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2] disabled:opacity-60"
-                  onMouseDown={(event) => event.stopPropagation()}
+                  className={itemClass}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -533,8 +545,11 @@ function RowMenu({
               {permissions.deactivate && user.status === "active" ? (
                 <button
                   type="button"
-                  className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-                  onClick={() => {
+                  role="menuitem"
+                  className={itemClass}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
                     setUserStatus(user.id, "deactivated", actor);
                     onOpenChange(false);
                   }}
@@ -545,8 +560,11 @@ function RowMenu({
               {permissions.deactivate && user.status === "deactivated" ? (
                 <button
                   type="button"
-                  className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
-                  onClick={() => {
+                  role="menuitem"
+                  className={itemClass}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
                     setUserStatus(user.id, "active", actor);
                     onOpenChange(false);
                   }}
