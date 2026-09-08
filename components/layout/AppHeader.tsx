@@ -68,9 +68,9 @@ export function AppHeader({
       </div>
 
       {showAppDownload ? (
-        <div className="order-3 flex w-full min-w-0 items-center justify-center gap-2 md:order-none md:w-auto md:flex-1">
-          <p className="hidden font-saveful text-xs text-gray-500 sm:block">
-          Download the app for the mobile experience in the palm of your hand
+        <div className="hidden min-w-0 items-center justify-center gap-2 md:flex md:flex-1">
+          <p className="font-saveful text-xs text-gray-500">
+            Download the app for the mobile experience in the palm of your hand
           </p>
           <StoreBadges compact />
         </div>
