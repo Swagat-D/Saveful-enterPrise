@@ -408,10 +408,12 @@ export async function refreshEnterpriseWorkspace(options?: { session?: SessionUs
     });
   }
 
-  replaceNetworkSites(siteRows.map(toSite));
+  if (sites) {
+    replaceNetworkSites(siteRows.map(toSite));
+  }
   applyEnterpriseStructure({ listedGroups, listedClusters, listedTerritories, structure });
 
-  if (session?.enterpriseRole === "site_admin") {
+  if (sites && session?.enterpriseRole === "site_admin") {
     const assigned = siteRows
       .filter((row) =>
         (row.managers ?? []).some(
@@ -427,9 +429,9 @@ export async function refreshEnterpriseWorkspace(options?: { session?: SessionUs
     if (nextIds.length && JSON.stringify(currentIds) !== JSON.stringify(nextIds)) {
       updateSession({
         scope: {
-          groupIds: session.scope?.groupIds ?? [],
-          territoryIds: session.scope?.territoryIds ?? [],
-          clusterIds: session.scope?.clusterIds ?? [],
+          groupIds: null,
+          territoryIds: null,
+          clusterIds: null,
           siteIds,
         },
       });

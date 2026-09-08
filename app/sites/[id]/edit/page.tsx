@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import { AppPage } from "@/components/layout/AppPage";
 import { SiteForm } from "@/components/sites/SiteForm";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,15 @@ export default function EditSitePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+
+  return (
+    <Suspense fallback={<SavefulPageLoader message="Loading site…" />}>
+      <EditSite id={id} />
+    </Suspense>
+  );
+}
+
+function EditSite({ id }: { id: string }) {
   const user = useSession();
   const scope = scopeFromUser(user);
   const permissions = sitePermissions(user);
@@ -27,10 +36,12 @@ export default function EditSitePage({
 
   useEffect(() => {
     if (!/^\d+$/.test(id)) {
+      setRemoteSite(null);
       setLoading(false);
       return;
     }
     let cancelled = false;
+    setLoading(true);
     getOrganisationSiteDetails(Number(id))
       .then((detail) => {
         if (cancelled) return;
@@ -56,7 +67,7 @@ export default function EditSitePage({
   const site = remoteSite ?? cached ?? null;
   const allowed = Boolean(site && (remoteSite || siteInScope(site, scope)));
 
-  if (!user || (loading && !site)) {
+  if (!user || loading) {
     return (
       <AppPage title="Edit site">
         <SavefulPageLoader message="Loading site…" />
@@ -64,13 +75,20 @@ export default function EditSitePage({
     );
   }
 
-  if (!site || !allowed || !permissions.edit) {
+  if (!site || !allowed) {
     return (
-      <AppPage
-        title={!site || !allowed ? "Site not found" : "You cannot edit this site"}
-        description="This action is limited by your role and scope."
-      >
-        <Button href={site ? `/sites/${site.id}` : "/sites"} variant="secondary">
+      <AppPage title="Site not found" description="This site is outside your scope or does not exist.">
+        <Button href="/sites" variant="secondary">
+          Back to sites
+        </Button>
+      </AppPage>
+    );
+  }
+
+  if (!permissions.edit) {
+    return (
+      <AppPage title="You cannot edit this site" description="This action is limited by your role and scope.">
+        <Button href={`/sites/${site.id}`} variant="secondary">
           Back
         </Button>
       </AppPage>

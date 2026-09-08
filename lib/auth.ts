@@ -318,9 +318,9 @@ async function resolveEnterpriseScope(
   ];
 
   return {
-    groupIds: fromGrants.groupIds ?? [],
-    territoryIds: fromGrants.territoryIds ?? [],
-    clusterIds: fromGrants.clusterIds ?? [],
+    groupIds: role === "site_admin" ? null : fromGrants.groupIds ?? [],
+    territoryIds: role === "site_admin" ? null : fromGrants.territoryIds ?? [],
+    clusterIds: role === "site_admin" ? null : fromGrants.clusterIds ?? [],
     siteIds,
   };
 }
@@ -328,11 +328,7 @@ async function resolveEnterpriseScope(
 export function homePath(user: SessionUser | null) {
   if (!user) return "/login";
   if (user.portal === "admin") return "/admin/dashboard";
-  if (user.enterpriseRole === "site_admin") {
-    const siteIds = user.scope?.siteIds?.filter(Boolean) ?? [];
-    if (siteIds.length === 1) return `/sites/${siteIds[0]}`;
-    return "/sites";
-  }
+  if (user.enterpriseRole === "site_admin") return "/sites";
   return "/dashboard";
 }
 

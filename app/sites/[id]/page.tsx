@@ -74,7 +74,7 @@ function SiteDetail({ id }: { id: string }) {
     router.replace(`/sites/${fallbackId}`);
   }, [fallbackId, loading, router, site]);
 
-  if (!user || (loading && !site) || (!site && fallbackId)) {
+  if (!user || loading || (!site && fallbackId)) {
     return <SavefulPageLoader message="Loading site…" />;
   }
 

@@ -15,14 +15,13 @@ export function scopeFromUser(user: SessionUser | null): AccessScope {
     return { siteIds: [] };
   }
   if (user.enterpriseRole === "site_admin") {
-    return (
-      user.scope ?? {
-        groupIds: [],
-        territoryIds: [],
-        clusterIds: [],
-        siteIds: [],
-      }
-    );
+    const siteIds = user.scope?.siteIds?.filter(Boolean) ?? [];
+    return {
+      groupIds: null,
+      territoryIds: null,
+      clusterIds: null,
+      siteIds: siteIds.length ? siteIds : null,
+    };
   }
   if (user.isHeadAdmin || !user.scope) {
     return {
@@ -43,11 +42,13 @@ function allows(allowed: string[] | null | undefined, value?: string | null) {
 
 export function siteInScope(site: OrganizationSite, scope: AccessScope) {
   const current = resolveSite(site);
+  if (scope.siteIds != null) {
+    return scope.siteIds.includes(current.id);
+  }
   return (
     allows(scope.groupIds, current.groupId) &&
     allows(scope.territoryIds, current.territoryId) &&
-    allows(scope.clusterIds, current.clusterId) &&
-    allows(scope.siteIds, current.id)
+    allows(scope.clusterIds, current.clusterId)
   );
 }
 
