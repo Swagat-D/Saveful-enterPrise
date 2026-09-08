@@ -23,8 +23,25 @@ function emitSites() {
 }
 
 export function replaceNetworkSites(rows: OrganizationSite[]) {
+  const sameLength = demoNetworkSites.length === rows.length;
+  const unchanged =
+    sameLength &&
+    demoNetworkSites.every((site, index) => {
+      const next = rows[index];
+      return (
+        site.id === next.id &&
+        site.name === next.name &&
+        site.siteCode === next.siteCode &&
+        site.address === next.address &&
+        site.status === next.status &&
+        site.managerName === next.managerName &&
+        site.groupId === next.groupId &&
+        site.territoryId === next.territoryId &&
+        site.clusterId === next.clusterId
+      );
+    });
   demoNetworkSites.splice(0, demoNetworkSites.length, ...rows);
-  emitSites();
+  if (!unchanged) emitSites();
 }
 
 export function getNetworkSitesVersion() {

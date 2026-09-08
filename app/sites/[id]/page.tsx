@@ -9,9 +9,8 @@ import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { getOrganisationSiteDetails } from "@/lib/api";
 import { useSession } from "@/lib/auth";
 import { demoSites } from "@/lib/demo";
-import { refreshEnterpriseWorkspace, siteFromApiRow } from "@/lib/enterpriseLive";
+import { siteFromApiRow } from "@/lib/enterpriseLive";
 import { scopeFromUser, siteInScope } from "@/lib/scope";
-import { useLiveSitesVersion } from "@/lib/sitesDirectory";
 import type { OrganizationSite } from "@/types/enterprise";
 
 export default function SiteDetailPage({
@@ -32,14 +31,8 @@ function SiteDetail({ id }: { id: string }) {
   const router = useRouter();
   const user = useSession();
   const scope = scopeFromUser(user);
-  const liveVersion = useLiveSitesVersion();
   const [remoteSite, setRemoteSite] = useState<OrganizationSite | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) return;
-    void refreshEnterpriseWorkspace({ session: user }).catch(() => undefined);
-  }, [user]);
 
   useEffect(() => {
     if (!/^\d+$/.test(id)) {
@@ -95,5 +88,5 @@ function SiteDetail({ id }: { id: string }) {
     );
   }
 
-  return <SiteWorkspace site={site} user={user} scope={scope} key={`${site.id}-${liveVersion}`} />;
+  return <SiteWorkspace site={site} user={user} scope={scope} />;
 }

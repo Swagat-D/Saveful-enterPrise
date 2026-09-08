@@ -422,7 +422,9 @@ export async function refreshEnterpriseWorkspace(options?: { session?: SessionUs
       )
       .map((row) => String(row.id));
     const siteIds = assigned.length ? assigned : siteRows.map((row) => String(row.id));
-    if (siteIds.length && JSON.stringify(session.scope?.siteIds ?? []) !== JSON.stringify(siteIds)) {
+    const currentIds = [...(session.scope?.siteIds ?? [])].filter(Boolean).sort();
+    const nextIds = [...siteIds].sort();
+    if (nextIds.length && JSON.stringify(currentIds) !== JSON.stringify(nextIds)) {
       updateSession({
         scope: {
           groupIds: session.scope?.groupIds ?? [],

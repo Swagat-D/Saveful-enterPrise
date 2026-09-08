@@ -39,7 +39,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     void ensureLiveSession().then((live) => {
       if (live) void refreshEnterpriseWorkspace({ session: live }).catch(() => undefined);
     });
-  }, [user]);
+  }, [user?.id]);
 
   if (!isClient) {
     return <SavefulPageLoader message="Checking your business session…" />;
