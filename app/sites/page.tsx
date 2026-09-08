@@ -8,6 +8,7 @@ import { AdminRowMenu } from "@/components/admin/AdminChrome";
 import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
+import { SiteAdminPortalIntro } from "@/components/sites/SiteAdminPortalIntro";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { useSession } from "@/lib/auth";
 import { periodLabel } from "@/lib/dates";
@@ -112,6 +113,8 @@ function SitesDirectory() {
         <nav className="font-saveful text-xs text-gray-500">
           <span className="text-gray-700">Sites</span>
         </nav>
+
+        {user?.enterpriseRole === "site_admin" ? <SiteAdminPortalIntro /> : null}
 
         <section className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <header className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">

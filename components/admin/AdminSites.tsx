@@ -533,7 +533,14 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
               <td className="px-3.5 py-2.5 font-saveful text-sm text-gray-600">{formatLastActivity(site.lastActivityAt)}</td>
               <td className="px-3.5 py-2.5 font-saveful text-sm tabular-nums text-gray-800">{site.recoveredKg > 0 ? formatKg(site.recoveredKg) : "—"}</td>
               <td className="px-3.5 py-2.5" onClick={(event) => event.stopPropagation()}>
-                <RowMenu site={site} query={query} actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }} open={menuId === site.id} onOpenChange={(open) => setMenuId(open ? site.id : null)} />
+                <RowMenu
+                  site={site}
+                  query={query}
+                  actor={{ name: user?.name ?? "Saveful Admin", email: user?.email ?? "" }}
+                  open={menuId === site.id}
+                  onOpenChange={(open) => setMenuId(open ? site.id : null)}
+                  showOrganisationLink={false}
+                />
               </td>
             </tr>
           ))}
@@ -600,12 +607,14 @@ function RowMenu({
   actor,
   open,
   onOpenChange,
+  showOrganisationLink = true,
 }: {
   site: AdminDirectorySite;
   query: string;
   actor: { name: string; email: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  showOrganisationLink?: boolean;
 }) {
   return (
     <AdminRowMenu label={`Actions for ${site.name}`} open={open} onOpenChange={onOpenChange}>
@@ -615,12 +624,14 @@ function RowMenu({
       <Link href={`/admin/sites/${site.id}/edit${query}`} className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]">
         Edit site
       </Link>
-      <Link
-        href={`/admin/organisations/${site.orgId}${query.includes("?") ? `${query}&tab=sites` : `${query}?tab=sites`}`}
-        className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]"
-      >
-        View organisation
-      </Link>
+      {showOrganisationLink ? (
+        <Link
+          href={`/admin/organisations/${site.orgId}`}
+          className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]"
+        >
+          View organisation
+        </Link>
+      ) : null}
       <button
         type="button"
         className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"

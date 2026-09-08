@@ -5,8 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { AdminRowMenu } from "@/components/admin/AdminChrome";
-import { StoreBadges } from "@/components/business/StoreBadges";
 import { ActivityFeed } from "@/components/activity/ActivityFeed";
+import { SiteAdminPortalIntro } from "@/components/sites/SiteAdminPortalIntro";
 import { InsightsView } from "@/components/insights/InsightsView";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { PortalShell } from "@/components/layout/PortalShell";
@@ -81,20 +81,7 @@ export function SiteWorkspace({
           <span className="text-gray-700">{site.name}</span>
         </nav>
 
-        {user?.enterpriseRole === "site_admin" ? (
-          <section className="flex flex-col gap-3 rounded-2xl border border-saveful-green/20 bg-white px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <div className="min-w-0">
-              <p className="font-saveful-semibold text-sm text-gray-900">
-                Download the Saveful for Business app
-              </p>
-              <p className="mt-0.5 font-saveful text-xs text-gray-500">
-                Use the app on site to list surplus and add other team members. Activity in the app
-                shows in this portal and vice-versa.
-              </p>
-            </div>
-            <StoreBadges compact />
-          </section>
-        ) : null}
+        {user?.enterpriseRole === "site_admin" ? <SiteAdminPortalIntro /> : null}
 
         <section className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <header className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">

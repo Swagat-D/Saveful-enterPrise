@@ -45,7 +45,9 @@ type Dialog =
   | null;
 
 function kindLabel(kind: AdminStructureKind) {
-  return TABS.find((tab) => tab.id === kind)?.label.slice(0, -1) ?? "Structure";
+  if (kind === "groups") return "Group";
+  if (kind === "territories") return "Territory";
+  return "Cluster";
 }
 
 function structureError(err: unknown, fallback: string) {
