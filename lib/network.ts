@@ -14,8 +14,28 @@ const territoryName = (id?: string | null) =>
 const clusterName = (id?: string | null) =>
   id ? demoClusters.find((item) => item.id === id)?.name ?? id : "Unassigned";
 
+const siteListeners = new Set<() => void>();
+let sitesVersion = 0;
+
+function emitSites() {
+  sitesVersion += 1;
+  siteListeners.forEach((listener) => listener());
+}
+
 export function replaceNetworkSites(rows: OrganizationSite[]) {
   demoNetworkSites.splice(0, demoNetworkSites.length, ...rows);
+  emitSites();
+}
+
+export function getNetworkSitesVersion() {
+  return sitesVersion;
+}
+
+export function subscribeNetworkSites(listener: () => void) {
+  siteListeners.add(listener);
+  return () => {
+    siteListeners.delete(listener);
+  };
 }
 
 export function replaceNetworkUnits(next: { groups?: OrgUnit[]; territories?: OrgUnit[]; clusters?: OrgUnit[] }) {

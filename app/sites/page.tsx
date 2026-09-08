@@ -28,6 +28,7 @@ import {
   sitesFilterOptions,
   sitesFiltersToQuery,
   summaryCounts,
+  useLiveSitesVersion,
   type SitesTableFilters,
 } from "@/lib/sitesDirectory";
 import type { ActivityStatus, OrganizationSite, PeriodKey, SiteLifecycleStatus } from "@/types/enterprise";
@@ -63,10 +64,11 @@ function SitesDirectory() {
   const permissions = sitePermissions(user);
   const lifecycleVersion = useSiteLifecycleVersion();
   const structureVersion = useOrgStructureVersion();
+  const liveSitesVersion = useLiveSitesVersion();
   const filters = useMemo(() => parseSitesFilters(searchParams), [searchParams]);
-  const options = useMemo(() => sitesFilterOptions(scope, filters), [scope, filters, structureVersion]);
-  const counts = useMemo(() => summaryCounts(scope, filters), [scope, filters, structureVersion, lifecycleVersion]);
-  const rows = useMemo(() => filterDirectorySites(scope, filters), [scope, filters, structureVersion, lifecycleVersion]);
+  const options = useMemo(() => sitesFilterOptions(scope, filters), [scope, filters, structureVersion, liveSitesVersion]);
+  const counts = useMemo(() => summaryCounts(scope, filters), [scope, filters, structureVersion, lifecycleVersion, liveSitesVersion]);
+  const rows = useMemo(() => filterDirectorySites(scope, filters), [scope, filters, structureVersion, lifecycleVersion, liveSitesVersion]);
   const pageCount = Math.max(1, Math.ceil(rows.length / filters.pageSize));
   const page = Math.min(filters.page, pageCount);
   const paged = rows.slice((page - 1) * filters.pageSize, page * filters.pageSize);
@@ -418,7 +420,11 @@ function SitesDirectory() {
               </div>
 
               {rows.length === 0 ? (
-                <p className="px-3.5 pb-3.5 font-saveful text-sm text-gray-500">No sites match these filters.</p>
+                <p className="px-3.5 pb-3.5 font-saveful text-sm text-gray-500">
+                  {user?.enterpriseRole === "site_admin"
+                    ? "Your assigned site will appear here. Open it to view listings, collections, and site details."
+                    : "No sites match these filters."}
+                </p>
               ) : (
                 <div className="flex flex-col gap-3 border-t border-gray-100 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="font-saveful text-xs text-gray-500">

@@ -1,13 +1,17 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { AppPage } from "@/components/layout/AppPage";
 import { SiteForm } from "@/components/sites/SiteForm";
 import { Button } from "@/components/ui/button";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
+import { getOrganisationSiteDetails } from "@/lib/api";
 import { useSession } from "@/lib/auth";
 import { demoSites } from "@/lib/demo";
+import { siteFromApiRow } from "@/lib/enterpriseLive";
 import { sitePermissions } from "@/lib/permissions";
 import { scopeFromUser, siteInScope } from "@/lib/scope";
+import type { OrganizationSite } from "@/types/enterprise";
 
 export default function EditSitePage({
   params,
@@ -18,20 +22,52 @@ export default function EditSitePage({
   const user = useSession();
   const scope = scopeFromUser(user);
   const permissions = sitePermissions(user);
-  const site = demoSites.find((item) => item.id === id && siteInScope(item, scope));
+  const [remoteSite, setRemoteSite] = useState<OrganizationSite | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!user) {
+  useEffect(() => {
+    if (!/^\d+$/.test(id)) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    getOrganisationSiteDetails(Number(id))
+      .then((detail) => {
+        if (cancelled) return;
+        setRemoteSite(
+          siteFromApiRow({
+            ...detail.site,
+            managers: detail.managers ?? detail.site.managers,
+          }),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setRemoteSite(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const cached = demoSites.find((item) => item.id === id);
+  const site = remoteSite ?? cached ?? null;
+  const allowed = Boolean(site && (remoteSite || siteInScope(site, scope)));
+
+  if (!user || (loading && !site)) {
     return (
       <AppPage title="Edit site">
-        <p className="font-saveful text-sm text-gray-500">Loading…</p>
+        <SavefulPageLoader message="Loading site…" />
       </AppPage>
     );
   }
 
-  if (!site || !permissions.edit) {
+  if (!site || !allowed || !permissions.edit) {
     return (
       <AppPage
-        title={!site ? "Site not found" : "You cannot edit this site"}
+        title={!site || !allowed ? "Site not found" : "You cannot edit this site"}
         description="This action is limited by your role and scope."
       >
         <Button href={site ? `/sites/${site.id}` : "/sites"} variant="secondary">

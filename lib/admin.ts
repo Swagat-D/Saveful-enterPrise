@@ -12,8 +12,17 @@ import { foodInsights, organisationInsights } from "@/lib/insights";
 import { foodCategoryFor, impactOverTime, PATHWAY_LABEL } from "@/lib/networkQuery";
 import { isSiteAdminRole } from "@/lib/enterpriseRole";
 import { activityForSite } from "@/lib/siteWorkspace";
+import { formatCollectionHours } from "@/lib/siteForm";
 import { foodRecoveredKg, lookupLabel } from "@/lib/sitesDirectory";
-import type { ActivityStatus, PeriodKey, RecoveryPathway, RecoveryTransaction, SiteLifecycleStatus } from "@/types/enterprise";
+import type {
+  ActivityStatus,
+  OrganizationSite,
+  PeriodKey,
+  RecoveryPathway,
+  RecoveryTransaction,
+  SiteLifecycleStatus,
+  Weekday,
+} from "@/types/enterprise";
 
 export type OrgTypeId = "food_business" | "charity" | "farmer" | "circular";
 export type ParticipationRoleId = "surplus_provider" | "surplus_receiver";
@@ -143,6 +152,9 @@ export type AdminSite = {
   orgId: string;
   name: string;
   address: string;
+  postcode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   status: string;
   lastActivityAt: string | null;
   createdAt?: string | null;
@@ -156,9 +168,14 @@ export type AdminSite = {
   clusterLabel?: string;
   activatedAt?: string | null;
   managerName?: string | null;
+  managerUserId?: string | null;
   managerPhone?: string | null;
   contactName?: string | null;
   contactEmail?: string | null;
+  collectionDays?: Weekday[];
+  collectionFrom?: string;
+  collectionTo?: string;
+  collectionInstructions?: string | null;
 };
 
 export type AdminListing = {
@@ -220,6 +237,7 @@ export type AdminOrgProfile = {
 export const ORG_DETAIL_TABS = [
   { id: "overview", label: "Overview" },
   { id: "sites", label: "Sites" },
+  { id: "structure", label: "Structure" },
   { id: "users", label: "Users" },
   { id: "listings", label: "Listings" },
   { id: "collections", label: "Collections" },
@@ -492,13 +510,23 @@ function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
     orgName: row.organisationName,
     name: row.siteName,
     address: row.address,
+    postcode: row.postcode ?? null,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
     status: row.isActive ? "Active" : "Deactivated",
     lastActivityAt: row.lastActivityAt ?? null,
     createdAt: row.createdAt ?? row.activatedAt ?? null,
     managerName: assignedName || contactName || null,
+    managerUserId: manager && row.managers?.[0]?.userId != null ? String(row.managers[0].userId) : null,
     managerPhone: manager?.phoneNumber || row.phoneNumber || null,
     contactName: contactName || null,
     contactEmail: row.contactEmail && row.contactEmail !== "not provided" ? row.contactEmail : null,
+    collectionDays: (row.collectionDays ?? []).filter((day): day is Weekday =>
+      ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].includes(day),
+    ),
+    collectionFrom: row.collectionStartTime ?? undefined,
+    collectionTo: row.collectionEndTime ?? undefined,
+    collectionInstructions: row.collectionInstructions ?? null,
     siteCode: row.siteCode ?? undefined,
     groupId: row.groupId != null ? String(row.groupId) : null,
     territoryId: row.territoryId != null ? String(row.territoryId) : null,
@@ -680,6 +708,38 @@ export function listCollections(): AdminCollection[] {
 
 export function getSite(id: string) {
   return listSites().find((row) => row.id === id) ?? null;
+}
+
+export function organizationSiteFromAdmin(site: AdminSite): OrganizationSite {
+  return {
+    id: site.id,
+    siteCode: site.siteCode || `SITE-${site.id.padStart(6, "0")}`,
+    siteType: "branch",
+    name: site.name,
+    address: site.address,
+    postCode: site.postcode ?? "",
+    managerName: site.managerName || site.contactName || "",
+    managerUserId: site.managerUserId ?? null,
+    email: site.contactEmail || "",
+    mobile: site.managerPhone || "",
+    hasManager: Boolean(site.managerName || site.contactEmail),
+    isDefault: false,
+    groupId: site.groupId,
+    territoryId: site.territoryId,
+    clusterId: site.clusterId,
+    status: site.status === "Deactivated" ? "deactivated" : "active",
+    createdAt: site.createdAt ?? null,
+    activatedAt: site.activatedAt ?? null,
+    lastActivityAt: site.lastActivityAt,
+    lastListingAt: null,
+    primaryContact: site.contactName,
+    collectionDays: site.collectionDays,
+    collectionFrom: site.collectionFrom,
+    collectionTo: site.collectionTo,
+    collectionInstructions: site.collectionInstructions ?? undefined,
+    latitude: site.latitude,
+    longitude: site.longitude,
+  };
 }
 
 export function getListing(id: string) {
@@ -2183,8 +2243,11 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
             listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.name ||
             site.contactName ||
             "Not assigned",
-          collectionHours: "—",
-          collectionInstructions: "—",
+          collectionHours:
+            site.collectionDays?.length && site.collectionFrom && site.collectionTo
+              ? formatCollectionHours(site.collectionDays, site.collectionFrom, site.collectionTo)
+              : "—",
+          collectionInstructions: site.collectionInstructions?.trim() || "—",
           phone: site.managerPhone || "",
         },
   };

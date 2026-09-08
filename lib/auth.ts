@@ -177,7 +177,12 @@ export async function login(credentials: LoginCredentials) {
       portal: "enterprise",
       enterpriseRole,
       isHeadAdmin: roleAllowsEnterprise(enterpriseRole),
-      scope: await resolveEnterpriseScope(String(data.user.id), data.user.email, enterpriseRole),
+      scope: await resolveEnterpriseScope(
+        String(data.user.id),
+        data.user.email,
+        enterpriseRole,
+        (profile.sites ?? []).map((row) => String(row.id)),
+      ),
     };
     persistSession(user, { token: data.accessToken });
     return user;
@@ -279,6 +284,7 @@ async function resolveEnterpriseScope(
   userId: string,
   email: string,
   role: NonNullable<SessionUser["enterpriseRole"]>,
+  profileSiteIds: string[] = [],
 ): Promise<SessionUser["scope"]> {
   if (role === "enterprise_super_admin" || role === "enterprise_admin") {
     return { groupIds: null, territoryIds: null, clusterIds: null, siteIds: null };
@@ -293,6 +299,7 @@ async function resolveEnterpriseScope(
     (row) => String(row.id) === userId || row.email?.toLowerCase() === email.toLowerCase(),
   );
   const fromGrants = accessScopeFromUserScope(scopeFromApi(role, self?.scopes));
+  const listedIds = siteRowsFromPayload(sitesPayload).map((row) => String(row.id));
   const managedIds = siteRowsFromPayload(sitesPayload)
     .filter((row) =>
       (row.managers ?? []).some(
@@ -301,15 +308,14 @@ async function resolveEnterpriseScope(
     )
     .map((row) => String(row.id));
 
-  const siteIds = [...new Set([...(fromGrants.siteIds ?? []), ...managedIds])];
-  if (role === "site_admin" && siteIds.length === 0) {
-    return {
-      groupIds: fromGrants.groupIds ?? [],
-      territoryIds: fromGrants.territoryIds ?? [],
-      clusterIds: fromGrants.clusterIds ?? [],
-      siteIds: siteRowsFromPayload(sitesPayload).map((row) => String(row.id)),
-    };
-  }
+  const siteIds = [
+    ...new Set([
+      ...(fromGrants.siteIds ?? []),
+      ...managedIds,
+      ...profileSiteIds,
+      ...(role === "site_admin" ? listedIds : []),
+    ]),
+  ];
 
   return {
     groupIds: fromGrants.groupIds ?? [],

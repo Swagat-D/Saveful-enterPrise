@@ -30,6 +30,7 @@ import {
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
 import { AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { AdminOrgSitesTable } from "@/components/admin/AdminSites";
+import { AdminOrganisationStructure } from "@/components/admin/AdminOrganisationStructure";
 import { PortalPageShell } from "@/components/ui/Portal";
 import {
   ORG_DETAIL_TABS,
@@ -145,6 +146,9 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
                       <Link href={`/admin/sites/new${query}${query ? "&" : "?"}organisationId=${org.id}`} className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]" onClick={() => setMenuOpen(false)}>
                         Add site
                       </Link>
+                      <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={() => { setMenuOpen(false); setTab("structure"); }}>
+                        Manage structure
+                      </button>
                       <button type="button" className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]" onClick={() => { setMenuOpen(false); setTab("account"); }}>
                         Edit account
                       </button>
@@ -203,6 +207,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
               <OverviewTab model={model} query={orgQuery} period={period} onPeriod={setPeriod} onTab={setTab} />
             ) : null}
             {tab === "sites" ? <AdminOrgSitesTable orgId={org.id} query={orgQuery} period={period} /> : null}
+            {tab === "structure" ? <AdminOrganisationStructure organisationId={org.id} query={orgQuery} /> : null}
             {tab === "users" ? (
               <RecordTable
                 columns={["Name", "Email", "Role", "Status"]}

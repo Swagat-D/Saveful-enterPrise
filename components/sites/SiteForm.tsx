@@ -23,6 +23,7 @@ import {
   listAdminEnterpriseUsers,
   inviteEnterpriseUser,
   listEnterpriseMembers,
+  updateAdminOrganisationSite,
   updateOrganisationSite,
 } from "@/lib/api";
 import {
@@ -153,7 +154,13 @@ export function SiteForm({
   const [createdSiteId, setCreatedSiteId] = useState<number | null>(site ? Number(site.id) : null);
   const [assignedSiteCode, setAssignedSiteCode] = useState(site?.siteCode ?? "");
   const adminQuery = adminFiltersToQuery(lastAdminFilters());
-  const cancelHref = isAdmin ? `/admin/sites${adminQuery}` : site ? `/sites/${site.id}` : "/sites";
+  const cancelHref = isAdmin
+    ? site
+      ? `/admin/sites/${site.id}${adminQuery}`
+      : `/admin/sites${adminQuery}`
+    : site
+      ? `/sites/${site.id}`
+      : "/sites";
   const organisations = isAdmin ? listLiveEnterprises() : [];
   const enterpriseUsers = listUsers()
     .filter((item) => item.status === "active" && /^\d+$/.test(item.id))
@@ -450,7 +457,7 @@ export function SiteForm({
       }
       const saved = savedSiteId
         ? isAdmin
-          ? { site: { id: savedSiteId, siteName: values.siteName.trim(), address: values.place.address.trim(), siteCode: assignedSiteCode } }
+          ? await updateAdminOrganisationSite(organisationId, savedSiteId, payload)
           : await updateOrganisationSite(savedSiteId, payload)
         : isAdmin
           ? await createAdminOrganisationSite(organisationId, payload)
@@ -506,7 +513,7 @@ export function SiteForm({
         );
         await refreshSites().catch(() => undefined);
         clearSiteFormDraft("admin", mode === "edit" ? String(savedSiteId) : undefined);
-        router.push(mode === "edit" ? `/admin/sites${adminQuery}` : `/admin/sites/${savedSiteId}${adminQuery}`);
+        router.push(`/admin/sites/${savedSiteId}${adminQuery}`);
       } else {
         await refreshEnterpriseWorkspace();
         clearSiteFormDraft("enterprise", mode === "edit" ? String(savedSiteId) : undefined);
@@ -558,7 +565,11 @@ export function SiteForm({
 
   const openStructureSettings = async () => {
     await persistDraft();
-    router.push("/settings/structure");
+    router.push(
+      isAdmin && organisationId
+        ? `/admin/organisations/${organisationId}?tab=structure`
+        : "/settings/structure",
+    );
   };
 
   const siteContact =
@@ -585,7 +596,7 @@ export function SiteForm({
           {site ? (
             <>
               <span className="px-1.5 text-gray-300">/</span>
-              <Link href={`/sites/${site.id}`} className="hover:text-saveful-green">
+              <Link href={isAdmin ? `/admin/sites/${site.id}${adminQuery}` : `/sites/${site.id}`} className="hover:text-saveful-green">
                 {site.name}
               </Link>
             </>
@@ -968,15 +979,15 @@ export function SiteForm({
               <div className="space-y-3 p-3.5">
               <p className="font-saveful text-xs text-gray-500">
                 Save a draft if you need to set up groups, territories or clusters first.
-                {!isAdmin ? (
+                {(!isAdmin || organisationId) ? (
                   <>
                     {" "}
                     <button
                       type="button"
-                      onClick={openStructureSettings}
+                      onClick={() => void openStructureSettings()}
                       className="font-saveful-semibold text-saveful-green hover:underline"
                     >
-                      Open structure settings
+                      {isAdmin ? "Manage groups, territories and clusters" : "Open structure settings"}
                     </button>
                   </>
                 ) : null}

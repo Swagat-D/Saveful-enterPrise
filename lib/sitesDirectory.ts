@@ -1,6 +1,7 @@
+import { useSyncExternalStore } from "react";
 import { periodRange } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
-import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
+import { demoNetworkSites, getNetworkSitesVersion, recoveryTransactions, subscribeNetworkSites } from "@/lib/network";
 import { getUnit, resolveSite, type OrgStructureKind } from "@/lib/orgStructure";
 import {
   ACTIVITY_LABEL,
@@ -36,6 +37,10 @@ export type SitesTableFilters = {
   page: number;
   pageSize: 10 | 25 | 50;
 };
+
+export function useLiveSitesVersion() {
+  return useSyncExternalStore(subscribeNetworkSites, getNetworkSitesVersion, () => 0);
+}
 
 export const EMPTY_SITES_FILTERS: SitesTableFilters = {
   q: "",

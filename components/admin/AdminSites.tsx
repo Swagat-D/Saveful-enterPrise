@@ -612,6 +612,9 @@ function RowMenu({
       <Link href={`/admin/sites/${site.id}${query}`} className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]">
         View site
       </Link>
+      <Link href={`/admin/sites/${site.id}/edit${query}`} className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]">
+        Edit site
+      </Link>
       <Link
         href={`/admin/organisations/${site.orgId}${query.includes("?") ? `${query}&tab=sites` : `${query}?tab=sites`}`}
         className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]"

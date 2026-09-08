@@ -53,6 +53,7 @@ export type AuthProfileResponse = {
     plan?: { name?: string | null; displayName?: string | null };
     status?: string | null;
   } | null;
+  sites?: Array<{ id: number; name?: string }>;
 };
 
 export type InvitationPreview = {
@@ -271,6 +272,18 @@ export function createAdminOrganisationSite(organisationId: string | number, inp
   });
 }
 
+export function updateAdminOrganisationSite(
+  organisationId: string | number,
+  siteId: number,
+  input: Partial<CreateOrganisationSiteInput>,
+) {
+  return apiFetch<CreatedOrganisationSite>(`/admin/enterprise/${organisationId}/sites/${siteId}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
 export function inviteAdminEnterpriseUser(
   organisationId: string | number,
   input: {
@@ -305,6 +318,66 @@ export function getAdminEnterpriseStructure(organisationId: string | number) {
   return apiFetch<EnterpriseStructureResponse>(`/admin/enterprise/${organisationId}/structure`, { auth: true });
 }
 
+export type AdminStructureKind = "groups" | "clusters" | "territories";
+
+export function createAdminEnterpriseStructure(
+  organisationId: string | number,
+  kind: AdminStructureKind,
+  input: { name: string; code?: string; description?: string },
+) {
+  return apiFetch<EnterpriseStructureUnit>(`/admin/enterprise/${organisationId}/${kind}`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminEnterpriseStructure(
+  organisationId: string | number,
+  kind: AdminStructureKind,
+  id: number,
+  input: { name?: string; code?: string; description?: string },
+) {
+  return apiFetch<EnterpriseStructureUnit>(`/admin/enterprise/${organisationId}/${kind}/${id}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function deactivateAdminEnterpriseStructure(
+  organisationId: string | number,
+  kind: AdminStructureKind,
+  id: number,
+) {
+  return apiFetch<{ message: string }>(`/admin/enterprise/${organisationId}/${kind}/${id}/deactivate`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export function reactivateAdminEnterpriseStructure(
+  organisationId: string | number,
+  kind: AdminStructureKind,
+  id: number,
+) {
+  return apiFetch<{ message: string }>(`/admin/enterprise/${organisationId}/${kind}/${id}/reactivate`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export function deleteAdminEnterpriseStructure(
+  organisationId: string | number,
+  kind: AdminStructureKind,
+  id: number,
+) {
+  return apiFetch<{ message: string }>(`/admin/enterprise/${organisationId}/${kind}/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
 export type AdminApiSiteRow = {
   id: number;
   organisationId: number;
@@ -313,9 +386,16 @@ export type AdminApiSiteRow = {
   siteName: string;
   siteCode?: string | null;
   address: string;
+  postcode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   contactName?: string | null;
   contactEmail?: string | null;
   phoneNumber?: string | null;
+  collectionDays?: string[];
+  collectionStartTime?: string | null;
+  collectionEndTime?: string | null;
+  collectionInstructions?: string | null;
   isActive: boolean;
   createdAt?: string | null;
   activatedAt?: string | null;

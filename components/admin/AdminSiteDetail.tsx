@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Pencil } from "lucide-react";
 import {
   CartesianGrid,
   Cell,
@@ -19,7 +19,8 @@ import {
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
 import { AdminSection, StatusPill, useAdminFilters } from "@/components/admin/AdminChrome";
 import { PortalPageShell, StatusBadge } from "@/components/ui/Portal";
-import { buildSiteDetail, orgTypeLabel, participationLabel, updateSiteStatus, useAdminVersion } from "@/lib/admin";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
+import { buildSiteDetail, orgTypeLabel, participationLabel, refreshSites, updateSiteStatus, useAdminVersion } from "@/lib/admin";
 import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
 import { CHART_COLORS, CHART_TOOLTIP } from "@/lib/demo";
@@ -105,7 +106,14 @@ export function AdminSiteDetail({ id }: { id: string }) {
   const tab = parseSiteTab(searchParams.get("tab"));
   const [period, setPeriod] = useState<PeriodKey>("30");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const model = buildSiteDetail(id, period);
+
+  useEffect(() => {
+    void refreshSites()
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
+  }, []);
 
   const setTab = (next: SiteTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -114,6 +122,10 @@ export function AdminSiteDetail({ id }: { id: string }) {
     const nextQuery = params.toString();
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
   };
+
+  if (loading && !model) {
+    return <SavefulPageLoader message="Loading site…" />;
+  }
 
   if (!model) {
     return (
@@ -180,6 +192,13 @@ export function AdminSiteDetail({ id }: { id: string }) {
                   ))}
                 </select>
               ) : null}
+              <Link
+                href={`/admin/sites/${site.id}/edit${context}`}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white px-3 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </Link>
               <div className="relative">
                 <button
                   type="button"
@@ -191,6 +210,13 @@ export function AdminSiteDetail({ id }: { id: string }) {
                 </button>
                 {menuOpen ? (
                   <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
+                    <Link
+                      href={`/admin/sites/${site.id}/edit${context}`}
+                      className="block px-3 py-2 font-saveful text-sm text-gray-800 hover:bg-[#F7F6F2]"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Edit site
+                    </Link>
                     <button
                       type="button"
                       className="block w-full px-3 py-2 text-left font-saveful text-sm hover:bg-[#F7F6F2]"
