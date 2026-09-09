@@ -32,6 +32,7 @@ import {
   useLiveSitesVersion,
   type SitesTableFilters,
 } from "@/lib/sitesDirectory";
+import { formatSiteAddress } from "@/lib/siteForm";
 import type { ActivityStatus, OrganizationSite, PeriodKey, SiteLifecycleStatus } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
@@ -348,7 +349,7 @@ function SitesDirectory() {
                         >
                           <td className="py-2.5 pr-3">
                             <p className="font-saveful-semibold text-sm text-gray-900">{site.name}</p>
-                            <p className="font-saveful text-xs text-gray-500">{site.address}</p>
+                            <p className="font-saveful text-xs text-gray-500">{formatSiteAddress(site)}</p>
                           </td>
                           <td className="py-2.5 pr-3 font-saveful text-sm text-gray-700">{site.siteCode}</td>
                           <td className="py-2.5 pr-3 font-saveful text-sm text-gray-700">{lookupLabel("group", site.groupId)}</td>
@@ -392,7 +393,7 @@ function SitesDirectory() {
                           <div className="min-w-0">
                             <p className="font-saveful-semibold text-sm text-gray-900">{site.name}</p>
                             <p className="mt-0.5 font-saveful text-xs text-gray-500">
-                              {site.siteCode} · {site.address}
+                              {site.siteCode} · {formatSiteAddress(site)}
                             </p>
                           </div>
                           <StatusPill active={getSiteStatus(site) === "active"} />

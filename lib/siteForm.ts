@@ -8,10 +8,33 @@ const DEFAULT_MAP = { lat: -33.861, lon: 151.211 };
 
 export type PickedLocation = {
   address: string;
+  specificInfo?: string;
   postcode: string;
   lat: number;
   lon: number;
 };
+
+export function splitSiteAddress(value: string) {
+  const [street, ...rest] = String(value ?? "").split("\n");
+  return {
+    street: (street ?? "").trim(),
+    specific: rest.join("\n").trim(),
+  };
+}
+
+export function joinSiteAddress(street: string, specific?: string) {
+  const line = street.trim();
+  const extra = (specific ?? "").trim();
+  return extra ? `${line}\n${extra}` : line;
+}
+
+export function formatSiteAddress(site: { address: string; addressDetail?: string | null }) {
+  return [site.address, site.addressDetail]
+    .flatMap((part) => String(part ?? "").split("\n"))
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export const WEEKDAYS: { id: Weekday; label: string }[] = [
   { id: "mon", label: "Mon" },
@@ -106,7 +129,7 @@ export function emptySiteForm(): SiteFormValues {
   return {
     siteName: "",
     siteCode: "",
-    place: { ...DEFAULT_MAP, address: "", postcode: "" },
+    place: { ...DEFAULT_MAP, address: "", specificInfo: "", postcode: "" },
     groupId: "",
     territoryId: "",
     clusterId: "",
@@ -142,11 +165,13 @@ export function siteToFormValues(site: OrganizationSite): SiteFormValues {
   });
   const names = splitName(current.managerName || current.primaryContact || "");
   const useExisting = Boolean(existing);
+  const parsedAddress = splitSiteAddress(current.address);
   return {
     siteName: current.name,
     siteCode: current.siteCode,
     place: {
-      address: current.address,
+      address: parsedAddress.street,
+      specificInfo: current.addressDetail || parsedAddress.specific,
       postcode: current.postCode,
       lat: current.latitude ?? DEFAULT_MAP.lat,
       lon: current.longitude ?? DEFAULT_MAP.lon,
@@ -168,12 +193,11 @@ export function siteToFormValues(site: OrganizationSite): SiteFormValues {
 }
 
 export function contactFromSiteAdmin(values: SiteFormValues) {
-  if (values.adminMode === "invite") {
-    return {
-      name: `${values.inviteFirstName} ${values.inviteLastName}`.trim(),
-      email: values.inviteEmail.trim(),
-      mobile: values.inviteMobile.trim(),
-    };
+  const name = `${values.inviteFirstName} ${values.inviteLastName}`.trim();
+  const email = values.inviteEmail.trim();
+  const mobile = values.inviteMobile.trim();
+  if (name || email || mobile) {
+    return { name, email, mobile };
   }
   if (values.adminMode === "existing" && values.existingUserId) {
     const user = listUsers().find((item) => item.id === values.existingUserId);
@@ -199,7 +223,7 @@ export function siteFormToApiInput(
 
   const input: CreateOrganisationSiteInput = {
     siteName: values.siteName.trim().slice(0, 160),
-    address: values.place.address.trim(),
+    address: joinSiteAddress(values.place.address, values.place.specificInfo),
     latitude: Number(values.place.lat),
     longitude: Number(values.place.lon),
     collectionDays: values.collectionDays,

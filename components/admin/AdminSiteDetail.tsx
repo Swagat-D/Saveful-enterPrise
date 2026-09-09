@@ -21,6 +21,7 @@ import { AdminSection, StatusPill, useAdminFilters } from "@/components/admin/Ad
 import { PortalPageShell, StatusBadge } from "@/components/ui/Portal";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { buildSiteDetail, orgTypeLabel, participationLabel, refreshSites, updateSiteStatus, useAdminVersion } from "@/lib/admin";
+import { formatSiteAddress } from "@/lib/siteForm";
 import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
 import { CHART_COLORS, CHART_TOOLTIP } from "@/lib/demo";
@@ -297,7 +298,7 @@ function OverviewTab({
     { label: "Organisations", value: formatCount(impact.organisations) },
   ];
   const details = [
-    { label: "Address", value: site.address },
+    { label: "Address", value: formatSiteAddress(site) },
     { label: "Primary contact", value: ops.primaryContact },
     { label: "Site admin", value: ops.siteAdmin },
     { label: "Availability", value: ops.collectionHours },

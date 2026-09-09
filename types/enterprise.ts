@@ -60,6 +60,7 @@ export type OrganizationSite = {
   siteType: SiteType;
   name: string;
   address: string;
+  addressDetail?: string;
   postCode: string;
   managerName: string;
   managerUserId?: string | null;

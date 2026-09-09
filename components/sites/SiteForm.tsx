@@ -50,6 +50,13 @@ import {
   siteToFormValues,
   type SiteFormValues,
 } from "@/lib/siteForm";
+
+function splitContactName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0], last: "" };
+  return { first: parts[0], last: parts.slice(1).join(" ") };
+}
 import type { OrganizationSite } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
@@ -249,11 +256,8 @@ export function SiteForm({
     if (values.adminMode !== "invite") return;
     const existing = memberForEmail(values.inviteEmail, assignableUsers);
     if (!existing) return;
-    setValues((prev) => ({
-      ...prev,
-      adminMode: "existing",
-      existingUserId: existing.id,
-    }));
+    if (existing.email.trim().toLowerCase() === currentManagerEmail) return;
+    adoptExistingMember(existing, { keepEdits: true });
     setPickingUser(false);
     setExistingMemberNotice(
       `${existing.name} (${existing.email}) is already in this Enterprise. They are selected as an existing user. No invitation email will be sent — the site will be assigned to them.`,
@@ -360,19 +364,28 @@ export function SiteForm({
       next.existingUserId = "Select a Site Admin so this site can be used.";
     }
     if (values.adminMode === "existing" && values.existingUserId) {
-      const selected = assignableUsers.find((item) => item.id === values.existingUserId);
-      if (selected && !String(selected.mobile ?? "").replace(/\D/g, "")) {
-        next.existingUserId = "This user has no mobile number. Choose someone else or invite a new Site Admin.";
+      if (!values.inviteFirstName.trim()) next.inviteFirstName = "Please enter a first name.";
+      if (!values.inviteLastName.trim()) next.inviteLastName = "Please enter a last name.";
+      if (!values.inviteMobile.trim()) next.inviteMobile = "Please enter a mobile number.";
+      else if (!/\d{6,}/.test(values.inviteMobile.replace(/\D/g, ""))) {
+        next.inviteMobile = "Please enter a valid mobile number.";
       }
     }
     return next;
   };
 
-  const adoptExistingMember = (member: AssignableUser) => {
+  const currentManagerEmail = (liveSite?.email || site?.email || "").trim().toLowerCase();
+
+  const adoptExistingMember = (member: AssignableUser, options?: { keepEdits?: boolean }) => {
+    const names = splitContactName(member.name);
     setValues((prev) => ({
       ...prev,
       adminMode: "existing",
       existingUserId: member.id,
+      inviteFirstName: options?.keepEdits && prev.inviteFirstName.trim() ? prev.inviteFirstName : names.first,
+      inviteLastName: options?.keepEdits && prev.inviteLastName.trim() ? prev.inviteLastName : names.last,
+      inviteEmail: member.email,
+      inviteMobile: options?.keepEdits && prev.inviteMobile.trim() ? prev.inviteMobile : member.mobile ?? "",
     }));
     setPickingUser(false);
     setExistingMemberNotice(
@@ -449,12 +462,6 @@ export function SiteForm({
       const payload = siteFormToApiInput(values, {
         clearUnassigned: mode === "edit" || Boolean(createdSiteId),
       });
-      const selectedAdmin = assignableUsers.find((item) => item.id === values.existingUserId);
-      if (values.adminMode === "existing" && selectedAdmin) {
-        payload.contactName = selectedAdmin.name.slice(0, 120);
-        payload.contactEmail = selectedAdmin.email.toLowerCase();
-        if (selectedAdmin.mobile) payload.phoneNumber = selectedAdmin.mobile.slice(0, 30);
-      }
       const saved = savedSiteId
         ? isAdmin
           ? await updateAdminOrganisationSite(organisationId, savedSiteId, payload)
@@ -714,6 +721,7 @@ export function SiteForm({
                 <Field label="Address" htmlFor="address" required>
                   <AddressPicker
                     compact
+                    showSpecificInfo
                     value={values.place}
                     error={errors.address}
                     onChange={(place) => {
@@ -836,8 +844,11 @@ export function SiteForm({
                           update("inviteEmail", nextEmail);
                           clearError("inviteEmail");
                           const existing = memberForEmail(nextEmail, assignableUsers);
-                          if (existing) adoptExistingMember(existing);
-                          else setExistingMemberNotice("");
+                          if (existing && existing.email.trim().toLowerCase() !== currentManagerEmail) {
+                            adoptExistingMember(existing);
+                          } else {
+                            setExistingMemberNotice("");
+                          }
                         }}
                         placeholder="name@organisation.com"
                         className={inputClass}
@@ -873,10 +884,52 @@ export function SiteForm({
                   <div className="space-y-3">
                     {siteContact && !pickingUser ? (
                       <div className="space-y-3">
-                        <div className="grid grid-cols-1 gap-3 rounded-xl bg-[#F7F6F2] px-3.5 py-3 sm:grid-cols-3">
-                          <ContactPreview label="Name" value={siteContact.name} />
-                          <ContactPreview label="Email" value={siteContact.email} />
-                          <ContactPreview label="Mobile" value={siteContact.mobile} />
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <Field label="First name" htmlFor="existingFirstName" required error={errors.inviteFirstName}>
+                            <input
+                              id="existingFirstName"
+                              maxLength={80}
+                              value={values.inviteFirstName}
+                              onChange={(event) => {
+                                update("inviteFirstName", event.target.value);
+                                clearError("inviteFirstName");
+                              }}
+                              className={inputClass}
+                            />
+                          </Field>
+                          <Field label="Last name" htmlFor="existingLastName" required error={errors.inviteLastName}>
+                            <input
+                              id="existingLastName"
+                              maxLength={80}
+                              value={values.inviteLastName}
+                              onChange={(event) => {
+                                update("inviteLastName", event.target.value);
+                                clearError("inviteLastName");
+                              }}
+                              className={inputClass}
+                            />
+                          </Field>
+                          <Field label="Email" htmlFor="existingEmail">
+                            <input
+                              id="existingEmail"
+                              readOnly
+                              value={values.inviteEmail || siteContact.email}
+                              className={cn(inputClass, "text-gray-500")}
+                            />
+                          </Field>
+                          <Field label="Mobile" htmlFor="existingMobile" required error={errors.inviteMobile}>
+                            <input
+                              id="existingMobile"
+                              type="tel"
+                              maxLength={30}
+                              value={values.inviteMobile}
+                              onChange={(event) => {
+                                update("inviteMobile", event.target.value);
+                                clearError("inviteMobile");
+                              }}
+                              className={inputClass}
+                            />
+                          </Field>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -917,6 +970,7 @@ export function SiteForm({
                               clearError("existingUserId");
                               const selected = assignableUsers.find((item) => item.id === nextId);
                               if (selected) {
+                                adoptExistingMember(selected);
                                 setPickingUser(false);
                                 setExistingMemberNotice(
                                   `${selected.name} is already in this Enterprise. No invitation email will be sent — the site will be assigned to them.`,

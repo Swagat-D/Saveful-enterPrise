@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 export type PickedLocation = {
   address: string;
+  specificInfo?: string;
   postcode: string;
   lat: number;
   lon: number;
@@ -52,11 +53,13 @@ export function AddressPicker({
   onChange,
   error,
   compact,
+  showSpecificInfo,
 }: {
   value: PickedLocation;
   onChange: (next: PickedLocation) => void;
   error?: string;
   compact?: boolean;
+  showSpecificInfo?: boolean;
 }) {
   const [query, setQuery] = useState(value.address);
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -88,7 +91,10 @@ export function AddressPicker({
   };
 
   const applyPlace = (place: PickedLocation) => {
-    onChange(place);
+    onChange({
+      ...place,
+      specificInfo: place.address ? (place.specificInfo ?? value.specificInfo ?? "") : "",
+    });
     setQuery(place.address);
     setHits([]);
     setSearchError("");
@@ -154,7 +160,7 @@ export function AddressPicker({
             onChange={(event) => {
               setQuery(event.target.value);
               setSearchError("");
-              onChange({ ...value, address: event.target.value });
+              onChange({ ...value, address: event.target.value, specificInfo: value.specificInfo });
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -227,7 +233,7 @@ export function AddressPicker({
             type="button"
             aria-label="Clear address"
             onClick={() => {
-              applyPlace({ ...SYDNEY, address: "", postcode: "" });
+              applyPlace({ ...SYDNEY, address: "", specificInfo: "", postcode: "" });
               setQuery("");
             }}
             className="text-gray-400 hover:text-gray-600"
@@ -235,6 +241,24 @@ export function AddressPicker({
             <X className="h-4 w-4" />
           </button>
         </div>
+      ) : null}
+
+      {showSpecificInfo ? (
+        <label className="block">
+          <span className="mb-1.5 block font-saveful-semibold text-sm text-gray-800">
+            Specific address info
+            <span className="ml-1 font-saveful text-xs font-normal text-gray-400">(optional)</span>
+          </span>
+          <input
+            value={value.specificInfo ?? ""}
+            onChange={(event) => onChange({ ...value, specificInfo: event.target.value })}
+            placeholder="e.g. Building B, Level 3, Gate 4"
+            className="h-10 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none transition placeholder:text-gray-400 focus:border-saveful-green/40 focus:bg-white"
+          />
+          <p className="mt-1 font-saveful text-xs text-gray-500">
+            Building name or number, floor, gate, or any other location note collectors need.
+          </p>
+        </label>
       ) : null}
 
       <div

@@ -188,12 +188,14 @@ function toSite(row: ApiSiteRow): OrganizationSite {
   const contactEmail = row.contactEmail && row.contactEmail !== "not provided" ? row.contactEmail : "";
   const contactMobile = row.phoneNumber && row.phoneNumber !== "not provided" ? row.phoneNumber : "";
   const managerName = assignedName || contactName;
+  const [street, ...addressRest] = String(row.address ?? "").split("\n");
   return {
     id: String(row.id),
     siteCode: row.siteCode || `SITE-${String(row.id).padStart(6, "0")}`,
     siteType: "branch",
     name: row.siteName,
-    address: row.address,
+    address: (street ?? "").trim(),
+    addressDetail: addressRest.join("\n").trim() || undefined,
     postCode: row.postcode ?? "",
     managerName,
     managerUserId: row.managers?.[0]?.userId != null ? String(row.managers[0].userId) : null,

@@ -19,6 +19,7 @@ import { sitePermissions } from "@/lib/permissions";
 import { setSiteStatus, useSiteStatus } from "@/lib/siteLifecycle";
 import { parseSiteTab, SITE_TABS, siteOperations, siteRecoveryRows, type SiteTab } from "@/lib/siteWorkspace";
 import { resolveSite, useOrgStructureVersion } from "@/lib/orgStructure";
+import { formatSiteAddress } from "@/lib/siteForm";
 import { lookupLabel } from "@/lib/sitesDirectory";
 import type { SessionUser } from "@/lib/auth";
 import type { AccessScope, OrganizationSite, PeriodKey } from "@/types/enterprise";
@@ -234,7 +235,7 @@ function OverviewTab({
   ];
 
   const details = [
-    { label: "Address", value: [site.address, site.postCode].filter(Boolean).join(", ") },
+    { label: "Address", value: [formatSiteAddress(site), site.postCode].filter(Boolean).join(", ") },
     { label: "Primary contact", value: ops.primaryContact },
     { label: "Site admin", value: ops.siteAdmin },
     { label: "Availability", value: ops.collectionHours },
