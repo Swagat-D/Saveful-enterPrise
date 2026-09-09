@@ -516,7 +516,7 @@ function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
     status: row.isActive ? "Active" : "Deactivated",
     lastActivityAt: row.lastActivityAt ?? null,
     createdAt: row.createdAt ?? row.activatedAt ?? null,
-    managerName: assignedName || contactName || null,
+    managerName: contactName || assignedName || null,
     managerUserId: manager && row.managers?.[0]?.userId != null ? String(row.managers[0].userId) : null,
     managerPhone: manager?.phoneNumber || row.phoneNumber || null,
     contactName: contactName || null,
@@ -719,7 +719,7 @@ export function organizationSiteFromAdmin(site: AdminSite): OrganizationSite {
     address: site.address.split("\n")[0]?.trim() || site.address,
     addressDetail: site.address.includes("\n") ? site.address.split("\n").slice(1).join("\n").trim() : undefined,
     postCode: site.postcode ?? "",
-    managerName: site.managerName || site.contactName || "",
+    managerName: site.contactName || site.managerName || "",
     managerUserId: site.managerUserId ?? null,
     email: site.contactEmail || "",
     mobile: site.managerPhone || "",
@@ -2225,8 +2225,9 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
     audit,
     ops: harbour
       ? {
-          primaryContact: harbour.primaryContact || (harbour.hasManager ? harbour.managerName : profile.contactName),
-          siteAdmin: harbour.hasManager ? harbour.managerName : profile.contactName,
+          primaryContact:
+            harbour.primaryContact || harbour.managerName || profile.contactName || "Not assigned",
+          siteAdmin: harbour.primaryContact || harbour.managerName || profile.contactName || "Not assigned",
           collectionHours: "Mon–Fri 2:00 pm – 5:00 pm",
           collectionInstructions:
             harbour.collectionInstructions ||
@@ -2240,9 +2241,9 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
             listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.name ||
             "Not assigned",
           siteAdmin:
+            site.contactName ||
             site.managerName ||
             listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.name ||
-            site.contactName ||
             "Not assigned",
           collectionHours:
             site.collectionDays?.length && site.collectionFrom && site.collectionTo

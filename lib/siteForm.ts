@@ -163,7 +163,7 @@ export function siteToFormValues(site: OrganizationSite): SiteFormValues {
       user.scope.siteIds?.includes(current.id) && (user.role === "site_admin" || user.role === "group_admin"),
     );
   });
-  const names = splitName(current.managerName || current.primaryContact || "");
+  const names = splitName(current.primaryContact || current.managerName || "");
   const useExisting = Boolean(existing);
   const parsedAddress = splitSiteAddress(current.address);
   return {

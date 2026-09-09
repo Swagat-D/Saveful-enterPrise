@@ -187,7 +187,7 @@ function toSite(row: ApiSiteRow): OrganizationSite {
   const managerMobile = manager?.phoneNumber && manager.phoneNumber !== "not provided" ? manager.phoneNumber : "";
   const contactEmail = row.contactEmail && row.contactEmail !== "not provided" ? row.contactEmail : "";
   const contactMobile = row.phoneNumber && row.phoneNumber !== "not provided" ? row.phoneNumber : "";
-  const managerName = assignedName || contactName;
+  const managerName = contactName || assignedName;
   const [street, ...addressRest] = String(row.address ?? "").split("\n");
   return {
     id: String(row.id),

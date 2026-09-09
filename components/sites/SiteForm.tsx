@@ -24,6 +24,7 @@ import {
   inviteEnterpriseUser,
   listEnterpriseMembers,
   updateAdminOrganisationSite,
+  updateEnterpriseUser,
   updateOrganisationSite,
 } from "@/lib/api";
 import {
@@ -505,6 +506,25 @@ export function SiteForm({
       if (values.adminMode === "existing" && values.existingUserId !== currentManagerId) {
         if (isAdmin) await assignAdminSiteAdmin(organisationId, savedSiteId, Number(values.existingUserId));
         else await assignExistingSiteAdmin(savedSiteId, Number(values.existingUserId));
+      }
+
+      const profileUserId = Number(
+        values.adminMode === "existing" && values.existingUserId
+          ? values.existingUserId
+          : currentManagerId,
+      );
+      const nextEmail = values.inviteEmail.trim().toLowerCase();
+      const editingSamePerson = Boolean(
+        profileUserId &&
+          (!currentEmail || !nextEmail || nextEmail === currentEmail) &&
+          (values.inviteFirstName.trim() || values.inviteLastName.trim() || values.inviteMobile.trim()),
+      );
+      if (editingSamePerson && !isAdmin) {
+        await updateEnterpriseUser(profileUserId, {
+          firstName: values.inviteFirstName.trim() || undefined,
+          lastName: values.inviteLastName.trim() || undefined,
+          mobile: values.inviteMobile.trim() || undefined,
+        }).catch(() => undefined);
       }
 
       if (isAdmin) {
