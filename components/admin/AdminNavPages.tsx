@@ -65,8 +65,8 @@ export function AdminUsers() {
     <AdminPage
       workspace
       crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
-      title="Users"
-      hint="People with access across provisioned Enterprises. Last login is shown for members who have signed in."
+      title="Enterprise users"
+      hint="People with access across provisioned Enterprises. App signups are under App users."
     >
       <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
       {loadError ? (

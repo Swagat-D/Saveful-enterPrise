@@ -839,6 +839,48 @@ export function listAdminNetworkUsers() {
   });
 }
 
+export type AppUserKind =
+  | "all"
+  | "business_single"
+  | "business_multi"
+  | "charity_single"
+  | "charity_multi"
+  | "farmer_producer"
+  | "farmer_consumer";
+
+export type AdminAppUser = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  name: string;
+  email: string;
+  mobile?: string | null;
+  region?: string | null;
+  status: string;
+  emailVerified: boolean;
+  lastLoginAt?: string | null;
+  createdAt?: string | null;
+  joinedAt?: string | null;
+  orgRole?: string | null;
+  organisationId: number;
+  organisationName: string;
+  organisationType: string;
+  organisationTypeLabel: string;
+  venueType?: string | null;
+  organisationCreatedAt?: string | null;
+  plan?: string | null;
+  subscriptionStatus?: string | null;
+};
+
+export type AdminAppUsersResponse = {
+  users: AdminAppUser[];
+  counts: Record<AppUserKind, number>;
+};
+
+export function listAdminAppUsers() {
+  return apiFetch<AdminAppUsersResponse>("/admin/app-users", { auth: true });
+}
+
 export type ApiAuditLogRow = {
   id: number;
   organisationId: number;
