@@ -459,12 +459,21 @@ export function StatusPill({ status }: { status: string }) {
           status === "Never activated" ||
           status === "Claimed" ||
           status === "CLAIMED" ||
+          status === "Confirmed" ||
+          status === "CONFIRMED" ||
           status === "Partial" ||
-          status === "PARTIAL"
+          status === "PARTIAL" ||
+          status === "Pending" ||
+          status === "PENDING"
         ? "bg-amber-50 text-amber-700"
         : status === "Suspended"
           ? "bg-red-50 text-red-700"
-          : status === "Inactive" || status === "Paused" || status === "Deactivated" || status === "expired" || status === "cancelled"
+          : status === "Inactive" ||
+              status === "Paused" ||
+              status === "Deactivated" ||
+              status === "expired" ||
+              status === "cancelled" ||
+              status === "CANCELLED"
             ? "bg-gray-100 text-gray-600"
             : "bg-[#F7F6F2] text-gray-700";
   return <span className={cn("rounded-full px-2 py-0.5 font-saveful text-[11px] capitalize", tone)}>{status.replaceAll("_", " ")}</span>;

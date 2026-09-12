@@ -900,6 +900,15 @@ export type AdminAppClaim = {
   pickupByTime?: string | null;
   food?: string;
   siteName?: string;
+  siteAddress?: string;
+  providerType?: string;
+  listingType?: string;
+  listingCreatedAt?: string | null;
+  bestBefore?: string | null;
+  listingTotalKg?: number;
+  listingRemainingKg?: number;
+  pickupPostcode?: string | null;
+  items?: Array<{ name: string; totalQtyKg: number }>;
 };
 
 export type AdminAppListing = {

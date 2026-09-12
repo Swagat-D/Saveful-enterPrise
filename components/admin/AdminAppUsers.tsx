@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { AdminPage, AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { listAdminAppUsers, type AdminAppUser, type AppUserKind } from "@/lib/api";
@@ -44,6 +44,7 @@ function regionLabel(region?: string | null) {
 }
 
 export function AdminAppUsers() {
+  const router = useRouter();
   const { query } = useAdminFilters();
   const [kind, setKind] = useState<AppUserKind>("all");
   const [search, setSearch] = useState("");
@@ -169,18 +170,18 @@ export function AdminAppUsers() {
             </thead>
             <tbody>
               {paged.map((row) => (
-                <tr key={`${row.organisationId}-${row.id}`} className="border-b border-gray-50 last:border-0 hover:bg-[#FAF7F0]">
+                <tr
+                  key={`${row.organisationId}-${row.id}`}
+                  className="cursor-pointer border-b border-gray-50 last:border-0 hover:bg-[#FAF7F0]"
+                  onClick={() => router.push(`/admin/app-users/${row.organisationId}${query}`)}
+                >
                   <td className="px-3 py-3">
-                    <Link href={`/admin/app-users/${row.organisationId}${query}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">
-                      {row.name}
-                    </Link>
+                    <p className="font-saveful-semibold text-sm text-gray-900">{row.name}</p>
                     <p className="font-saveful text-xs text-gray-500">{row.email}</p>
                     {row.mobile ? <p className="font-saveful text-[11px] text-gray-400">{row.mobile}</p> : null}
                   </td>
                   <td className="px-3 py-3">
-                    <Link href={`/admin/app-users/${row.organisationId}${query}`} className="font-saveful text-sm text-saveful-green hover:underline">
-                      {row.organisationName}
-                    </Link>
+                    <p className="font-saveful text-sm text-gray-800">{row.organisationName}</p>
                     <p className="font-saveful text-[11px] text-gray-400">{roleLabel(row.orgRole)}</p>
                   </td>
                   <td className="px-3 py-3">

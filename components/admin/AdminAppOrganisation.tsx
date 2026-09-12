@@ -62,10 +62,6 @@ function foodSummary(listing: AdminAppListing) {
   return listing.items.map((item) => item.name).filter(Boolean).join(", ") || listing.listingType;
 }
 
-function collectedBy(claim: AdminAppClaim) {
-  const parts = [claim.collectedBy || claim.claimant?.name, claim.driver ? `Driver ${claim.driver.name}` : null].filter(Boolean);
-  return parts.join(" · ") || "—";
-}
 
 export function AdminAppOrganisation({ organisationId }: { organisationId: string }) {
   const { query } = useAdminFilters();
@@ -84,6 +80,10 @@ export function AdminAppOrganisation({ organisationId }: { organisationId: strin
         if (cancelled) return;
         setData(payload);
         setError("");
+        const isCharity = /charity/i.test(payload.organisation.organisationTypeLabel || payload.organisation.organisationType);
+        if (isCharity && payload.collections.length > 0 && payload.listings.length === 0) {
+          setTab("collections");
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -355,23 +355,144 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: stri
   );
 }
 
+const COLLECTION_STATUSES = [
+  { id: "all", label: "All" },
+  { id: "PENDING", label: "Pending" },
+  { id: "CONFIRMED", label: "Confirmed" },
+  { id: "COLLECTED", label: "Collected" },
+  { id: "CANCELLED", label: "Cancelled" },
+] as const;
+
 function Collections({ rows }: { rows: AdminAppClaim[] }) {
+  const [status, setStatus] = useState<(typeof COLLECTION_STATUSES)[number]["id"]>("all");
+  const [openId, setOpenId] = useState<number | null>(null);
+  const counts = useMemo(() => {
+    const next: Record<string, number> = { all: rows.length };
+    for (const item of COLLECTION_STATUSES) {
+      if (item.id === "all") continue;
+      next[item.id] = rows.filter((row) => row.status === item.id).length;
+    }
+    return next;
+  }, [rows]);
+  const filtered = status === "all" ? rows : rows.filter((row) => row.status === status);
+
   return (
-    <AdminSection title="Collections" action={<span className="font-saveful text-xs text-gray-500">{rows.length}</span>}>
-      <Table
-        columns={["From", "Food", "Pickup window", "Status", "Kg", "Collected", "Collected by"]}
-        empty="This organisation has not collected any listings yet."
-        rows={rows.map((row) => [
-          row.providerName || "—",
-          row.food || `Listing #${row.listingId ?? "—"}`,
-          pickupWindow(row.pickupFromTime, row.pickupByTime),
-          <StatusPill key={`${row.id}-status`} status={row.status} />,
-          formatKg(row.collectedKg),
-          row.collectedAt ? formatDisplayDateTime(row.collectedAt) : "—",
-          collectedBy(row),
-        ])}
-      />
-    </AdminSection>
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5">
+        {COLLECTION_STATUSES.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setStatus(item.id)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-lg px-3 font-saveful-semibold text-xs transition",
+              status === item.id ? "bg-saveful-green text-white" : "bg-[#F7F6F2] text-gray-600 hover:bg-[#EFEDE6]",
+            )}
+          >
+            {item.label}
+            <span className={cn("tabular-nums", status === item.id ? "text-white/80" : "text-gray-400")}>
+              {counts[item.id] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <AdminSection title="Collections" action={<span className="font-saveful text-xs text-gray-500">{filtered.length}</span>}>
+        {filtered.length === 0 ? (
+          <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">
+            This organisation has not collected any listings in this status.
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {filtered.map((row) => {
+              const open = openId === row.id;
+              return (
+                <article key={row.id} className={cn(open && "bg-[#FAF7F0]/70")}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(open ? null : row.id)}
+                    className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-3.5 py-3 text-left hover:bg-[#FAF7F0] sm:gap-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-saveful-semibold text-sm text-gray-900">{row.providerName || "Listing"}</p>
+                      <p className="truncate font-saveful text-xs text-gray-500">{row.food || `Listing #${row.listingId ?? "—"}`}</p>
+                    </div>
+                    <div className="hidden min-w-0 sm:block">
+                      <p className="truncate font-saveful text-sm text-gray-800">{row.siteName || "—"}</p>
+                      <p className="truncate font-saveful text-[11px] text-gray-400">{row.pickupAddress || "—"}</p>
+                    </div>
+                    <p className="hidden font-saveful text-xs text-gray-500 lg:block">{pickupWindow(row.pickupFromTime, row.pickupByTime)}</p>
+                    <p className="font-saveful-semibold text-sm tabular-nums text-gray-800">{formatKg(row.collectedKg)}</p>
+                    <span className="flex items-center justify-end gap-2">
+                      <StatusPill status={row.status} />
+                      <ChevronDown className={cn("h-4 w-4 text-gray-400 transition", open && "rotate-180")} />
+                    </span>
+                  </button>
+                  {open ? <CollectionDetail row={row} /> : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </AdminSection>
+    </div>
+  );
+}
+
+function CollectionDetail({ row }: { row: AdminAppClaim }) {
+  const items = row.items?.length ? row.items : row.food ? [{ name: row.food, totalQtyKg: row.collectedKg }] : [];
+  return (
+    <div className="space-y-3 border-t border-gray-100 px-3.5 py-3.5">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Package} label="From" value={row.providerName || "—"} />
+        <Metric icon={MapPin} label="Pickup address" value={[row.pickupAddress, row.pickupPostcode].filter(Boolean).join(", ") || "—"} />
+        <Metric icon={Clock3} label="Pickup window" value={pickupWindow(row.pickupFromTime, row.pickupByTime)} />
+        <Metric icon={Clock3} label="Collected" value={row.collectedAt ? formatDisplayDateTime(row.collectedAt) : "Not collected yet"} />
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Package} label="Listed" value={row.listingCreatedAt ? formatDisplayDateTime(row.listingCreatedAt) : "—"} />
+        <Metric icon={Package} label="Best before" value={row.bestBefore ? formatDisplayDate(row.bestBefore) : "—"} />
+        <Metric
+          icon={Package}
+          label="Listing total"
+          value={
+            row.listingTotalKg != null
+              ? `${formatKg(row.listingTotalKg)}${row.listingRemainingKg != null ? ` · ${formatKg(row.listingRemainingKg)} left` : ""}`
+              : "—"
+          }
+        />
+        <Metric icon={Truck} label="Collected by" value={row.driver ? `Driver ${row.driver.name}` : row.collectedBy || "This organisation"} />
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.length ? (
+          items.map((item) => (
+            <span key={`${row.id}-${item.name}`} className="rounded-full bg-white px-2.5 py-1 font-saveful text-xs text-gray-700 ring-1 ring-black/[0.06]">
+              {item.name}
+              <span className="ml-1 text-gray-400">{formatKg(item.totalQtyKg)}</span>
+            </span>
+          ))
+        ) : (
+          <span className="font-saveful text-sm text-gray-500">No food items</span>
+        )}
+      </div>
+      <div className="rounded-xl bg-white px-3 py-2.5 ring-1 ring-black/[0.04]">
+        <p className="font-saveful text-[11px] uppercase tracking-wide text-gray-400">
+          Listing source{row.listingId ? ` · #${row.listingId}` : ""}
+        </p>
+        <p className="mt-1 font-saveful text-sm text-gray-800">
+          {row.providerName || "—"}
+          {row.providerType ? ` · ${row.providerType}` : ""}
+          {row.siteName ? ` · ${row.siteName}` : ""}
+        </p>
+        <p className="mt-0.5 font-saveful text-xs text-gray-500">{row.siteAddress || row.pickupAddress || "—"}</p>
+        {row.driver ? (
+          <p className="mt-1 font-saveful text-xs text-gray-600">
+            Driver {row.driver.name}
+            {row.driver.mobile ? ` · ${row.driver.mobile}` : ""}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
