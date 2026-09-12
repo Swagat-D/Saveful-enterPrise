@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Search } from "lucide-react";
 import { AdminPage, AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { listAdminAppUsers, type AdminAppUser, type AppUserKind } from "@/lib/api";
@@ -138,18 +139,20 @@ export function AdminAppUsers() {
           </span>
         }
       >
-        <label className="relative mb-3 block max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Search name, email or organisation"
-            className="h-10 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] pl-10 pr-3 font-saveful text-sm outline-none placeholder:text-gray-400 focus:border-saveful-green/40 focus:bg-white"
-          />
-        </label>
+        <div className="border-b border-gray-100 px-3.5 py-3">
+          <label className="relative block max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search name, email or organisation"
+              className="h-10 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] pl-10 pr-3 font-saveful text-sm outline-none placeholder:text-gray-400 focus:border-saveful-green/40 focus:bg-white"
+            />
+          </label>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">
@@ -166,14 +169,18 @@ export function AdminAppUsers() {
             </thead>
             <tbody>
               {paged.map((row) => (
-                <tr key={`${row.organisationId}-${row.id}`} className="border-b border-gray-50 last:border-0">
+                <tr key={`${row.organisationId}-${row.id}`} className="border-b border-gray-50 last:border-0 hover:bg-[#FAF7F0]">
                   <td className="px-3 py-3">
-                    <p className="font-saveful-semibold text-sm text-gray-900">{row.name}</p>
+                    <Link href={`/admin/app-users/${row.organisationId}${query}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">
+                      {row.name}
+                    </Link>
                     <p className="font-saveful text-xs text-gray-500">{row.email}</p>
                     {row.mobile ? <p className="font-saveful text-[11px] text-gray-400">{row.mobile}</p> : null}
                   </td>
                   <td className="px-3 py-3">
-                    <p className="font-saveful text-sm text-gray-800">{row.organisationName}</p>
+                    <Link href={`/admin/app-users/${row.organisationId}${query}`} className="font-saveful text-sm text-saveful-green hover:underline">
+                      {row.organisationName}
+                    </Link>
                     <p className="font-saveful text-[11px] text-gray-400">{roleLabel(row.orgRole)}</p>
                   </td>
                   <td className="px-3 py-3">

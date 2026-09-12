@@ -448,9 +448,19 @@ export function AdminRowMenu({
 
 export function StatusPill({ status }: { status: string }) {
   const tone =
-    status === "Active" || status === "completed" || status === "claimed"
+    status === "Active" ||
+    status === "completed" ||
+    status === "Collected" ||
+    status === "COLLECTED"
       ? "bg-emerald-50 text-emerald-700"
-      : status === "Prospect" || status === "Onboarding" || status === "published" || status === "Never activated"
+      : status === "Prospect" ||
+          status === "Onboarding" ||
+          status === "published" ||
+          status === "Never activated" ||
+          status === "Claimed" ||
+          status === "CLAIMED" ||
+          status === "Partial" ||
+          status === "PARTIAL"
         ? "bg-amber-50 text-amber-700"
         : status === "Suspended"
           ? "bg-red-50 text-red-700"

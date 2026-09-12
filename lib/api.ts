@@ -881,6 +881,88 @@ export function listAdminAppUsers() {
   return apiFetch<AdminAppUsersResponse>("/admin/app-users", { auth: true });
 }
 
+export type AdminAppClaim = {
+  id: number;
+  status: string;
+  claimMode: string;
+  collectedKg: number;
+  createdAt?: string | null;
+  confirmedAt?: string | null;
+  collectedAt?: string | null;
+  claimant?: { id: number; name: string; type: string } | null;
+  collectedBy?: string | null;
+  driver?: { id: number; name: string; email: string; mobile?: string | null; status: string } | null;
+  listingId?: number;
+  listingStatus?: string;
+  providerName?: string;
+  pickupAddress?: string;
+  pickupFromTime?: string | null;
+  pickupByTime?: string | null;
+  food?: string;
+  siteName?: string;
+};
+
+export type AdminAppListing = {
+  id: number;
+  status: string;
+  listingType: string;
+  totalQtyKg: number;
+  remainingQtyKg: number;
+  pickupAddress: string;
+  pickupPostcode?: string | null;
+  pickupFromTime?: string | null;
+  pickupByTime?: string | null;
+  bestBefore?: string | null;
+  createdAt?: string | null;
+  site: { id: number; name: string; address: string };
+  items: Array<{ name: string; totalQtyKg: number; remainingQtyKg: number; unit?: string | null; category?: string | null }>;
+  claims: AdminAppClaim[];
+};
+
+export type AdminAppOrganisationDetail = {
+  organisation: {
+    id: number;
+    name: string;
+    organisationType: string;
+    organisationTypeLabel: string;
+    region?: string | null;
+    venueType?: string | null;
+    address?: string | null;
+    brandName?: string | null;
+    createdAt?: string | null;
+    plan?: string | null;
+    subscriptionStatus?: string | null;
+  };
+  members: Array<{
+    id: number;
+    name: string;
+    email: string;
+    mobile?: string | null;
+    orgRole?: string | null;
+    status: string;
+    lastLoginAt?: string | null;
+    joinedAt?: string | null;
+  }>;
+  sites: Array<{
+    id: number;
+    name: string;
+    address: string;
+    postcode?: string | null;
+    contactName?: string | null;
+    contactEmail?: string | null;
+    contactMobile?: string | null;
+    isActive: boolean;
+    createdAt?: string | null;
+  }>;
+  listings: AdminAppListing[];
+  listingCounts: Record<string, number>;
+  collections: AdminAppClaim[];
+};
+
+export function getAdminAppOrganisation(organisationId: string | number) {
+  return apiFetch<AdminAppOrganisationDetail>(`/admin/app-users/organisations/${organisationId}`, { auth: true });
+}
+
 export type ApiAuditLogRow = {
   id: number;
   organisationId: number;
