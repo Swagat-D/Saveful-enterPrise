@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { AddOrganisationForm } from "@/components/admin/AdminOrganisations";
 import { AdminFiltersBar, AdminPage, AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { useSession } from "@/lib/auth";
@@ -26,6 +28,7 @@ import { formatLastActivity } from "@/lib/networkRules";
 export function AdminUsers() {
   const { filters, update, reset, query } = useAdminFilters();
   useAdminVersion();
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [loadError, setLoadError] = useState("");
@@ -50,13 +53,21 @@ export function AdminUsers() {
     if (filters.country !== "all" && org.country !== filters.country) return false;
     return true;
   });
-  const rows = orgs.flatMap((org) =>
-    listOrgUsers(org.id).map((user) => ({
-      ...user,
-      orgName: org.name,
-      orgType: org.enterpriseId ? `Enterprise · ${formatEnterpriseId(org.enterpriseId)}` : "Enterprise",
-    })),
-  );
+  const needle = search.trim().toLowerCase();
+  const rows = orgs
+    .flatMap((org) =>
+      listOrgUsers(org.id).map((user) => ({
+        ...user,
+        orgName: org.name,
+        orgType: org.enterpriseId ? `Enterprise · ${formatEnterpriseId(org.enterpriseId)}` : "Enterprise",
+      })),
+    )
+    .filter((row) => {
+      if (!needle) return true;
+      return [row.name, row.email, row.orgName, row.role, row.status]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle));
+    });
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(page, pageCount);
   const paged = rows.slice((current - 1) * pageSize, current * pageSize);
@@ -74,7 +85,24 @@ export function AdminUsers() {
           {loadError} Restart the API with the latest admin users endpoint, then refresh this page.
         </p>
       ) : null}
-      <AdminSection title="Directory">
+      <AdminSection
+        title="Directory"
+        action={<span className="font-saveful text-xs text-gray-500">{rows.length} {rows.length === 1 ? "user" : "users"}</span>}
+      >
+        <div className="border-b border-gray-100 px-3.5 py-3">
+          <label className="relative block max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search name, email or organisation"
+              className="h-10 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] pl-10 pr-3 font-saveful text-sm outline-none placeholder:text-gray-400 focus:border-saveful-green/40 focus:bg-white"
+            />
+          </label>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">
             <thead>
@@ -111,6 +139,11 @@ export function AdminUsers() {
             </tbody>
           </table>
         </div>
+        {rows.length === 0 ? (
+          <p className="px-3 py-8 text-center font-saveful text-sm text-gray-500">
+            {needle ? "No enterprise users match that search." : "No enterprise users in this view."}
+          </p>
+        ) : null}
         <TablePager
           page={current}
           pageSize={pageSize}
@@ -243,7 +276,9 @@ export function AdminGaps() {
 
 export function AdminCreateReport() {
   const { query } = useAdminFilters();
-  const [period, setPeriod] = useState("30");
+  const [period, setPeriod] = useState<"7" | "30" | "90" | "all" | "custom">("30");
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
   return (
     <AdminPage
       crumb={[{ href: `/admin/insights${query}`, label: "Insights & Reports" }]}
@@ -255,15 +290,16 @@ export function AdminCreateReport() {
           <span className="mb-1.5 block font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">Report name</span>
           <input className="h-9 w-full rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40" defaultValue="Platform impact report" />
         </label>
-        <label className="block">
-          <span className="mb-1.5 block font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">Period</span>
-          <select value={period} onChange={(event) => setPeriod(event.target.value)} className="h-9 w-full rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful text-sm outline-none">
-            <option value="7">7 days</option>
-            <option value="30">30 days</option>
-            <option value="90">90 days</option>
-            <option value="all">All time</option>
-          </select>
-        </label>
+        <PeriodFilter
+          period={period}
+          from={from}
+          to={to}
+          onChange={(next) => {
+            setPeriod(next.period);
+            setFrom(next.from);
+            setTo(next.to);
+          }}
+        />
       </div>
       <p className="font-saveful text-sm text-gray-600">
         Reports use the same conversion factors as Dashboard and Insights. Open Insights to review figures before you export.

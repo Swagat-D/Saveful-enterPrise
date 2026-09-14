@@ -28,7 +28,7 @@ export type ActivityStatus =
 
 export type SiteSummaryKey = "total" | "active" | "no_recent" | "never_activated" | "deactivated";
 
-export type PeriodKey = "7" | "30" | "90" | "all";
+export type PeriodKey = "7" | "30" | "90" | "all" | "custom";
 
 export type OrgStructureKind = "group" | "territory" | "cluster";
 
@@ -213,4 +213,6 @@ export type NetworkFilters = {
   clusterId: string;
   siteId: string;
   period: PeriodKey;
+  from?: string;
+  to?: string;
 };

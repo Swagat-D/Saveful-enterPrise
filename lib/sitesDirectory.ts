@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { periodRange } from "@/lib/dates";
+import { parsePeriodBounds, parsePeriodKey, periodRange, writePeriodParams } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import { demoNetworkSites, getNetworkSitesVersion, recoveryTransactions, subscribeNetworkSites } from "@/lib/network";
 import { getUnit, resolveSite, type OrgStructureKind } from "@/lib/orgStructure";
@@ -34,6 +34,8 @@ export type SitesTableFilters = {
   summary: "all" | SiteSummaryKey;
   attention: string | null;
   period: PeriodKey;
+  from?: string;
+  to?: string;
   page: number;
   pageSize: 10 | 25 | 50;
 };
@@ -90,7 +92,8 @@ export function parseSitesFilters(params: URLSearchParams): SitesTableFilters {
         : "all",
     summary: "all",
     attention: attention === "all" ? "all" : null,
-    period: (params.get("period") as PeriodKey) || "30",
+    period: parsePeriodKey(params.get("period")),
+    ...parsePeriodBounds(params),
     page: page > 0 ? page : 1,
     pageSize: PAGE_SIZES.includes(pageSize as 10) ? (pageSize as 10 | 25 | 50) : 10,
   };
@@ -104,7 +107,7 @@ export function sitesFiltersToQuery(filters: SitesTableFilters) {
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
   if (filters.siteStatus !== "all") params.set("status", filters.siteStatus);
   if (filters.activity !== "all") params.set("activity", filters.activity);
-  if (filters.period !== "30") params.set("period", filters.period);
+  writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (filters.attention === "all") params.set("attention", "all");
   if (filters.page > 1) params.set("page", String(filters.page));
   if (filters.pageSize !== 10) params.set("pageSize", String(filters.pageSize));

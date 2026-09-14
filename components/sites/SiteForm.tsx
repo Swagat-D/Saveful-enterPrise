@@ -90,6 +90,24 @@ function isDeactivatedStatus(status?: string) {
   return /deactivat/i.test(status ?? "");
 }
 
+function currentSiteAdminEmail(liveSite?: OrganizationSite, site?: OrganizationSite) {
+  return (liveSite?.email || site?.email || "").trim().toLowerCase();
+}
+
+function willSendSiteAdminInvitation(
+  values: SiteFormValues,
+  mode: "create" | "edit",
+  liveSite?: OrganizationSite,
+  site?: OrganizationSite,
+) {
+  if (values.adminMode !== "invite") return false;
+  const nextEmail = values.inviteEmail.trim().toLowerCase();
+  if (!nextEmail) return false;
+  if (mode !== "edit") return true;
+  const currentEmail = currentSiteAdminEmail(liveSite, site);
+  return !currentEmail || nextEmail !== currentEmail;
+}
+
 function memberForEmail(email: string, users: AssignableUser[]) {
   const needle = email.trim().toLowerCase();
   if (!needle || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(needle)) return undefined;
@@ -257,11 +275,13 @@ export function SiteForm({
     if (values.adminMode !== "invite") return;
     const existing = memberForEmail(values.inviteEmail, assignableUsers);
     if (!existing) return;
-    if (existing.email.trim().toLowerCase() === currentManagerEmail) return;
+    const sameCurrentAdmin = existing.email.trim().toLowerCase() === currentManagerEmail;
     adoptExistingMember(existing, { keepEdits: true });
     setPickingUser(false);
     setExistingMemberNotice(
-      `${existing.name} (${existing.email}) is already in this Enterprise. They are selected as an existing user. No invitation email will be sent — the site will be assigned to them.`,
+      sameCurrentAdmin
+        ? `${existing.name} is already the Site Admin. Saving site details will not send another invitation.`
+        : `${existing.name} (${existing.email}) is already in this Enterprise. They are selected as an existing user. No invitation email will be sent — the site will be assigned to them.`,
     );
     // Only re-check when the member list loads (e.g. after picking an Enterprise).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- invite field edits are handled in onChange
@@ -479,7 +499,7 @@ export function SiteForm({
 
       if (values.adminMode === "invite") {
         const nextEmail = values.inviteEmail.trim().toLowerCase();
-        const alreadyThisManager = Boolean(currentManagerId && currentEmail && nextEmail === currentEmail);
+        const alreadyThisManager = Boolean(currentEmail && nextEmail === currentEmail);
         if (!alreadyThisManager) {
           const invite = {
             firstName: values.inviteFirstName.trim(),
@@ -608,7 +628,7 @@ export function SiteForm({
             : null;
         })()
       : contactFromSiteAdmin(values);
-  const inviting = values.adminMode === "invite";
+  const inviting = willSendSiteAdminInvitation(values, mode, liveSite, site);
   const submitLabel = saving ? "Saving…" : inviting ? "Save site & send invitation" : "Save site";
   const Shell = isAdmin ? AdminPortalShell : PortalShell;
   const selectedEnterprise = organisations.find((org) => org.id === organisationId);
@@ -895,7 +915,9 @@ export function SiteForm({
                       />
                     </Field>
                     <p className="font-saveful text-xs text-gray-500 sm:col-span-2">
-                      These details are saved as the site contact. They set their own password from the invitation email.
+                      {inviting
+                        ? "These details are saved as the site contact. They set their own password from the invitation email."
+                        : "Site details will be saved. An invitation is only sent if you change the Site Admin email to a new person."}
                     </p>
                   </div>
                 ) : null}

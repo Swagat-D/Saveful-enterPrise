@@ -1,5 +1,5 @@
 import { calculateImpact, percentChange } from "@/lib/impact";
-import { inDateRange, periodRange, previousPeriodRange } from "@/lib/dates";
+import { inDateRange, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams } from "@/lib/dates";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import { listUnits, resolveSite } from "@/lib/orgStructure";
 import {
@@ -22,16 +22,16 @@ import type {
 
 export type { NetworkFilters };
 
-const PERIODS: PeriodKey[] = ["7", "30", "90", "all"];
-
 export function parseNetworkFilters(params: URLSearchParams): NetworkFilters {
-  const period = params.get("period");
+  const bounds = parsePeriodBounds(params);
   return {
     groupId: params.get("group") || "all",
     territoryId: params.get("territory") || "all",
     clusterId: params.get("cluster") || "all",
     siteId: params.get("site") || "all",
-    period: PERIODS.includes(period as PeriodKey) ? (period as PeriodKey) : "30",
+    period: parsePeriodKey(params.get("period")),
+    from: bounds.from,
+    to: bounds.to,
   };
 }
 
@@ -41,7 +41,7 @@ export function filtersToSearchParams(filters: NetworkFilters, extra?: Record<st
   if (filters.territoryId !== "all") params.set("territory", filters.territoryId);
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
   if (filters.siteId !== "all") params.set("site", filters.siteId);
-  if (filters.period !== "30") params.set("period", filters.period);
+  writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (extra) {
     for (const [key, value] of Object.entries(extra)) {
       if (value) params.set(key, value);
@@ -109,7 +109,7 @@ export function scopedTransactions(
   const allowedSites = new Set(
     visibleSites(demoNetworkSites, scope, filters).map((site) => site.id),
   );
-  const { startDate, endDate } = range ?? periodRange(filters.period);
+  const { startDate, endDate } = range ?? rangeForFilters(filters);
 
   return recoveryTransactions.filter((row) => {
     if (!allowedSites.has(row.snapshot.siteId)) return false;
@@ -182,7 +182,7 @@ export function recoveryPathways(rows: RecoveryTransaction[]) {
 }
 
 export function networkHealth(sites: OrganizationSite[], filters: NetworkFilters) {
-  const { startDate, endDate } = periodRange(filters.period);
+  const { startDate, endDate } = rangeForFilters(filters);
   const activated = sites.filter((site) => site.status === "active" && isActivated(site));
   const withActivity = activated.filter((site) => hasActivityInPeriod(site, startDate, endDate));
   return {
@@ -252,7 +252,7 @@ export function impactOverTime(rows: RecoveryTransaction[], period: PeriodKey) {
       }));
   }
 
-  const days = Number(period);
+  const days = period === "custom" || !Number.isFinite(Number(period)) ? 30 : Number(period);
   const bucket = days <= 7 ? 1 : days <= 30 ? 3 : 7;
   const points: { label: string; kg: number; collections: number }[] = [];
   const end = new Date(`${endDate}T00:00:00Z`);
@@ -282,7 +282,7 @@ function toRangeDate(date: Date) {
 export function buildDashboardModel(filters: NetworkFilters, scope: AccessScope) {
   const sites = visibleSites(demoNetworkSites, scope, filters);
   const currentRows = scopedTransactions(filters, scope);
-  const previousRows = scopedTransactions(filters, scope, previousPeriodRange(filters.period));
+  const previousRows = scopedTransactions(filters, scope, previousPeriodRange(filters.period, undefined, { from: filters.from, to: filters.to }));
   const current = impactFromTransactions(currentRows);
   const previous = impactFromTransactions(previousRows);
 

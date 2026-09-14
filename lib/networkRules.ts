@@ -93,11 +93,11 @@ export function attentionReasons(
   site: OrganizationSite,
   filters: NetworkFilters,
 ): AttentionReason[] {
-  const { startDate, endDate } = periodRange(filters.period);
+  const { startDate, endDate } = periodRange(filters.period, undefined, { from: filters.from, to: filters.to });
   const reasons: AttentionReason[] = [];
 
   if (!isActivated(site)) reasons.push("never_activated");
-  if (hasNoRecentActivity(site, activityQuietDays(), endDate)) reasons.push("no_activity_30d");
+  if (endDate && hasNoRecentActivity(site, activityQuietDays(), endDate)) reasons.push("no_activity_30d");
   if (isActivated(site) && !hasListingInPeriod(site, startDate, endDate)) {
     reasons.push("no_listings_in_period");
   }

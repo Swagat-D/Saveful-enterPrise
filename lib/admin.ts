@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { appendAdminAudit, listAdminAudit } from "@/lib/adminAudit";
 import { ApiError, getEnterprise, listAdminNetworkUsers, listAdminSites, listAllOrganisationFoodListings, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminNetworkInvite, type AdminNetworkUser, type ApiFoodListing, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
-import { inDateRange, liveToday, periodRange, previousPeriodRange } from "@/lib/dates";
+import { inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams, type PeriodBounds } from "@/lib/dates";
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
@@ -96,6 +96,8 @@ export function countryCode(value: string) {
 
 export type AdminFilters = {
   period: PeriodKey;
+  from?: string;
+  to?: string;
   country: string;
   state: string;
   orgType: "all" | OrgTypeId;
@@ -178,6 +180,17 @@ export type AdminSite = {
   collectionInstructions?: string | null;
 };
 
+export type AdminListingClaim = {
+  id: string;
+  status: string;
+  collectedKg: number;
+  collectedAt?: string | null;
+  confirmedAt?: string | null;
+  claimantName?: string | null;
+  collectedBy?: string | null;
+  driverName?: string | null;
+};
+
 export type AdminListing = {
   id: string;
   orgId: string;
@@ -186,8 +199,17 @@ export type AdminListing = {
   food: string;
   pathway: RecoveryPathway;
   quantityKg: number;
+  remainingQtyKg?: number;
   status: string;
   createdAt: string;
+  pickupAddress?: string;
+  pickupPostcode?: string | null;
+  pickupFromTime?: string | null;
+  pickupByTime?: string | null;
+  bestBefore?: string | null;
+  listingType?: string;
+  items?: Array<{ name: string; totalQtyKg: number; remainingQtyKg?: number }>;
+  claims?: AdminListingClaim[];
 };
 
 export type AdminCollection = {
@@ -203,6 +225,21 @@ export type AdminCollection = {
   recipientOrgId?: string;
   status: string;
   occurredAt: string;
+  claimStatus?: string;
+  providerName?: string;
+  siteName?: string;
+  listingCode?: string;
+  listingCreatedAt?: string | null;
+  listingTotalKg?: number;
+  listingRemainingKg?: number;
+  pickupAddress?: string;
+  pickupPostcode?: string | null;
+  pickupFromTime?: string | null;
+  pickupByTime?: string | null;
+  bestBefore?: string | null;
+  collectedAt?: string | null;
+  driverName?: string | null;
+  items?: Array<{ name: string; totalQtyKg: number }>;
 };
 
 export type AdminOrgUser = {
@@ -340,7 +377,7 @@ export function participationLabel(roles: ParticipationRoleId[]) {
 }
 
 const FILTER_STORE = "saveful_admin_filters";
-const FILTER_PARAM_KEYS = ["period", "country", "state", "orgType", "role", "org", "pathway", "q", "accountStatus", "activityStatus", "plan"];
+const FILTER_PARAM_KEYS = ["period", "from", "to", "country", "state", "orgType", "role", "org", "pathway", "q", "accountStatus", "activityStatus", "plan"];
 let rememberedFilters: AdminFilters | null = null;
 let filterStoreLoaded = false;
 
@@ -379,7 +416,8 @@ export function urlHasAdminFilters(params: URLSearchParams) {
 
 export function parseAdminFilters(params: URLSearchParams): AdminFilters {
   if (!urlHasAdminFilters(params)) return lastAdminFilters();
-  const period = params.get("period");
+  const period = parsePeriodKey(params.get("period"));
+  const bounds = parsePeriodBounds(params);
   const orgType = params.get("orgType");
   const role = params.get("role");
   const pathway = params.get("pathway");
@@ -387,7 +425,9 @@ export function parseAdminFilters(params: URLSearchParams): AdminFilters {
   const activityStatus = params.get("activityStatus");
   const plan = params.get("plan");
   return cascadeAdminFilters({
-    period: (["7", "30", "90", "all"].includes(period ?? "") ? period : "30") as PeriodKey,
+    period,
+    from: bounds.from,
+    to: bounds.to,
     country: params.get("country") || "all",
     state: params.get("state") || "all",
     orgType: ORG_TYPES.some((item) => item.id === orgType) ? (orgType as OrgTypeId) : "all",
@@ -417,7 +457,7 @@ function cascadeAdminFilters(filters: AdminFilters): AdminFilters {
 
 export function adminFiltersToQuery(filters: AdminFilters) {
   const params = new URLSearchParams();
-  if (filters.period !== "30") params.set("period", filters.period);
+  writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (filters.country !== "all") params.set("country", filters.country);
   if (filters.state !== "all") params.set("state", filters.state);
   if (filters.orgType !== "all") params.set("orgType", filters.orgType);
@@ -806,7 +846,7 @@ export function filteredSites(filters: AdminFilters) {
 
 export function filteredListings(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
   const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
-  const { startDate, endDate } = range ?? periodRange(filters.period, liveToday());
+  const { startDate, endDate } = range ?? rangeForFilters(filters, liveToday());
   return listListings().filter((row) => {
     if (!allowed.has(row.orgId) || !inDateRange(row.createdAt, startDate, endDate)) return false;
     if (filters.pathway !== "all" && row.pathway !== filters.pathway) return false;
@@ -816,7 +856,7 @@ export function filteredListings(filters: AdminFilters, range?: { startDate?: st
 
 export function filteredCollections(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
   const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
-  const { startDate, endDate } = range ?? periodRange(filters.period, liveToday());
+  const { startDate, endDate } = range ?? rangeForFilters(filters, liveToday());
   return listCollections().filter((row) => {
     if (!allowed.has(row.orgId) || !inDateRange(row.occurredAt, startDate, endDate)) return false;
     if (filters.pathway !== "all" && row.pathway !== filters.pathway) return false;
@@ -826,7 +866,7 @@ export function filteredCollections(filters: AdminFilters, range?: { startDate?:
 
 function recoveryPoints(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
   const orgs = new Set(filteredOrganisations(filters).map((org) => org.id));
-  const { startDate, endDate } = range ?? periodRange(filters.period);
+  const { startDate, endDate } = range ?? rangeForFilters(filters);
   const rows: RecoveryTransaction[] = [];
   for (const row of filteredCollections(filters, { startDate, endDate })) {
     if (row.orgId === "harbour" || row.status !== "completed") continue;
@@ -871,11 +911,11 @@ function listingRates(listings: AdminListing[]) {
 }
 
 function priorLabel(period: PeriodKey) {
-  return period === "all" ? "prior period" : `prior ${period} days`;
+  return period === "all" || period === "custom" ? "prior period" : `prior ${period} days`;
 }
 
 export function buildAdminOverview(filters: AdminFilters) {
-  const previousRange = previousPeriodRange(filters.period);
+  const previousRange = previousPeriodRange(filters.period, liveToday(), { from: filters.from, to: filters.to });
   const organisations = filteredOrganisations(filters);
   const sites = filteredSites(filters);
   const listings = filteredListings(filters);
@@ -1005,10 +1045,10 @@ export function buildOrgDirectory(filters: AdminFilters) {
   const organisations = filteredOrganisations(filters);
   const sites = filteredSites(filters);
   const listings = filteredListings(filters);
-  const previousListings = filteredListings(filters, previousPeriodRange(filters.period));
+  const previousRange = previousPeriodRange(filters.period, liveToday(), { from: filters.from, to: filters.to });
+  const previousListings = filteredListings(filters, previousRange);
   const collections = filteredCollections(filters);
-  const previousCollections = filteredCollections(filters, previousPeriodRange(filters.period));
-  const previousRange = previousPeriodRange(filters.period);
+  const previousCollections = filteredCollections(filters, previousRange);
   const previousActiveSites = sites.filter((site) => inDateRange(site.lastActivityAt, previousRange.startDate, previousRange.endDate)).length;
   return {
     organisations,
@@ -1347,7 +1387,7 @@ function toDirectorySite(row: AdminSite, period: PeriodKey): AdminDirectorySite 
     row.orgId === "harbour"
       ? foodRecoveredKg(row.id, period)
       : listCollections()
-          .filter((item) => item.siteId === row.id && item.status === "completed" && inDateRange(item.occurredAt, periodRange(period).startDate, periodRange(period).endDate))
+          .filter((item) => item.siteId === row.id && item.status === "completed" && inDateRange(item.occurredAt, periodRange(period, liveToday()).startDate, periodRange(period, liveToday()).endDate))
           .reduce((sum, item) => sum + item.quantityKg, 0);
   return {
     id: row.id,
@@ -1584,6 +1624,13 @@ function listingFoodLabel(row: ApiFoodListing) {
   return names.join(", ") || "Food listing";
 }
 
+function claimDriverName(claim: NonNullable<ApiFoodListing["foodClaims"]>[number]) {
+  const driver = claim.driverPickups?.[0]?.driver;
+  if (!driver) return null;
+  const name = [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
+  return name || null;
+}
+
 function mapLiveListing(row: ApiFoodListing): AdminListing {
   return {
     id: String(row.id),
@@ -1593,33 +1640,76 @@ function mapLiveListing(row: ApiFoodListing): AdminListing {
     food: listingFoodLabel(row),
     pathway: mapListingPathway(row),
     quantityKg: row.totalQtyKg ?? 0,
+    remainingQtyKg: row.remainingQtyKg ?? 0,
     status: mapListingStatus(row),
     createdAt: row.createdAt,
+    pickupAddress: row.pickupAddress,
+    pickupPostcode: row.pickupPostcode ?? null,
+    pickupFromTime: row.pickupFromTime ?? null,
+    pickupByTime: row.pickupByTime ?? null,
+    bestBefore: row.bestBefore ?? null,
+    listingType: row.listingType,
+    items: (row.foodItems ?? []).map((item) => ({
+      name: item.name,
+      totalQtyKg: item.totalQtyKg ?? 0,
+      remainingQtyKg: item.remainingQtyKg,
+    })),
+    claims: (row.foodClaims ?? []).map((claim) => {
+      const collectedKg = (claim.claimItems ?? []).reduce((sum, item) => sum + (item.qtyKg ?? 0), 0);
+      return {
+        id: String(claim.id),
+        status: (claim.status || "PENDING").toUpperCase(),
+        collectedKg,
+        collectedAt: claim.collectedAt ?? null,
+        confirmedAt: claim.confirmedAt ?? null,
+        claimantName: claim.claimantOrg?.name ?? null,
+        collectedBy: claim.claimantOrg?.name ?? null,
+        driverName: claimDriverName(claim),
+      };
+    }),
   };
 }
 
 function mapLiveCollections(row: ApiFoodListing): AdminCollection[] {
   const listing = mapLiveListing(row);
-  return (row.foodClaims ?? [])
-    .filter((claim) => (claim.status || "").toUpperCase() !== "CANCELLED")
-    .map((claim) => {
-      const claimStatus = (claim.status || "").toUpperCase();
-      const kg = (claim.claimItems ?? []).reduce((sum, item) => sum + (item.qtyKg ?? 0), 0);
-      return {
-        id: String(claim.id),
-        orgId: listing.orgId,
-        siteId: listing.siteId,
-        listingId: listing.id,
-        code: `COL-${String(claim.id).padStart(5, "0")}`,
-        food: listing.food,
-        pathway: listing.pathway,
-        quantityKg: kg || listing.quantityKg,
-        recipientName: claim.claimantOrg?.name || "Recipient",
-        recipientOrgId: claim.claimantOrg?.id != null ? String(claim.claimantOrg.id) : undefined,
-        status: claimStatus === "COLLECTED" ? "completed" : claimStatus === "CONFIRMED" ? "claimed" : "claimed",
-        occurredAt: claim.collectedAt || claim.confirmedAt || claim.createdAt || listing.createdAt,
-      };
-    });
+  const site = getSite(listing.siteId);
+  const provider = getOrganisation(listing.orgId);
+  return (row.foodClaims ?? []).map((claim) => {
+    const claimStatus = (claim.status || "PENDING").toUpperCase();
+    const kg = (claim.claimItems ?? []).reduce((sum, item) => sum + (item.qtyKg ?? 0), 0);
+    const items = (claim.claimItems ?? [])
+      .map((item) => ({ name: item.foodItem?.name || "Item", totalQtyKg: item.qtyKg ?? 0 }))
+      .filter((item) => item.totalQtyKg > 0);
+    return {
+      id: String(claim.id),
+      orgId: listing.orgId,
+      siteId: listing.siteId,
+      listingId: listing.id,
+      code: `COL-${String(claim.id).padStart(5, "0")}`,
+      food: listing.food,
+      pathway: listing.pathway,
+      quantityKg: kg || listing.quantityKg,
+      recipientName: claim.claimantOrg?.name || "Recipient",
+      recipientOrgId: claim.claimantOrg?.id != null ? String(claim.claimantOrg.id) : undefined,
+      status: claimStatus === "COLLECTED" ? "completed" : claimStatus === "CANCELLED" ? "cancelled" : "claimed",
+      occurredAt: claim.collectedAt || claim.confirmedAt || claim.createdAt || listing.createdAt,
+      claimStatus,
+      providerName: provider?.name,
+      siteName: site?.name,
+      listingCode: listing.code,
+      listingCreatedAt: listing.createdAt,
+      listingTotalKg: listing.quantityKg,
+      listingRemainingKg: listing.remainingQtyKg,
+      pickupAddress: listing.pickupAddress,
+      pickupPostcode: listing.pickupPostcode,
+      pickupFromTime: listing.pickupFromTime,
+      pickupByTime: listing.pickupByTime,
+      bestBefore: listing.bestBefore,
+      collectedAt: claim.collectedAt ?? null,
+      driverName: claimDriverName(claim),
+      items: items.length ? items : listing.items?.map((item) => ({ name: item.name, totalQtyKg: item.totalQtyKg })),
+    };
+  });
 }
 
 function listingActivityKind(status: string) {
@@ -1868,7 +1958,7 @@ function collectOrganisationActivity(org: AdminOrganisation): AdminActivityItem[
 
 export function listNetworkActivity(filters: AdminFilters, limit?: number): AdminActivityItem[] {
   const orgs = filteredOrganisations(filters);
-  const { startDate, endDate } = periodRange(filters.period, liveToday());
+  const { startDate, endDate } = rangeForFilters(filters, liveToday());
   const rows = mergeActivity(orgs.flatMap(collectOrganisationActivity)).filter(
     (item) => filters.period === "all" || inDateRange(item.at, startDate, endDate),
   );
@@ -1879,10 +1969,10 @@ export function listOrganisationDirectoryActivity(filters: AdminFilters, limit =
   return listNetworkActivity(filters, limit);
 }
 
-export function listOrganisationInternalActivity(orgId: string, period: PeriodKey = "30", limit = 6): AdminActivityItem[] {
+export function listOrganisationInternalActivity(orgId: string, period: PeriodKey = "30", limit = 6, bounds?: PeriodBounds): AdminActivityItem[] {
   const org = getOrganisation(orgId);
   if (!org) return [];
-  const { startDate, endDate } = periodRange(period, liveToday());
+  const { startDate, endDate } = periodRange(period, liveToday(), bounds);
   return collectOrganisationActivity(org)
     .filter((item) => period === "all" || inDateRange(item.at, startDate, endDate))
     .slice(0, limit);
@@ -1911,11 +2001,11 @@ function collectionImpactRows(rows: AdminCollection[]): RecoveryTransaction[] {
     }));
 }
 
-export function buildOrgDetail(orgId: string, period: PeriodKey = "30") {
+export function buildOrgDetail(orgId: string, period: PeriodKey = "30", bounds?: PeriodBounds) {
   const org = getOrganisation(orgId);
   if (!org) return null;
-  const previousRange = previousPeriodRange(period, liveToday());
-  const { startDate, endDate } = periodRange(period, liveToday());
+  const previousRange = previousPeriodRange(period, liveToday(), bounds);
+  const { startDate, endDate } = periodRange(period, liveToday(), bounds);
   const sites = listSites().filter((row) => row.orgId === orgId);
   const collections = listCollections().filter((row) => row.orgId === orgId || row.recipientOrgId === orgId);
   const periodCollections = collections.filter((row) => inDateRange(row.occurredAt, startDate, endDate));
@@ -2041,7 +2131,7 @@ function isAssignedSiteAdmin(user: AdminOrgUser, siteId: string) {
   return isSiteAdminRole(user.role) && (user.siteIds?.includes(siteId) ?? false);
 }
 
-export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
+export function buildSiteDetail(siteId: string, period: PeriodKey = "30", bounds?: PeriodBounds) {
   const site = getSite(siteId);
   if (!site) return null;
   const org = getOrganisation(site.orgId);
@@ -2049,7 +2139,7 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30") {
   const directory = toDirectorySite(site, period);
   const harbour = site.orgId === "harbour" ? demoNetworkSites.find((item) => item.id === site.id) : undefined;
   const profile = orgProfile(org);
-  const { startDate, endDate } = periodRange(period);
+  const { startDate, endDate } = periodRange(period, liveToday(), bounds);
   const listings = listListings().filter((row) => row.siteId === site.id);
   const outbound = listCollections().filter((row) => row.siteId === site.id);
   const inbound = listCollections().filter((row) => {

@@ -17,14 +17,16 @@ import {
   YAxis,
 } from "recharts";
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
+import { AdminSiteActivity } from "@/components/admin/AdminSiteActivity";
 import { AdminSection, StatusPill, useAdminFilters } from "@/components/admin/AdminChrome";
 import { PortalPageShell, StatusBadge } from "@/components/ui/Portal";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
-import { buildSiteDetail, orgTypeLabel, participationLabel, refreshSites, updateSiteStatus, useAdminVersion } from "@/lib/admin";
+import { buildSiteDetail, getSite, orgTypeLabel, participationLabel, refreshOrganisationListings, refreshSites, updateSiteStatus, useAdminVersion } from "@/lib/admin";
 import { formatSiteAddress } from "@/lib/siteForm";
 import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
 import { CHART_COLORS, CHART_TOOLTIP } from "@/lib/demo";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import { formatDisplayDate, periodLabel } from "@/lib/dates";
 import { calculateImpact, formatCount, formatKg, formatMoney, IMPACT } from "@/lib/impact";
 import { INSIGHTS_METRICS, INSIGHTS_PATHWAYS, type InsightsMetric } from "@/lib/insights";
@@ -34,12 +36,6 @@ import { parseSiteTab, SITE_TABS, type SiteTab } from "@/lib/siteWorkspace";
 import type { PeriodKey, RecoveryPathway } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "7 days" },
-  { id: "30", label: "30 days" },
-  { id: "90", label: "90 days" },
-  { id: "all", label: "All time" },
-];
 
 const PATHWAY_BAR: Record<string, string> = {
   people: "#2D5F4F",
@@ -52,13 +48,6 @@ const PARTICIPATION_COPY = {
   lists: "Lists surplus",
   collects: "Collects surplus",
   both: "Lists and collects surplus",
-} as const;
-
-const ACTIVITY_TONE = {
-  Collection: "green",
-  Users: "blue",
-  Listing: "blue",
-  Alert: "amber",
 } as const;
 
 function orgTabHref(orgId: string, query: string, tab: string) {
@@ -106,15 +95,28 @@ export function AdminSiteDetail({ id }: { id: string }) {
   const { query } = useAdminFilters();
   const tab = parseSiteTab(searchParams.get("tab"));
   const [period, setPeriod] = useState<PeriodKey>("30");
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const model = buildSiteDetail(id, period);
+  const model = buildSiteDetail(id, period, { from, to });
 
   useEffect(() => {
+    let cancelled = false;
     void refreshSites()
+      .then(() => {
+        const current = getSite(id);
+        if (!current) return;
+        return refreshOrganisationListings(current.orgId);
+      })
       .catch(() => undefined)
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const setTab = (next: SiteTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -181,17 +183,17 @@ export function AdminSiteDetail({ id }: { id: string }) {
             </div>
             <div className="flex items-center gap-2">
               {tab === "overview" ? (
-                <select
-                  value={period}
-                  onChange={(event) => setPeriod(event.target.value as PeriodKey)}
-                  className="h-9 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful text-sm outline-none focus:border-saveful-green/40"
-                >
-                  {PERIODS.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                <PeriodFilter
+                  compact
+                  period={period}
+                  from={from}
+                  to={to}
+                  onChange={(next) => {
+                    setPeriod(next.period);
+                    setFrom(next.from);
+                    setTo(next.to);
+                  }}
+                />
               ) : null}
               <Link
                 href={`/admin/sites/${site.id}/edit${context}`}
@@ -267,7 +269,9 @@ export function AdminSiteDetail({ id }: { id: string }) {
             {tab === "overview" ? (
               <OverviewTab model={model} period={period} query={context} onViewActivity={() => setTab("activity")} />
             ) : null}
-            {tab === "activity" ? <ActivityTab model={model} query={context} /> : null}
+            {tab === "activity" ? (
+              <AdminSiteActivity siteName={site.name} listings={model.listings} collections={model.collections} />
+            ) : null}
             {tab === "insights" ? <InsightsTab siteId={site.id} query={query} /> : null}
             {tab === "access" ? <AccessTab model={model} /> : null}
           </div>
@@ -481,38 +485,17 @@ function OverviewTab({
   );
 }
 
-function ActivityTab({ model, query }: { model: NonNullable<ReturnType<typeof buildSiteDetail>>; query: string }) {
-  if (!model.activityFeed.length) {
-    return <p className="font-saveful text-sm text-gray-500">No activity recorded for this site yet.</p>;
-  }
-
-  return (
-    <div className="divide-y divide-gray-100">
-      {model.activityFeed.map((item) => (
-        <article key={item.id} className="py-3 first:pt-0 last:pb-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={ACTIVITY_TONE[item.type as keyof typeof ACTIVITY_TONE] ?? "slate"}>{item.type}</StatusBadge>
-            <span className="font-saveful text-xs text-gray-500">{item.time}</span>
-          </div>
-          <Link href={withQuery(item.href, query)} className="mt-1 block font-saveful-semibold text-sm text-gray-900 hover:text-saveful-green">
-            {item.title}
-          </Link>
-          <p className="mt-0.5 font-saveful text-sm text-gray-600">{item.body}</p>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function InsightsTab({ siteId, query }: { siteId: string; query: string }) {
   const [period, setPeriod] = useState<PeriodKey>("30");
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
   const [pathway, setPathway] = useState<"all" | RecoveryPathway>("all");
   const [metric, setMetric] = useState<InsightsMetric>("food");
   const [foodId, setFoodId] = useState("all");
   const [recipientId, setRecipientId] = useState("all");
   const [showAllFoods, setShowAllFoods] = useState(false);
   const [showAllOrgs, setShowAllOrgs] = useState(false);
-  const model = buildSiteDetail(siteId, period);
+  const model = buildSiteDetail(siteId, period, { from, to });
   if (!model) return null;
 
   const activePathways = model.pathways.filter((item) => item.kg > 0);
@@ -549,17 +532,17 @@ function InsightsTab({ siteId, query }: { siteId: string; query: string }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <select
-            value={period}
-            onChange={(event) => setPeriod(event.target.value as PeriodKey)}
-            className="h-9 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful text-sm outline-none focus:border-saveful-green/40"
-          >
-            {PERIODS.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+          <PeriodFilter
+            compact
+            period={period}
+            from={from}
+            to={to}
+            onChange={(next) => {
+              setPeriod(next.period);
+              setFrom(next.from);
+              setTo(next.to);
+            }}
+          />
           <select
             value={pathway}
             onChange={(event) => setPathway(event.target.value as "all" | RecoveryPathway)}

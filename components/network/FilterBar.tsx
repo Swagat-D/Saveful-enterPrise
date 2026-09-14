@@ -8,18 +8,12 @@ import { cascadeFilters, filterOptions, filtersToQuery, parseNetworkFilters } fr
 import { demoNetworkSites } from "@/lib/network";
 import { EMPTY_FILTERS, scopeFromUser } from "@/lib/scope";
 import { useSession } from "@/lib/auth";
-import type { NetworkFilters, PeriodKey } from "@/types/enterprise";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
+import type { NetworkFilters } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
 const selectClass =
   "h-10 w-full appearance-none rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 pr-8 font-saveful text-sm text-gray-900 outline-none transition focus:border-saveful-green/40 focus:bg-white focus:ring-2 focus:ring-saveful-green/10";
-
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "7 days" },
-  { id: "30", label: "30 days" },
-  { id: "90", label: "90 days" },
-  { id: "all", label: "All time" },
-];
 
 export function useNetworkFilters() {
   const router = useRouter();
@@ -59,10 +53,14 @@ export function FilterBar({
     filters.territoryId !== "all",
     filters.clusterId !== "all",
     filters.siteId !== "all",
-    filters.period !== "30",
+    filters.period !== "30" || Boolean(filters.from || filters.to),
   ].filter(Boolean).length;
 
-  const periodName = PERIODS.find((item) => item.id === filters.period)?.label ?? "30 days";
+  const periodName = filters.period === "custom" && filters.from && filters.to
+    ? `${filters.from} – ${filters.to}`
+    : filters.period === "all"
+      ? "All time"
+      : `${filters.period} days`;
   const applied = [
     labelFor(options.groups, filters.groupId),
     labelFor(options.territories, filters.territoryId),
@@ -97,12 +95,11 @@ export function FilterBar({
         onChange={(siteId) => update({ siteId })}
         options={options.sites}
       />
-      <FilterSelect
-        label="Period"
-        value={filters.period}
-        onChange={(period) => update({ period: period as PeriodKey })}
-        options={PERIODS.map((item) => ({ id: item.id, name: item.label }))}
-        allLabel={null}
+      <PeriodFilter
+        period={filters.period}
+        from={filters.from}
+        to={filters.to}
+        onChange={(next) => update(next)}
       />
     </>
   );

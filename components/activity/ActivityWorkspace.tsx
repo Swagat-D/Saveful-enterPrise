@@ -21,17 +21,7 @@ import { formatLastActivity } from "@/lib/networkRules";
 import { useOrgStructureVersion } from "@/lib/orgStructure";
 import { scopeFromUser } from "@/lib/scope";
 import { useUsersVersion } from "@/lib/users";
-import type { PeriodKey } from "@/types/enterprise";
-
-const selectClass =
-  "h-9 w-full appearance-none rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 pr-8 font-saveful text-sm text-gray-800 outline-none focus:border-saveful-green/40";
-
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "Last 7 days" },
-  { id: "30", label: "Last 30 days" },
-  { id: "90", label: "Last 90 days" },
-  { id: "all", label: "All time" },
-];
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 
 export function ActivityWorkspace() {
   const router = useRouter();
@@ -82,27 +72,15 @@ export function ActivityWorkspace() {
 
         <div className="rounded-xl border border-gray-200 bg-white">
           <div className="flex items-end gap-2 px-3 py-2.5">
-            <label className="block min-w-[10rem]">
-              <span className="mb-1.5 block font-saveful text-[11px] uppercase tracking-[0.14em] text-gray-500">Period</span>
-              <div className="relative">
-                <select
-                  value={filters.period}
-                  onChange={(event) => setFilters({ ...filters, period: event.target.value as PeriodKey })}
-                  className={selectClass}
-                >
-                  {PERIODS.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-gray-400">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </span>
-              </div>
-            </label>
+            <div className="min-w-[16rem]">
+              <PeriodFilter
+                compact
+                period={filters.period}
+                from={filters.from}
+                to={filters.to}
+                onChange={(next) => setFilters({ ...filters, ...next, page: 1 })}
+              />
+            </div>
             {filters.period !== "30" ? (
               <button
                 type="button"

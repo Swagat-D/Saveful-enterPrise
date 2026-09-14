@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { ApiFoodListing } from "@/lib/api";
-import { daysAgoIso, inDateRange, liveToday, periodRange } from "@/lib/dates";
+import { daysAgoIso, inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, rangeForFilters, writePeriodParams } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import { demoNetworkSites } from "@/lib/network";
 import { PATHWAY_LABEL } from "@/lib/networkQuery";
@@ -367,6 +367,8 @@ export type ActivityFilters = {
   tab: ActivityTab;
   q: string;
   period: PeriodKey;
+  from?: string;
+  to?: string;
   groupId: string;
   territoryId: string;
   clusterId: string;
@@ -399,7 +401,8 @@ export function parseActivityFilters(params: URLSearchParams): ActivityFilters {
   return {
     tab: params.get("tab") === "collections" ? "collections" : "listings",
     q: params.get("q") ?? "",
-    period: (params.get("period") as PeriodKey) || "30",
+    period: parsePeriodKey(params.get("period")),
+    ...parsePeriodBounds(params),
     groupId: params.get("group") || "all",
     territoryId: params.get("territory") || "all",
     clusterId: params.get("cluster") || "all",
@@ -416,7 +419,7 @@ export function activityFiltersToQuery(filters: ActivityFilters) {
   const params = new URLSearchParams();
   if (filters.tab !== "listings") params.set("tab", filters.tab);
   if (filters.q.trim()) params.set("q", filters.q.trim());
-  if (filters.period !== "30") params.set("period", filters.period);
+  writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (filters.groupId !== "all") params.set("group", filters.groupId);
   if (filters.territoryId !== "all") params.set("territory", filters.territoryId);
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
@@ -470,7 +473,7 @@ function matchesPathwayAndPeriod(
   filters: ActivityFilters,
 ) {
   if (filters.pathway !== "all" && pathway !== filters.pathway) return false;
-  const { startDate, endDate } = periodRange(filters.period, liveToday());
+  const { startDate, endDate } = rangeForFilters(filters, liveToday());
   return inDateRange(iso, startDate, endDate);
 }
 
@@ -566,7 +569,7 @@ function listingEventKind(status: ActivityListingStatus) {
 }
 
 export function listEnterpriseActivity(filters: ActivityFilters, scope: AccessScope): EnterpriseActivityEvent[] {
-  const { startDate, endDate } = periodRange(filters.period, liveToday());
+  const { startDate, endDate } = rangeForFilters(filters, liveToday());
   const inPeriod = (iso: string) => Boolean(iso) && (filters.period === "all" || inDateRange(iso, startDate, endDate));
   const items: EnterpriseActivityEvent[] = [];
 

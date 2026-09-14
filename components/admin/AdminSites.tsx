@@ -38,15 +38,9 @@ import {
   type AdminSitesTableFilters,
 } from "@/lib/admin";
 import { useAdminAuditVersion } from "@/lib/adminAudit";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import type { ActivityStatus, PeriodKey, SiteLifecycleStatus } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
-
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "7 days" },
-  { id: "30", label: "30 days" },
-  { id: "90", label: "90 days" },
-  { id: "all", label: "All time" },
-];
 
 const headerBtn =
   "inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white px-3 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]";
@@ -175,23 +169,19 @@ export function AdminSites() {
               <p className="mt-1.5 truncate font-saveful text-xs text-gray-500">
                 {directory.rows.length} {directory.rows.length === 1 ? "site" : "sites"}
                 <span className="text-gray-300"> · </span>
-                {periodLabel(admin.period)}
+                {periodLabel(admin.period, { from: admin.from, to: admin.to })}
                 <span className="text-gray-300"> · </span>
                 Group, territory and cluster are independent
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={admin.period}
-                onChange={(event) => updateAdmin({ period: event.target.value as PeriodKey })}
-                className="h-9 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful text-sm outline-none focus:border-saveful-green/40"
-              >
-                {PERIODS.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+              <PeriodFilter
+                compact
+                period={admin.period}
+                from={admin.from}
+                to={admin.to}
+                onChange={(next) => updateAdmin(next)}
+              />
               <button type="button" className={headerBtn} onClick={() => exportAdminSitesCsv(directory.rows, admin.period)}>
                 <Download className="h-3.5 w-3.5" />
                 Export

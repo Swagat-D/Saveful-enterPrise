@@ -22,15 +22,9 @@ import { resolveSite, useOrgStructureVersion } from "@/lib/orgStructure";
 import { formatSiteAddress } from "@/lib/siteForm";
 import { lookupLabel } from "@/lib/sitesDirectory";
 import type { SessionUser } from "@/lib/auth";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import type { AccessScope, OrganizationSite, PeriodKey } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
-
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "7 days" },
-  { id: "30", label: "30 days" },
-  { id: "90", label: "90 days" },
-  { id: "all", label: "All time" },
-];
 
 const PATHWAY_COLORS: Record<string, string> = {
   people: "#2D5F4F",
@@ -58,6 +52,8 @@ export function SiteWorkspace({
   const status = useSiteStatus(site);
   const [menuOpen, setMenuOpen] = useState(false);
   const [period, setPeriod] = useState<PeriodKey>("30");
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
   const ops = siteOperations(site);
   const group = lookupLabel("group", current.groupId);
   const territory = lookupLabel("territory", current.territoryId);
@@ -105,17 +101,17 @@ export function SiteWorkspace({
 
             <div className="flex items-center gap-2">
               {tab === "overview" ? (
-                <select
-                  value={period}
-                  onChange={(event) => setPeriod(event.target.value as PeriodKey)}
-                  className="h-9 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful text-sm outline-none focus:border-saveful-green/40"
-                >
-                  {PERIODS.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                <PeriodFilter
+                  compact
+                  period={period}
+                  from={from}
+                  to={to}
+                  onChange={(next) => {
+                    setPeriod(next.period);
+                    setFrom(next.from);
+                    setTo(next.to);
+                  }}
+                />
               ) : null}
               {permissions.edit ? (
                 <Link
@@ -181,6 +177,8 @@ export function SiteWorkspace({
                 site={site}
                 scope={scope}
                 period={period}
+                from={from}
+                to={to}
                 onViewActivity={() => setTab("activity")}
                 ops={ops}
               />
@@ -201,12 +199,16 @@ function OverviewTab({
   site,
   scope,
   period,
+  from,
+  to,
   onViewActivity,
   ops,
 }: {
   site: OrganizationSite;
   scope: AccessScope;
   period: PeriodKey;
+  from?: string;
+  to?: string;
   onViewActivity: () => void;
   ops: ReturnType<typeof siteOperations>;
 }) {
@@ -217,13 +219,15 @@ function OverviewTab({
       clusterId: "all" as const,
       siteId: site.id,
       period,
+      from,
+      to,
     }),
-    [site.id, period],
+    [site.id, period, from, to],
   );
   const rows = scopedTransactions(filters, scope);
   const impact = impactFromTransactions(rows);
   const pathways = recoveryPathways(rows);
-  const recent = siteRecoveryRows(site.id, period, 5);
+  const recent = siteRecoveryRows(site.id, period, 5, { from, to });
 
   const metrics = [
     { label: "Food recovered", value: formatKg(impact.foodKg) },

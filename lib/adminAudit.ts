@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { listAllAdminEnterpriseAudit, type ApiAuditLogRow } from "@/lib/api";
-import { DEMO_TODAY, addDays, inDateRange, liveToday, periodRange, toApiDate } from "@/lib/dates";
+import { DEMO_TODAY, addDays, inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, toApiDate, writePeriodParams } from "@/lib/dates";
 import type { PeriodKey } from "@/types/enterprise";
 
 export const ADMIN_AUDIT_RETENTION_MONTHS = 24;
@@ -50,6 +50,8 @@ export type AdminAuditEntry = {
 export type AdminAuditFilters = {
   q: string;
   period: PeriodKey;
+  from?: string;
+  to?: string;
   organisationId: string;
   user: string;
   entityType: string;
@@ -254,7 +256,7 @@ export function appendAdminAudit(
 export function listAdminAudit(filters: Partial<AdminAuditFilters> & Pick<AdminAuditFilters, "period" | "organisationId">) {
   ensureLoaded();
   const merged: AdminAuditFilters = { ...EMPTY_ADMIN_AUDIT_FILTERS, ...filters };
-  const { startDate, endDate } = periodRange(merged.period, liveToday());
+  const { startDate, endDate } = periodRange(merged.period, liveToday(), { from: merged.from, to: merged.to });
   const query = merged.q.trim().toLowerCase();
   return applyRetention([...remoteEntries, ...extras, ...seed()]).filter((row) => {
     if (!inDateRange(row.at, startDate, endDate)) return false;
@@ -294,7 +296,8 @@ export function parseAdminAuditFilters(params: URLSearchParams | null): AdminAud
   const area = params?.get("area");
   return {
     q: params?.get("q") ?? "",
-    period: period === "7" || period === "90" || period === "all" ? period : "30",
+    period: parsePeriodKey(period),
+    ...parsePeriodBounds(params),
     organisationId: params?.get("org") || "all",
     user: params?.get("user") || "all",
     entityType: entityType && entityType !== "all" ? entityType : "all",
@@ -308,7 +311,7 @@ export function parseAdminAuditFilters(params: URLSearchParams | null): AdminAud
 export function adminAuditFiltersToQuery(filters: AdminAuditFilters) {
   const params = new URLSearchParams();
   if (filters.q.trim()) params.set("q", filters.q.trim());
-  if (filters.period !== "30") params.set("period", filters.period);
+  writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (filters.organisationId !== "all") params.set("org", filters.organisationId);
   if (filters.user !== "all") params.set("user", filters.user);
   if (filters.entityType !== "all") params.set("entityType", filters.entityType);

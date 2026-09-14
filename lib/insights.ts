@@ -1,4 +1,4 @@
-import { periodLabel, rangeLabel } from "@/lib/dates";
+import { parsePeriodBounds, parsePeriodKey, periodLabel, rangeLabel, writePeriodParams } from "@/lib/dates";
 import { calculateImpact, IMPACT } from "@/lib/impact";
 import {
   EMPTY_FILTERS,
@@ -70,9 +70,8 @@ export function parseInsightsFilters(params: URLSearchParams): InsightsFilters {
     territoryId: params.get("territory") || "all",
     clusterId: params.get("cluster") || "all",
     siteId: params.get("site") || "all",
-    period: (["7", "30", "90", "all"].includes(params.get("period") ?? "")
-      ? params.get("period")
-      : "30") as PeriodKey,
+    period: parsePeriodKey(params.get("period")),
+    ...parsePeriodBounds(params),
     pathway: PATHWAYS.includes(pathway as RecoveryPathway) ? (pathway as RecoveryPathway) : "all",
     foodId: params.get("food") || "all",
     recipientId: params.get("org") || "all",
@@ -88,7 +87,7 @@ export function insightsFiltersToQuery(filters: InsightsFilters) {
   if (filters.territoryId !== "all") params.set("territory", filters.territoryId);
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
   if (filters.siteId !== "all") params.set("site", filters.siteId);
-  if (filters.period !== "30") params.set("period", filters.period);
+  writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (filters.tab === "impact" && filters.pathway !== "all") params.set("pathway", filters.pathway);
   if (filters.tab === "impact" && filters.foodId !== "all") params.set("food", filters.foodId);
   if (filters.tab === "impact" && filters.recipientId !== "all") params.set("org", filters.recipientId);
@@ -116,6 +115,8 @@ export function networkFiltersFrom(filters: InsightsFilters): NetworkFilters {
     clusterId: filters.clusterId,
     siteId: filters.siteId,
     period: filters.period,
+    from: filters.from,
+    to: filters.to,
   };
 }
 

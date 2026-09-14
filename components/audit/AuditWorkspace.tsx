@@ -42,19 +42,12 @@ import {
   type AuditEntry,
   type AuditFilters,
 } from "@/lib/audit";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import { formatDisplayDateTime, periodLabel } from "@/lib/dates";
-import type { PeriodKey } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
 const selectClass =
   "h-9 w-full appearance-none rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 pr-8 font-saveful text-sm text-gray-800 outline-none focus:border-saveful-green/40";
-
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "Last 7 days" },
-  { id: "30", label: "Last 30 days" },
-  { id: "90", label: "Last 90 days" },
-  { id: "all", label: "All time" },
-];
 
 export function AuditWorkspace() {
   const router = useRouter();
@@ -144,12 +137,7 @@ export function AuditWorkspace() {
                       onReset={() => setFilters(EMPTY_AUDIT_FILTERS)}
                     >
                       <div className="grid grid-cols-1 gap-3">
-                        <FilterSelect
-                          label="Period"
-                          value={filters.period}
-                          onChange={(period) => update({ period: period as PeriodKey })}
-                          options={PERIODS}
-                        />
+                        <PeriodFilter period={filters.period} from={filters.from} to={filters.to} onChange={(next) => update(next)} />
                         <FilterSelect
                           label="Action"
                           value={filters.action}
@@ -174,11 +162,7 @@ export function AuditWorkspace() {
                 </div>
                 <div className="hidden items-end gap-2 lg:flex">
                   <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 xl:grid-cols-4">
-                  <FilterSelect
-                    value={filters.period}
-                    onChange={(period) => update({ period: period as PeriodKey })}
-                    options={PERIODS.map((item) => ({ id: item.id, name: `Period: ${item.label}` }))}
-                  />
+                  <PeriodFilter compact period={filters.period} from={filters.from} to={filters.to} onChange={(next) => update(next)} />
                   <FilterSelect
                     value={filters.action}
                     onChange={(action) => update({ action })}

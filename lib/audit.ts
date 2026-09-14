@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { DEMO_TODAY, addDays, inDateRange, periodRange, toApiDate } from "@/lib/dates";
+import { DEMO_TODAY, addDays, inDateRange, parsePeriodBounds, parsePeriodKey, periodRange, toApiDate, writePeriodParams } from "@/lib/dates";
 import type { PeriodKey } from "@/types/enterprise";
 
 export const AUDIT_RETENTION_MONTHS = 24;
@@ -36,6 +36,8 @@ export type AuditEntry = {
 export type AuditFilters = {
   q: string;
   period: PeriodKey;
+  from?: string;
+  to?: string;
   action: string;
   user: string;
   area: string;
@@ -333,7 +335,8 @@ export function parseAuditFilters(params: URLSearchParams | null): AuditFilters 
   const page = Number(params?.get("page"));
   return {
     q: params?.get("q") ?? "",
-    period: period === "7" || period === "90" || period === "all" ? period : "30",
+    period: parsePeriodKey(period),
+    ...parsePeriodBounds(params),
     action: params?.get("action") || "all",
     user: params?.get("user") || "all",
     area: params?.get("area") || "all",
@@ -345,7 +348,7 @@ export function parseAuditFilters(params: URLSearchParams | null): AuditFilters 
 export function auditFiltersToQuery(filters: AuditFilters) {
   const params = new URLSearchParams();
   if (filters.q.trim()) params.set("q", filters.q.trim());
-  if (filters.period !== "30") params.set("period", filters.period);
+  writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (filters.action !== "all") params.set("action", filters.action);
   if (filters.user !== "all") params.set("user", filters.user);
   if (filters.area !== "all") params.set("area", filters.area);
@@ -365,15 +368,15 @@ export function auditFilterOptions(items = listAudit()) {
   return { actions, users };
 }
 
-function auditPeriodRange(period: PeriodKey) {
+function auditPeriodRange(filters: AuditFilters) {
   const today = new Date() > DEMO_TODAY ? new Date() : DEMO_TODAY;
-  if (period === "all") return { startDate: undefined as string | undefined, endDate: undefined as string | undefined };
-  return periodRange(period, today);
+  if (filters.period === "all") return { startDate: undefined as string | undefined, endDate: undefined as string | undefined };
+  return periodRange(filters.period, today, { from: filters.from, to: filters.to });
 }
 
 export function filterAudit(filters: AuditFilters, items = listAudit()) {
   const query = filters.q.trim().toLowerCase();
-  const range = auditPeriodRange(filters.period);
+  const range = auditPeriodRange(filters);
   return items.filter((entry) => {
     if (!inDateRange(entry.at, range.startDate, range.endDate)) return false;
     if (filters.action !== "all" && entry.action !== filters.action) return false;

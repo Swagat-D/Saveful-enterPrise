@@ -16,6 +16,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { FileText, Leaf } from "lucide-react";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { NetworkPerformance } from "@/components/insights/NetworkPerformance";
 import { PortalPageShell } from "@/components/ui/Portal";
@@ -46,18 +47,11 @@ import { filterOptions, PATHWAY_COLORS, PATHWAY_LABEL } from "@/lib/networkQuery
 import { demoNetworkSites } from "@/lib/network";
 import { useOrgStructureVersion } from "@/lib/orgStructure";
 import { scopeFromUser } from "@/lib/scope";
-import type { PeriodKey } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
 const selectClass =
   "h-9 w-full appearance-none rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 pr-8 font-saveful text-sm text-gray-800 outline-none focus:border-saveful-green/40";
 
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "7 days" },
-  { id: "30", label: "30 days" },
-  { id: "90", label: "90 days" },
-  { id: "all", label: "All time" },
-];
 
 export function InsightsWorkspace() {
   const router = useRouter();
@@ -166,7 +160,7 @@ export function InsightsWorkspace() {
                     onReset={() => setFilters({ ...EMPTY_INSIGHTS_FILTERS, tab: filters.tab, viewBy: filters.viewBy })}
                   >
                     <div className="grid grid-cols-1 gap-3">
-                      <FilterSelect label="Period" value={filters.period} onChange={(period) => update({ period: period as PeriodKey })} options={PERIODS} />
+                      <PeriodFilter period={filters.period} from={filters.from} to={filters.to} onChange={(next) => update(next)} />
                       <FilterSelect label="Group" value={filters.groupId} onChange={(groupId) => update({ groupId })} options={[{ id: "all", name: "All" }, ...options.groups]} />
                       <FilterSelect label="Territory" value={filters.territoryId} onChange={(territoryId) => update({ territoryId })} options={[{ id: "all", name: "All" }, ...options.territories]} />
                       <FilterSelect label="Cluster" value={filters.clusterId} onChange={(clusterId) => update({ clusterId })} options={[{ id: "all", name: "All" }, ...options.clusters]} />
@@ -179,7 +173,7 @@ export function InsightsWorkspace() {
                 </div>
                 <div className="hidden items-end gap-2 lg:flex">
                   <div className={cn("grid min-w-0 flex-1 gap-2", filters.tab === "impact" ? "grid-cols-2 xl:grid-cols-3" : "grid-cols-2 xl:grid-cols-5")}>
-                  <FilterSelect value={filters.period} onChange={(period) => update({ period: period as PeriodKey })} options={PERIODS.map((item) => ({ id: item.id, name: `Period: ${item.label}` }))} />
+                  <PeriodFilter compact period={filters.period} from={filters.from} to={filters.to} onChange={(next) => update(next)} />
                   <FilterSelect value={filters.groupId} onChange={(groupId) => update({ groupId })} options={[{ id: "all", name: "Group: All" }, ...options.groups.map((item) => ({ id: item.id, name: `Group: ${item.name}` }))]} />
                   <FilterSelect value={filters.territoryId} onChange={(territoryId) => update({ territoryId })} options={[{ id: "all", name: "Territory: All" }, ...options.territories.map((item) => ({ id: item.id, name: `Territory: ${item.name}` }))]} />
                   <FilterSelect value={filters.clusterId} onChange={(clusterId) => update({ clusterId })} options={[{ id: "all", name: "Cluster: All" }, ...options.clusters.map((item) => ({ id: item.id, name: `Cluster: ${item.name}` }))]} />

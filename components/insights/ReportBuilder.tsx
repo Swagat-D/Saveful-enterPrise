@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 const selectClass =
   "h-9 w-full appearance-none rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 pr-8 font-saveful text-sm text-gray-800 outline-none focus:border-saveful-green/40";
 
-const PERIODS: { id: PeriodKey | "custom"; label: string }[] = [
+const PERIODS: { id: PeriodKey; label: string }[] = [
   { id: "7", label: "Last 7 days" },
   { id: "30", label: "Last 30 days" },
   { id: "90", label: "Last 90 days" },
@@ -67,7 +67,7 @@ export function ReportBuilder() {
   const [territoryId, setTerritoryId] = useState(incoming.territoryId);
   const [clusterId, setClusterId] = useState(incoming.clusterId);
   const [siteId, setSiteId] = useState(incoming.siteId);
-  const [period, setPeriod] = useState<PeriodKey | "custom">(incoming.period);
+  const [period, setPeriod] = useState<PeriodKey>(incoming.period);
   const initialRange = periodRange(incoming.period);
   const [from, setFrom] = useState(initialRange.startDate ?? "");
   const [to, setTo] = useState(initialRange.endDate ?? "");
@@ -113,7 +113,7 @@ export function ReportBuilder() {
     setSections((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   };
 
-  const choosePeriod = (next: PeriodKey | "custom") => {
+  const choosePeriod = (next: PeriodKey) => {
     setStatus("idle");
     setPeriod(next);
     if (next !== "custom") {
@@ -221,7 +221,7 @@ export function ReportBuilder() {
             <Step n={2} title="Reporting period" hint="Choose the period for this report.">
               <Select
                 value={period}
-                onChange={(value) => choosePeriod(value as PeriodKey | "custom")}
+                onChange={(value) => choosePeriod(value as PeriodKey)}
                 options={PERIODS.map((item) => ({ id: item.id, name: item.label }))}
               />
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">

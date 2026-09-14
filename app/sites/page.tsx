@@ -33,15 +33,9 @@ import {
   type SitesTableFilters,
 } from "@/lib/sitesDirectory";
 import { formatSiteAddress } from "@/lib/siteForm";
-import type { ActivityStatus, OrganizationSite, PeriodKey, SiteLifecycleStatus } from "@/types/enterprise";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
+import type { ActivityStatus, OrganizationSite, SiteLifecycleStatus } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
-
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "7 days" },
-  { id: "30", label: "30 days" },
-  { id: "90", label: "90 days" },
-  { id: "all", label: "All time" },
-];
 
 const selectClass =
   "h-9 w-full appearance-none rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 pr-8 font-saveful text-sm text-gray-800 outline-none focus:border-saveful-green/40";
@@ -124,23 +118,19 @@ function SitesDirectory() {
               <p className="mt-1.5 truncate font-saveful text-xs text-gray-500">
                 {rows.length} {rows.length === 1 ? "site" : "sites"}
                 <span className="text-gray-300"> · </span>
-                {periodLabel(filters.period)}
+                {periodLabel(filters.period, { from: filters.from, to: filters.to })}
                 <span className="text-gray-300"> · </span>
                 Group, territory and cluster are independent
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={filters.period}
-                onChange={(event) => update({ period: event.target.value as PeriodKey })}
-                className="h-9 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2.5 font-saveful text-sm outline-none focus:border-saveful-green/40"
-              >
-                {PERIODS.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+              <PeriodFilter
+                compact
+                period={filters.period}
+                from={filters.from}
+                to={filters.to}
+                onChange={(next) => update(next)}
+              />
               {permissions.bulkUpload ? (
                 <Link href="/sites/upload" className={headerBtn}>
                   <Upload className="h-3.5 w-3.5" />

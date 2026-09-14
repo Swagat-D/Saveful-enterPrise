@@ -51,17 +51,11 @@ import {
 import { listAdminAudit, refreshAdminAudit, useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
 import { CHART_TOOLTIP } from "@/lib/demo";
-import { formatDisplayDate } from "@/lib/dates";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
+import { formatDisplayDate, periodLabel } from "@/lib/dates";
 import { formatCount, formatKg, formatMoney } from "@/lib/impact";
 import type { PeriodKey } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
-
-const PERIODS: { id: PeriodKey; label: string }[] = [
-  { id: "7", label: "7 days" },
-  { id: "30", label: "30 days" },
-  { id: "90", label: "90 days" },
-  { id: "all", label: "All time" },
-];
 
 export function AdminOrganisationDetail({ id }: { id: string }) {
   const user = useSession();
@@ -73,8 +67,10 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
   const { query, filters } = useAdminFilters();
   const tab = parseOrgDetailTab(searchParams.get("tab"));
   const [period, setPeriod] = useState<PeriodKey>("30");
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
   const [menuOpen, setMenuOpen] = useState(false);
-  const model = buildOrgDetail(id, period);
+  const model = buildOrgDetail(id, period, { from, to });
 
   useEffect(() => {
     void refreshOrganisationDetail(id).catch(() => undefined);
@@ -204,7 +200,19 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
 
           <div className="space-y-3 p-4 sm:p-5">
             {tab === "overview" ? (
-              <OverviewTab model={model} query={orgQuery} period={period} onPeriod={setPeriod} onTab={setTab} />
+              <OverviewTab
+                model={model}
+                query={orgQuery}
+                period={period}
+                from={from}
+                to={to}
+                onPeriod={(next) => {
+                  setPeriod(next.period);
+                  setFrom(next.from);
+                  setTo(next.to);
+                }}
+                onTab={setTab}
+              />
             ) : null}
             {tab === "sites" ? <AdminOrgSitesTable orgId={org.id} query={orgQuery} period={period} /> : null}
             {tab === "structure" ? <AdminOrganisationStructure organisationId={org.id} query={orgQuery} /> : null}
@@ -269,18 +277,22 @@ function OverviewTab({
   model,
   query,
   period,
+  from,
+  to,
   onPeriod,
   onTab,
 }: {
   model: NonNullable<ReturnType<typeof buildOrgDetail>>;
   query: string;
   period: PeriodKey;
-  onPeriod: (period: PeriodKey) => void;
+  from?: string;
+  to?: string;
+  onPeriod: (next: { period: PeriodKey; from?: string; to?: string }) => void;
   onTab: (tab: OrgDetailTab) => void;
 }) {
   const { headlines, allTime, relationships, priorLabel } = model;
   const [chartMetric, setChartMetric] = useState<"collections" | "kg">("collections");
-  const periodHint = period === "all" ? "all time" : `${period} days`;
+  const periodHint = periodLabel(period, { from, to }).toLowerCase();
   const cards = [
     { label: "Sites", value: formatCount(headlines.sites), hint: `${formatCount(headlines.activeSites)} active`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green" },
     { label: "Users", value: formatCount(headlines.users), hint: `${formatCount(headlines.activeUsers)} active`, icon: Users, tone: "bg-sky-50 text-sky-700" },
@@ -331,17 +343,7 @@ function OverviewTab({
               <option value="collections">Collections</option>
               <option value="kg">Food recovered (kg)</option>
             </select>
-            <select
-              value={period}
-              onChange={(event) => onPeriod(event.target.value as PeriodKey)}
-              className="h-8 rounded-lg border border-black/[0.06] bg-[#F7F6F2] px-2 font-saveful text-xs outline-none"
-            >
-              {PERIODS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+            <PeriodFilter compact period={period} from={from} to={to} onChange={onPeriod} />
           </div>
           <div className="h-48 px-2 pb-2">
             <ResponsiveContainer width="100%" height="100%">

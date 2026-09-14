@@ -1,4 +1,4 @@
-import { periodRange, previousPeriodRange } from "@/lib/dates";
+import { previousPeriodRange, rangeForFilters } from "@/lib/dates";
 import { percentChange } from "@/lib/impact";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import {
@@ -147,8 +147,8 @@ export function buildNetworkPerformanceModel(
   range?: InsightsRange,
 ) {
   const sites = scopedSites(filters, scope);
-  const currentRange = range ?? periodRange(filters.period);
-  const previousRange = previousPeriodRange(filters.period);
+  const currentRange = range ?? rangeForFilters(filters);
+  const previousRange = previousPeriodRange(filters.period, undefined, { from: filters.from, to: filters.to });
   const comparable = !range && filters.period !== "all" && Boolean(previousRange.startDate && previousRange.endDate);
 
   const active = sites.filter(isActiveSite);

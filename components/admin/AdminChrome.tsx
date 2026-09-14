@@ -22,6 +22,7 @@ import {
   useAdminVersion,
   type AdminFilters,
 } from "@/lib/admin";
+import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import { cn } from "@/lib/utils";
 
 const selectClass =
@@ -163,6 +164,7 @@ export function AdminFiltersBar({
   const orgOptions = organisations ?? options.organisations;
   const active =
     filters.period !== "30" ||
+    Boolean(filters.from || filters.to) ||
     filters.country !== "all" ||
     filters.state !== "all" ||
     filters.orgType !== "all" ||
@@ -178,17 +180,13 @@ export function AdminFiltersBar({
     <div className="rounded-xl border border-gray-200 bg-white">
       <div className="flex items-end gap-2 overflow-x-auto px-3 py-2.5">
         <div className="grid min-w-[980px] flex-1 grid-cols-7 gap-2">
-          <FilterSelect
+          <PeriodFilter
             compact
-            label="Period"
-            value={filters.period}
-            onChange={(period) => onChange({ period: period as AdminFilters["period"] })}
-            options={[
-              { id: "7", name: "Last 7 days" },
-              { id: "30", name: "Last 30 days" },
-              { id: "90", name: "Last 90 days" },
-              { id: "all", name: "All time" },
-            ]}
+            showDates={false}
+            period={filters.period}
+            from={filters.from}
+            to={filters.to}
+            onChange={(next) => onChange(next)}
           />
           <FilterSelect
             compact
@@ -239,6 +237,18 @@ export function AdminFiltersBar({
         </div>
         <FilterResetButton onReset={onReset} active={active} />
       </div>
+      {filters.period === "custom" ? (
+        <div className="border-t border-gray-100 px-3 py-2 sm:max-w-md">
+          <PeriodFilter
+            compact
+            datesOnly
+            period="custom"
+            from={filters.from}
+            to={filters.to}
+            onChange={(next) => onChange(next)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -472,6 +482,7 @@ export function StatusPill({ status }: { status: string }) {
               status === "Paused" ||
               status === "Deactivated" ||
               status === "expired" ||
+              status === "EXPIRED" ||
               status === "cancelled" ||
               status === "CANCELLED"
             ? "bg-gray-100 text-gray-600"

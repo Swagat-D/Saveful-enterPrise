@@ -37,14 +37,70 @@ export function daysBetween(iso: string, today: Date = DEMO_TODAY) {
   return Math.round((end - start) / 86400000);
 }
 
-export function periodRange(period: PeriodKey, today: Date = DEMO_TODAY) {
+export type PeriodBounds = { from?: string; to?: string };
+
+export const PERIOD_KEYS: PeriodKey[] = ["7", "30", "90", "all", "custom"];
+
+export function parsePeriodKey(value: string | null | undefined): PeriodKey {
+  return PERIOD_KEYS.includes(value as PeriodKey) ? (value as PeriodKey) : "30";
+}
+
+function isIsoDay(value: string | null | undefined): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+export function parsePeriodBounds(params: URLSearchParams | null | undefined): PeriodBounds {
+  const from = params?.get("from");
+  const to = params?.get("to");
+  return {
+    from: isIsoDay(from) ? from : undefined,
+    to: isIsoDay(to) ? to : undefined,
+  };
+}
+
+export function writePeriodParams(params: URLSearchParams, period: PeriodKey, bounds?: PeriodBounds) {
+  if (period !== "30") params.set("period", period);
+  if (period === "custom") {
+    if (bounds?.from) params.set("from", bounds.from);
+    if (bounds?.to) params.set("to", bounds.to);
+  }
+}
+
+function normalizeRange(from?: string, to?: string) {
+  if (from && to && from > to) return { startDate: to, endDate: from };
+  return { startDate: from, endDate: to };
+}
+
+export function periodRange(period: PeriodKey, today: Date = DEMO_TODAY, bounds?: PeriodBounds) {
+  if (period === "custom") {
+    return normalizeRange(bounds?.from, bounds?.to || toApiDate(today));
+  }
   if (period === "all") {
     return { startDate: undefined as string | undefined, endDate: toApiDate(today) };
   }
   return rollingRange(Number(period), today);
 }
 
-export function previousPeriodRange(period: PeriodKey, today: Date = DEMO_TODAY) {
+export function rangeForFilters(
+  filters: { period: PeriodKey; from?: string; to?: string },
+  today: Date = DEMO_TODAY,
+) {
+  return periodRange(filters.period, today, { from: filters.from, to: filters.to });
+}
+
+export function previousPeriodRange(period: PeriodKey, today: Date = DEMO_TODAY, bounds?: PeriodBounds) {
+  if (period === "custom") {
+    const current = periodRange("custom", today, bounds);
+    if (!current.startDate || !current.endDate) {
+      return { startDate: undefined as string | undefined, endDate: undefined as string | undefined };
+    }
+    const start = new Date(`${current.startDate}T12:00:00Z`);
+    const end = new Date(`${current.endDate}T12:00:00Z`);
+    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+    const prevEnd = addDays(start, -1);
+    const prevStart = addDays(prevEnd, -(days - 1));
+    return { startDate: toApiDate(prevStart), endDate: toApiDate(prevEnd) };
+  }
   if (period === "all") return { startDate: undefined as string | undefined, endDate: undefined as string | undefined };
   const days = Number(period);
   const end = addDays(today, -days);
@@ -64,9 +120,12 @@ export function daysAgoIso(days: number, today: Date = DEMO_TODAY) {
   return addDays(today, -days).toISOString();
 }
 
-export function periodLabel(period: PeriodKey) {
+export function periodLabel(period: PeriodKey, bounds?: PeriodBounds) {
+  if (period === "custom") return rangeLabel(bounds?.from, bounds?.to);
   if (period === "all") return "All time";
-  return `${period} days`;
+  if (period === "7") return "Last 7 days";
+  if (period === "90") return "Last 90 days";
+  return "Last 30 days";
 }
 
 export function formatDisplayDate(iso?: string, month: "short" | "long" = "short") {

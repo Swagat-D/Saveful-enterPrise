@@ -1,4 +1,4 @@
-import { inDateRange, periodRange } from "@/lib/dates";
+import { inDateRange, periodRange, type PeriodBounds } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import { formatCollectionHours } from "@/lib/siteForm";
 import { recoveryTransactions } from "@/lib/network";
@@ -30,8 +30,8 @@ export function siteOperations(site: OrganizationSite) {
 
 export const foodLabelFor = foodCategoryFor;
 
-export function siteRecoveryRows(siteId: string, period: PeriodKey, limit = 6) {
-  const { startDate, endDate } = periodRange(period);
+export function siteRecoveryRows(siteId: string, period: PeriodKey, limit = 6, bounds?: PeriodBounds) {
+  const { startDate, endDate } = periodRange(period, undefined, bounds);
   return recoveryTransactions
     .filter((row) => row.snapshot.siteId === siteId && inDateRange(row.occurredAt, startDate, endDate))
     .slice(0, limit)
