@@ -863,6 +863,7 @@ export type AdminAppUser = {
   createdAt?: string | null;
   joinedAt?: string | null;
   orgRole?: string | null;
+  siteRole?: string | null;
   organisationId: number;
   organisationName: string;
   organisationType: string;
@@ -974,6 +975,7 @@ export type AdminAppOrganisationDetail = {
     email: string;
     mobile?: string | null;
     orgRole?: string | null;
+    siteRole?: string | null;
     status: string;
     lastLoginAt?: string | null;
     joinedAt?: string | null;

@@ -38,7 +38,8 @@ function listingDisplayStatus(listing: AdminAppListing) {
   return listing.status;
 }
 
-function roleLabel(role?: string | null) {
+function roleLabel(role?: string | null, siteRole?: string | null) {
+  if ((siteRole || "").toUpperCase() === "DRIVER") return "Driver";
   if (role === "SUPER_ADMIN") return "Account owner";
   if (role === "ORG_ADMIN") return "Org admin";
   if (role === "ORG_MEMBER") return "Team member";
@@ -191,7 +192,7 @@ function Overview({ data }: { data: AdminAppOrganisationDetail }) {
               {member.mobile ? <span className="block font-saveful text-[11px] text-gray-400">{member.mobile}</span> : null}
             </span>,
             member.email,
-            roleLabel(member.orgRole),
+            roleLabel(member.orgRole, member.siteRole),
             <StatusPill key={`${member.id}-status`} status={member.status} />,
             member.lastLoginAt ? formatLastActivity(member.lastLoginAt) : "—",
           ])}

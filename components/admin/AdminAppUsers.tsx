@@ -19,6 +19,17 @@ const KINDS: { id: AppUserKind; label: string }[] = [
   { id: "farmer_consumer", label: "Farmer consumer" },
 ];
 
+function isDriver(user: Pick<AdminAppUser, "siteRole" | "email">) {
+  if ((user.siteRole || "").toUpperCase() === "DRIVER") return true;
+  return (user.email || "").toLowerCase().startsWith("driver@");
+}
+
+function isAppAccountHolder(user: AdminAppUser) {
+  if (isDriver(user)) return false;
+  const role = (user.orgRole || "").toUpperCase();
+  return role === "SUPER_ADMIN" || role === "ORG_ADMIN";
+}
+
 function matchesKind(user: AdminAppUser, kind: AppUserKind) {
   if (kind === "all") return true;
   if (kind === "business_single") return user.organisationType === "BUSINESS_SINGLE";
@@ -29,11 +40,24 @@ function matchesKind(user: AdminAppUser, kind: AppUserKind) {
   return user.organisationType === "FARMER_CONSUMER";
 }
 
-function roleLabel(role?: string | null) {
+function roleLabel(role?: string | null, siteRole?: string | null) {
+  if ((siteRole || "").toUpperCase() === "DRIVER") return "Driver";
   if (role === "SUPER_ADMIN") return "Account owner";
   if (role === "ORG_ADMIN") return "Org admin";
   if (role === "ORG_MEMBER") return "Team member";
   return role || "—";
+}
+
+function countKinds(users: AdminAppUser[]): Record<AppUserKind, number> {
+  return {
+    all: users.length,
+    business_single: users.filter((row) => row.organisationType === "BUSINESS_SINGLE").length,
+    business_multi: users.filter((row) => row.organisationType === "BUSINESS_MULTI").length,
+    charity_single: users.filter((row) => row.organisationType === "CHARITY_SINGLE" || row.organisationType === "CHARITY").length,
+    charity_multi: users.filter((row) => row.organisationType === "CHARITY_MULTI").length,
+    farmer_producer: users.filter((row) => row.organisationType === "FARMER_PRODUCER").length,
+    farmer_consumer: users.filter((row) => row.organisationType === "FARMER_CONSUMER").length,
+  };
 }
 
 function regionLabel(region?: string | null) {
@@ -61,8 +85,18 @@ export function AdminAppUsers() {
     void listAdminAppUsers()
       .then((payload) => {
         if (cancelled) return;
-        setUsers(payload.users ?? []);
-        setCounts(payload.counts ?? {});
+        const members = payload.users ?? [];
+        const holders = members.filter(isAppAccountHolder);
+        const covered = new Set(holders.map((row) => row.organisationId));
+        const extras: AdminAppUser[] = [];
+        for (const row of members) {
+          if (covered.has(row.organisationId) || isDriver(row)) continue;
+          covered.add(row.organisationId);
+          extras.push(row);
+        }
+        const users = [...holders, ...extras];
+        setUsers(users);
+        setCounts(countKinds(users));
         setError("");
       })
       .catch((err) => {
@@ -182,7 +216,7 @@ export function AdminAppUsers() {
                   </td>
                   <td className="px-3 py-3">
                     <p className="font-saveful text-sm text-gray-800">{row.organisationName}</p>
-                    <p className="font-saveful text-[11px] text-gray-400">{roleLabel(row.orgRole)}</p>
+                    <p className="font-saveful text-[11px] text-gray-400">{roleLabel(row.orgRole, row.siteRole)}</p>
                   </td>
                   <td className="px-3 py-3">
                     <p className="font-saveful text-sm text-gray-800">{row.organisationTypeLabel}</p>
