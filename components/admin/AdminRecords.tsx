@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { AdminFiltersBar, AdminPage, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
+import { ChevronDown } from "lucide-react";
+import { AdminFiltersBar, AdminPage, AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
+import { AdminCollectionPanel, AdminListingPanel, collectionChipStatus, listingChipStatus } from "@/components/admin/AdminRecordPanels";
 import {
   EMPTY_ADMIN_FILTERS,
   filteredCollections,
@@ -12,9 +14,11 @@ import {
   getOrganisation,
   getSite,
   pathwayLabel,
+  refreshOrganisationListings,
   useAdminVersion,
 } from "@/lib/admin";
 import { formatKg } from "@/lib/impact";
+import { cn } from "@/lib/utils";
 
 function orgTabHref(orgId: string, query: string, tab: string) {
   const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
@@ -119,15 +123,22 @@ export function AdminCollections() {
 }
 
 export function AdminListingDetail({ id }: { id: string }) {
+  useAdminVersion();
   const { query, filters } = useAdminFilters();
+  const [openCollectionId, setOpenCollectionId] = useState<string | null>(null);
   const row = getListing(id);
   const org = row ? getOrganisation(row.orgId) : null;
   const site = row ? getSite(row.siteId) : null;
+
+  useEffect(() => {
+    if (row?.orgId) void refreshOrganisationListings(row.orgId).catch(() => undefined);
+  }, [row?.orgId]);
+
   const collections = filteredCollections({ ...EMPTY_ADMIN_FILTERS, period: "all", organisationId: row?.orgId ?? "all" }).filter(
     (item) => item.listingId === id,
   );
   const contextOrg = getOrganisation(contextOrgId(row?.orgId ?? "", filters.organisationId)) ?? org;
-  if (!row || !org || !site) {
+  if (!row) {
     return (
       <AdminPage title="Listing">
         <p className="font-saveful text-sm text-gray-500">This listing was not found.</p>
@@ -136,49 +147,68 @@ export function AdminListingDetail({ id }: { id: string }) {
   }
   return (
     <AdminPage
+      workspace
       crumb={[
         { href: `/admin/organisations${query}`, label: "Organisations" },
-        { href: orgTabHref(contextOrg?.id ?? org.id, query, "listings"), label: contextOrg?.name ?? org.name },
-        { href: `/admin/sites/${site.id}${query}`, label: site.name },
+        contextOrg || org
+          ? { href: orgTabHref(contextOrg?.id ?? org?.id ?? row.orgId, query, "listings"), label: contextOrg?.name ?? org?.name ?? "Organisation" }
+          : { href: `/admin/listings${query}`, label: "Listings" },
+        site ? { href: `/admin/sites/${site.id}${query}`, label: site.name } : { href: `/admin/listings${query}`, label: "Listing" },
       ]}
       title={row.code}
-      hint={row.food}
+      hint={`${row.food} · ${pathwayLabel(row.pathway)}`}
+      actions={<StatusPill status={listingChipStatus(row)} />}
     >
-      <dl className="grid gap-3 sm:grid-cols-4">
-        <Info label="Organisation" value={org.name} href={orgTabHref(org.id, query, "listings")} />
-        <Info label="Site" value={site.name} href={`/admin/sites/${site.id}${query}`} />
-        <Info label="Pathway" value={pathwayLabel(row.pathway)} />
-        <Info label="Listed" value={formatKg(row.quantityKg)} />
-      </dl>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left">
-          <thead>
-            <tr className="border-b border-gray-100 font-saveful text-[11px] uppercase tracking-wide text-gray-400">
-              <th className="px-3 py-2.5 font-saveful">Collection</th>
-              <th className="px-3 py-2.5 font-saveful">Recipient</th>
-              <th className="px-3 py-2.5 font-saveful">Kg</th>
-            </tr>
-          </thead>
-          <tbody>
-            {collections.map((item) => (
-              <tr key={item.id} className="border-b border-gray-50 last:border-0">
-                <td className="px-3 py-3">
-                  <Link href={`/admin/collections/${item.id}${query}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">
-                    {item.code}
-                  </Link>
-                </td>
-                <td className="px-3 py-3 font-saveful text-sm text-gray-700">{item.recipientName}</td>
-                <td className="px-3 py-3 font-saveful text-sm tabular-nums text-gray-800">{formatKg(item.quantityKg)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AdminSection title="Listing details">
+        <div className="px-3.5 py-3.5">
+          <AdminListingPanel listing={row} orgName={org?.name} siteName={site?.name} />
+        </div>
+      </AdminSection>
+      <AdminSection title="Collections" action={<span className="font-saveful text-xs text-gray-500">{collections.length}</span>}>
+        {collections.length === 0 ? (
+          <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">No collections on this listing yet.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {collections.map((item) => {
+              const open = openCollectionId === item.id;
+              return (
+                <article key={item.id} className={cn(open && "bg-[#FAF7F0]/70")}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenCollectionId(open ? null : item.id)}
+                    className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] items-center gap-3 px-3.5 py-3 text-left hover:bg-[#FAF7F0]"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-saveful-semibold text-sm text-gray-900">{item.recipientName}</p>
+                      <p className="truncate font-saveful text-xs text-gray-500">{item.food}</p>
+                    </div>
+                    <div className="hidden min-w-0 sm:block">
+                      <p className="truncate font-saveful text-sm text-gray-800">{item.siteName || site?.name || "—"}</p>
+                      <p className="truncate font-saveful text-[11px] text-gray-400">{item.pickupAddress || "—"}</p>
+                    </div>
+                    <p className="font-saveful-semibold text-sm tabular-nums text-gray-800">{formatKg(item.quantityKg)}</p>
+                    <span className="flex items-center justify-end gap-2">
+                      <StatusPill status={collectionChipStatus(item)} />
+                      <ChevronDown className={cn("h-4 w-4 text-gray-400 transition", open && "rotate-180")} />
+                    </span>
+                  </button>
+                  {open ? (
+                    <div className="border-t border-gray-100 px-3.5 py-3.5">
+                      <AdminCollectionPanel row={item} siteName={site?.name} />
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </AdminSection>
     </AdminPage>
   );
 }
 
 export function AdminCollectionDetail({ id }: { id: string }) {
+  useAdminVersion();
   const { query, filters } = useAdminFilters();
   const row = getCollection(id);
   const org = row ? getOrganisation(row.orgId) : null;
@@ -186,7 +216,12 @@ export function AdminCollectionDetail({ id }: { id: string }) {
   const listing = row ? getListing(row.listingId) : null;
   const recipientOrg = row?.recipientOrgId ? getOrganisation(row.recipientOrgId) : null;
   const contextOrg = getOrganisation(contextOrgId(row?.orgId ?? "", filters.organisationId)) ?? org;
-  if (!row || !org || !site) {
+
+  useEffect(() => {
+    if (row?.orgId) void refreshOrganisationListings(row.orgId).catch(() => undefined);
+  }, [row?.orgId]);
+
+  if (!row) {
     return (
       <AdminPage title="Collection">
         <p className="font-saveful text-sm text-gray-500">This collection was not found.</p>
@@ -195,43 +230,33 @@ export function AdminCollectionDetail({ id }: { id: string }) {
   }
   return (
     <AdminPage
+      workspace
       crumb={[
         { href: `/admin/organisations${query}`, label: "Organisations" },
-        { href: orgTabHref(contextOrg?.id ?? org.id, query, "collections"), label: contextOrg?.name ?? org.name },
-        { href: `/admin/sites/${site.id}${query}`, label: site.name },
+        contextOrg || org
+          ? { href: orgTabHref(contextOrg?.id ?? org?.id ?? row.orgId, query, "collections"), label: contextOrg?.name ?? org?.name ?? "Organisation" }
+          : { href: `/admin/collections${query}`, label: "Collections" },
+        site ? { href: `/admin/sites/${site.id}${query}`, label: site.name } : { href: `/admin/collections${query}`, label: "Collection" },
         listing ? { href: `/admin/listings/${listing.id}${query}`, label: listing.code } : { href: `/admin/listings${query}`, label: "Listing" },
       ]}
       title={row.code}
       hint={`${row.food} · ${formatKg(row.quantityKg)}`}
+      actions={<StatusPill status={collectionChipStatus(row)} />}
     >
-      <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Info label="Organisation" value={org.name} href={orgTabHref(org.id, query, "collections")} />
-        <Info label="Site" value={site.name} href={`/admin/sites/${site.id}${query}`} />
-        <Info label="Listing" value={listing?.code ?? row.listingId} href={listing ? `/admin/listings/${listing.id}${query}` : undefined} />
-        <Info
-          label="Recipient"
-          value={recipientOrg?.name ?? row.recipientName}
-          href={recipientOrg ? orgTabHref(recipientOrg.id, query, "overview") : undefined}
-        />
-        <Info label="Pathway" value={pathwayLabel(row.pathway)} />
-        <Info label="Status" value={row.status} />
-      </dl>
+      <AdminSection title="Collection details">
+        <div className="px-3.5 py-3.5">
+          <AdminCollectionPanel row={row} siteName={site?.name} />
+        </div>
+      </AdminSection>
+      {recipientOrg ? (
+        <p className="px-1 font-saveful text-sm text-gray-500">
+          Recipient{" "}
+          <Link href={orgTabHref(recipientOrg.id, query, "overview")} className="font-saveful-semibold text-saveful-green hover:underline">
+            {recipientOrg.name}
+          </Link>
+        </p>
+      ) : null}
     </AdminPage>
-  );
-}
-
-function Info({ label, value, href }: { label: string; value: string; href?: string }) {
-  return (
-    <div className="rounded-xl bg-[#F7F6F2] px-3.5 py-3">
-      <p className="font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">{label}</p>
-      {href ? (
-        <Link href={href} className="mt-1 block font-saveful-semibold text-sm text-saveful-green hover:underline">
-          {value}
-        </Link>
-      ) : (
-        <p className="mt-1 font-saveful-semibold text-sm capitalize text-gray-900">{value.replaceAll("_", " ")}</p>
-      )}
-    </div>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { appendAdminAudit, listAdminAudit } from "@/lib/adminAudit";
-import { ApiError, getEnterprise, listAdminNetworkUsers, listAdminSites, listAllOrganisationFoodListings, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminNetworkInvite, type AdminNetworkUser, type ApiFoodListing, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
+import { ApiError, getAdminAppOrganisation, getEnterprise, listAdminAppUsers, listAdminNetworkUsers, listAdminSites, listAllOrganisationFoodListings, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminAppOrganisation, type AdminAppSite, type AdminAppUser, type AdminNetworkInvite, type AdminNetworkUser, type ApiFoodListing, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
 import { inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams, type PeriodBounds } from "@/lib/dates";
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
@@ -247,11 +247,16 @@ export type AdminOrgUser = {
   orgId: string;
   name: string;
   email: string;
+  mobile?: string | null;
   role: string;
   status: "Active" | "Invited" | "Deactivated";
   lastActiveAt: string | null;
   joinedAt?: string | null;
   siteIds?: string[];
+  groupIds?: string[];
+  territoryIds?: string[];
+  clusterIds?: string[];
+  enterpriseWide?: boolean;
 };
 
 export type AdminOrgProfile = {
@@ -298,6 +303,8 @@ let createdOrgs: AdminOrganisation[] = [];
 let createdSites: AdminSite[] = [];
 let remoteSites: AdminSite[] = [];
 let remoteOrgs: AdminOrganisation[] = [];
+let remoteAppOrgs: AdminOrganisation[] = [];
+let remoteAppSites: AdminSite[] = [];
 let remoteOrgUsers: Record<string, AdminOrgUser[]> = {};
 let remoteOrgProfiles: Record<string, AdminOrgProfile> = {};
 let remoteListingsByOrg: Record<string, AdminListing[]> = {};
@@ -523,9 +530,104 @@ function mapEnterprise(row: EnterpriseListItem): AdminOrganisation {
   };
 }
 
+function mapAppOrgType(type?: string | null): OrgTypeId {
+  const value = (type ?? "").toUpperCase();
+  if (value.includes("CHARITY")) return "charity";
+  if (value.includes("FARMER")) return "farmer";
+  if (value.includes("CIRCULAR")) return "circular";
+  return "food_business";
+}
+
+function rolesForAppOrgType(type: OrgTypeId): ParticipationRoleId[] {
+  if (type === "charity" || type === "farmer") return ["surplus_receiver"];
+  if (type === "circular") return ["surplus_receiver", "surplus_provider"];
+  return ["surplus_provider"];
+}
+
+function mapAppOrganisation(row: AdminAppOrganisation): AdminOrganisation {
+  const type = mapAppOrgType(row.organisationType);
+  return {
+    id: String(row.id),
+    name: row.name,
+    type,
+    roles: rolesForAppOrgType(type),
+    country: countryLabel(row.region ?? ""),
+    state: row.region ?? "",
+    status: "Active",
+    plan: "standard",
+    users: row.users,
+    source: "platform",
+    createdAt: row.createdAt ?? null,
+  };
+}
+
+function mapAppSite(row: AdminAppSite): AdminSite {
+  return {
+    id: String(row.id),
+    orgId: String(row.organisationId),
+    name: row.name,
+    address: row.address,
+    postcode: row.postcode ?? null,
+    status: row.isActive ? "Active" : "Deactivated",
+    lastActivityAt: row.lastActivityAt ?? null,
+    createdAt: row.createdAt ?? null,
+  };
+}
+
+function storeAppNetwork(payload: {
+  users?: AdminAppUser[];
+  organisations?: AdminAppOrganisation[];
+  sites?: AdminAppSite[];
+}) {
+  const organisations = payload.organisations?.length
+    ? payload.organisations
+    : [...new Map((payload.users ?? []).map((user) => [user.organisationId, user])).values()].map((user) => ({
+        id: user.organisationId,
+        name: user.organisationName,
+        organisationType: user.organisationType,
+        organisationTypeLabel: user.organisationTypeLabel,
+        region: user.region,
+        createdAt: user.organisationCreatedAt ?? user.createdAt ?? null,
+        users: (payload.users ?? []).filter((row) => row.organisationId === user.organisationId).length,
+        siteCount: 0,
+        activeSiteCount: 0,
+      }));
+  const enterpriseIds = new Set(remoteOrgs.map((org) => org.id));
+  remoteAppOrgs = organisations.map(mapAppOrganisation).filter((org) => !enterpriseIds.has(org.id));
+  remoteAppSites = (payload.sites ?? [])
+    .map(mapAppSite)
+    .filter((site) => remoteAppOrgs.some((org) => org.id === site.orgId));
+}
+
 export async function refreshOrganisations() {
-  const rows = await listEnterprises();
+  const [rows, appNetwork] = await Promise.all([
+    listEnterprises(),
+    listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[] })),
+  ]);
   remoteOrgs = rows.map(mapEnterprise);
+  storeAppNetwork(appNetwork);
+  if (!appNetwork.sites?.length && remoteAppOrgs.some((org) => org.type !== "food_business")) {
+    const details = await Promise.all(
+      remoteAppOrgs
+        .filter((org) => org.type !== "food_business")
+        .slice(0, 40)
+        .map((org) => getAdminAppOrganisation(org.id).catch(() => null)),
+    );
+    remoteAppSites = details.flatMap((detail) =>
+      (detail?.sites ?? []).map((site) =>
+        mapAppSite({
+          id: site.id,
+          organisationId: detail.organisation.id,
+          name: site.name,
+          address: site.address,
+          postcode: site.postcode ?? null,
+          isActive: site.isActive,
+          createdAt: site.createdAt ?? null,
+          lastActivityAt: null,
+        }),
+      ),
+    );
+  }
   emit();
   const needsDetail = remoteOrgs
     .filter((org) => org.status === "Prospect" || !org.lastLoginAt)
@@ -612,47 +714,69 @@ export async function refreshSites() {
   return listSites();
 }
 
-function storeOrgUsers(orgId: string, members: AdminNetworkUser[], invitations: AdminNetworkInvite[]) {
-  const mapped: AdminOrgUser[] = members.map((row) => ({
+function scopeIdsOf(scopes: Array<{ scopeType: string; scopeId?: number | null }> | undefined, type: string) {
+  return (scopes ?? [])
+    .filter((scope) => (scope.scopeType ?? "").toUpperCase() === type && scope.scopeId != null)
+    .map((scope) => String(scope.scopeId));
+}
+
+function mapOrgUser(
+  orgId: string,
+  row: {
+    id: string | number;
+    firstName: string;
+    lastName: string;
+    email: string;
+    mobile?: string | null;
+    roleLabel?: string;
+    role: string;
+    lastLoginAt?: string | null;
+    joinedAt?: string | null;
+    invitationSentAt?: string | null;
+    siteIds?: Array<string | number>;
+    siteAdminForSiteId?: number | null;
+    scopes?: Array<{ scopeType: string; scopeId?: number | null }>;
+  },
+  status: AdminOrgUser["status"],
+): AdminOrgUser {
+  const scopes = row.scopes ?? [];
+  const siteIds = [
+    ...new Set([
+      ...(row.siteIds ?? []).map(String),
+      ...(row.siteAdminForSiteId != null ? [String(row.siteAdminForSiteId)] : []),
+      ...scopeIdsOf(scopes, "SITE"),
+    ]),
+  ];
+  const groupIds = scopeIdsOf(scopes, "GROUP");
+  const territoryIds = scopeIdsOf(scopes, "TERRITORY");
+  const clusterIds = scopeIdsOf(scopes, "CLUSTER");
+  const enterpriseWide =
+    scopes.some((scope) => (scope.scopeType ?? "").toUpperCase() === "ENTERPRISE") ||
+    /super admin|enterprise admin|reporting user/i.test(row.roleLabel || row.role);
+  return {
     id: String(row.id),
     orgId,
     name: `${row.firstName} ${row.lastName}`.trim() || row.email,
     email: row.email,
+    mobile: row.mobile ?? null,
     role: row.roleLabel || row.role,
-    status: mapMemberStatus(row.status),
+    status,
     lastActiveAt: row.lastLoginAt ?? null,
-    joinedAt: row.joinedAt ?? row.lastLoginAt ?? null,
-    siteIds: [
-      ...new Set([
-        ...(row.siteIds ?? []).map(String),
-        ...(row.scopes ?? [])
-          .filter((scope) => (scope.scopeType ?? "").toUpperCase() === "SITE" && scope.scopeId != null)
-          .map((scope) => String(scope.scopeId)),
-      ]),
-    ],
-  }));
+    joinedAt: row.joinedAt ?? row.invitationSentAt ?? row.lastLoginAt ?? null,
+    siteIds,
+    groupIds,
+    territoryIds,
+    clusterIds,
+    enterpriseWide,
+  };
+}
+
+function storeOrgUsers(orgId: string, members: AdminNetworkUser[], invitations: AdminNetworkInvite[]) {
+  const mapped = members.map((row) => mapOrgUser(orgId, row, mapMemberStatus(row.status)));
   const seen = new Set(mapped.map((row) => row.email.toLowerCase()));
-  const invited: AdminOrgUser[] = invitations
+  const invited = invitations
     .filter((row) => !seen.has(row.email.toLowerCase()))
-    .map((row) => ({
-      id: `invite-${row.id}`,
-      orgId,
-      name: `${row.firstName} ${row.lastName}`.trim() || row.email,
-      email: row.email,
-      role: row.roleLabel || row.role,
-      status: "Invited" as const,
-      lastActiveAt: null,
-      joinedAt: row.invitationSentAt ?? null,
-      siteIds: [
-        ...new Set([
-          ...(row.siteIds ?? []).map(String),
-          ...(row.siteAdminForSiteId != null ? [String(row.siteAdminForSiteId)] : []),
-          ...(row.scopes ?? [])
-            .filter((scope) => (scope.scopeType ?? "").toUpperCase() === "SITE" && scope.scopeId != null)
-            .map((scope) => String(scope.scopeId)),
-        ]),
-      ],
-    }));
+    .map((row) => mapOrgUser(orgId, { ...row, id: `invite-${row.id}` }, "Invited"));
   remoteOrgUsers[orgId] = [...mapped, ...invited];
 }
 
@@ -701,7 +825,17 @@ export function getOrganisation(id: string) {
 }
 
 export function listLiveEnterprises() {
-  return listOrganisations().filter((org) => /^\d+$/.test(org.id));
+  return listOrganisations().filter((org) => Boolean(org.enterpriseId));
+}
+
+export function listNetworkOrganisations() {
+  const enterpriseIds = new Set(listOrganisations().map((org) => org.id));
+  return [...listOrganisations(), ...remoteAppOrgs.filter((org) => !enterpriseIds.has(org.id))];
+}
+
+export function listNetworkSites() {
+  const siteIds = new Set(listSites().map((site) => site.id));
+  return [...listSites(), ...remoteAppSites.filter((site) => !siteIds.has(site.id))];
 }
 
 function matchRecipientOrgId(name: string): string | undefined {
@@ -820,9 +954,9 @@ export function orgActivityStatus(orgId: string): OrgActivityStatus {
   return recentCollection ? "Active" : "Inactive";
 }
 
-export function filteredOrganisations(filters: AdminFilters) {
+function filterOrganisationList(orgs: AdminOrganisation[], filters: AdminFilters) {
   const query = filters.q.trim().toLowerCase();
-  return listOrganisations().filter((org) => {
+  return orgs.filter((org) => {
     if (!orgMatches(filters, org)) return false;
     if (query && !org.name.toLowerCase().includes(query)) return false;
     if (filters.accountStatus !== "all" && org.status !== filters.accountStatus) return false;
@@ -832,16 +966,33 @@ export function filteredOrganisations(filters: AdminFilters) {
   });
 }
 
-export function filteredSites(filters: AdminFilters) {
+export function filteredOrganisations(filters: AdminFilters) {
+  return filterOrganisationList(listOrganisations(), filters);
+}
+
+export function filteredNetworkOrganisations(filters: AdminFilters) {
+  return filterOrganisationList(listNetworkOrganisations(), filters);
+}
+
+function filterSiteList(sites: AdminSite[], filters: AdminFilters, filteredOrgs: AdminOrganisation[], allOrgs: AdminOrganisation[]) {
   const hasOrgScope =
     filters.organisationId !== "all" ||
     filters.orgType !== "all" ||
     filters.country !== "all" ||
     filters.state !== "all" ||
     filters.role !== "all";
-  if (!hasOrgScope) return listSites();
-  const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
-  return listSites().filter((row) => allowed.has(row.orgId) || !getOrganisation(row.orgId));
+  if (!hasOrgScope) return sites;
+  const allowed = new Set(filteredOrgs.map((org) => org.id));
+  const known = new Set(allOrgs.map((org) => org.id));
+  return sites.filter((row) => allowed.has(row.orgId) || !known.has(row.orgId));
+}
+
+export function filteredSites(filters: AdminFilters) {
+  return filterSiteList(listSites(), filters, filteredOrganisations(filters), listOrganisations());
+}
+
+export function filteredNetworkSites(filters: AdminFilters) {
+  return filterSiteList(listNetworkSites(), filters, filteredNetworkOrganisations(filters), listNetworkOrganisations());
 }
 
 export function filteredListings(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
@@ -916,8 +1067,8 @@ function priorLabel(period: PeriodKey) {
 
 export function buildAdminOverview(filters: AdminFilters) {
   const previousRange = previousPeriodRange(filters.period, liveToday(), { from: filters.from, to: filters.to });
-  const organisations = filteredOrganisations(filters);
-  const sites = filteredSites(filters);
+  const organisations = filteredNetworkOrganisations(filters);
+  const sites = filteredNetworkSites(filters);
   const listings = filteredListings(filters);
   const previousListings = filteredListings(filters, previousRange);
   const collections = filteredCollections(filters);
@@ -941,8 +1092,8 @@ export function buildAdminOverview(filters: AdminFilters) {
 
   const types = ORG_TYPES.filter((type) => filters.orgType === "all" || filters.orgType === type.id).map((type) => {
     const typeFilters = { ...filters, orgType: type.id, organisationId: "all" as const };
-    const typeOrgs = filteredOrganisations(typeFilters);
-    const typeSites = filteredSites(typeFilters);
+    const typeOrgs = filteredNetworkOrganisations(typeFilters);
+    const typeSites = filteredNetworkSites(typeFilters);
     const typeListings = filteredListings(typeFilters);
     const typeCollections = filteredCollections(typeFilters).filter((row) => row.status === "completed");
     const typeRows = recoveryPoints(typeFilters);
@@ -1767,29 +1918,13 @@ export async function refreshOrganisationDetail(orgId: string) {
   } else if (latestLogin) {
     remoteOrgs = remoteOrgs.map((org) => (org.id === orgId ? { ...org, lastLoginAt: latestLogin } : org));
   }
-  const members: AdminOrgUser[] = (detail.users ?? []).map((row) => ({
-    id: String(row.id),
-    orgId,
-    name: `${row.firstName} ${row.lastName}`.trim() || row.email,
-    email: row.email,
-    role: row.roleLabel || row.role,
-    status: mapMemberStatus(row.status),
-    lastActiveAt: row.lastLoginAt ?? null,
-    joinedAt: row.joinedAt ?? row.lastLoginAt ?? null,
-  }));
+  const members: AdminOrgUser[] = (detail.users ?? []).map((row) =>
+    mapOrgUser(orgId, row, mapMemberStatus(row.status)),
+  );
   const seen = new Set(members.map((row) => row.email.toLowerCase()));
   const invited: AdminOrgUser[] = (detail.invitations ?? [])
     .filter((row) => !seen.has(row.email.toLowerCase()))
-    .map((row) => ({
-      id: `invite-${row.id}`,
-      orgId,
-      name: `${row.firstName} ${row.lastName}`.trim() || row.email,
-      email: row.email,
-      role: row.roleLabel || row.role,
-      status: "Invited" as const,
-      lastActiveAt: null,
-      joinedAt: row.invitationSentAt ?? null,
-    }));
+    .map((row) => mapOrgUser(orgId, { ...row, id: `invite-${row.id}` }, "Invited"));
   const hasUserPayload = Array.isArray(detail.users) || Array.isArray(detail.invitations);
   remoteOrgUsers[orgId] =
     members.length || invited.length
@@ -1829,6 +1964,31 @@ export function orgProfile(org: AdminOrganisation): AdminOrgProfile {
 
 export function listOrgUsers(orgId: string): AdminOrgUser[] {
   return remoteOrgUsers[orgId] ?? [];
+}
+
+export function isEnterpriseWideUser(user: AdminOrgUser) {
+  if (user.siteIds?.length || user.groupIds?.length || user.territoryIds?.length || user.clusterIds?.length) {
+    return false;
+  }
+  return Boolean(user.enterpriseWide) || /super admin|enterprise admin|reporting user/i.test(user.role);
+}
+
+export function assignedSitesForUser(user: AdminOrgUser): AdminSite[] {
+  const sites = listSites().filter((site) => site.orgId === user.orgId);
+  const byId = sites.filter((site) => user.siteIds?.includes(site.id));
+  if (byId.length) return byId;
+  const byDimension = sites.filter((site) => {
+    if (user.groupIds?.length && site.groupId && user.groupIds.includes(site.groupId)) return true;
+    if (user.territoryIds?.length && site.territoryId && user.territoryIds.includes(site.territoryId)) return true;
+    if (user.clusterIds?.length && site.clusterId && user.clusterIds.includes(site.clusterId)) return true;
+    return false;
+  });
+  if (byDimension.length) return byDimension;
+  return sites.filter((site) => {
+    if (site.managerUserId && site.managerUserId === user.id) return true;
+    if (site.contactEmail && site.contactEmail.toLowerCase() === user.email.toLowerCase()) return true;
+    return false;
+  });
 }
 
 export function lastOrgActivityAt(orgId: string) {

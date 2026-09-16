@@ -780,6 +780,7 @@ export type EnterpriseInviteRow = {
   firstName: string;
   lastName: string;
   email: string;
+  mobile?: string | null;
   role: string;
   roleLabel?: string;
   status: "INVITED" | string;
@@ -872,9 +873,34 @@ export type AdminAppUser = {
   subscriptionStatus?: string | null;
 };
 
+export type AdminAppOrganisation = {
+  id: number;
+  name: string;
+  organisationType: string;
+  organisationTypeLabel: string;
+  region?: string | null;
+  createdAt?: string | null;
+  users: number;
+  siteCount: number;
+  activeSiteCount: number;
+};
+
+export type AdminAppSite = {
+  id: number;
+  organisationId: number;
+  name: string;
+  address: string;
+  postcode?: string | null;
+  isActive: boolean;
+  createdAt?: string | null;
+  lastActivityAt?: string | null;
+};
+
 export type AdminAppUsersResponse = {
   users: AdminAppUser[];
   counts: Record<AppUserKind, number>;
+  organisations?: AdminAppOrganisation[];
+  sites?: AdminAppSite[];
 };
 
 export function listAdminAppUsers() {
