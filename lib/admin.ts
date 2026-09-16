@@ -602,7 +602,7 @@ function storeAppNetwork(payload: {
 export async function refreshOrganisations() {
   const [rows, appNetwork] = await Promise.all([
     listEnterprises(),
-    listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[] })),
+    listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] })),
   ]);
   remoteOrgs = rows.map(mapEnterprise);
   storeAppNetwork(appNetwork);
@@ -613,8 +613,9 @@ export async function refreshOrganisations() {
         .slice(0, 40)
         .map((org) => getAdminAppOrganisation(org.id).catch(() => null)),
     );
-    remoteAppSites = details.flatMap((detail) =>
-      (detail?.sites ?? []).map((site) =>
+    remoteAppSites = details.flatMap((detail) => {
+      if (!detail) return [];
+      return (detail.sites ?? []).map((site) =>
         mapAppSite({
           id: site.id,
           organisationId: detail.organisation.id,
@@ -625,8 +626,8 @@ export async function refreshOrganisations() {
           createdAt: site.createdAt ?? null,
           lastActivityAt: null,
         }),
-      ),
-    );
+      );
+    });
   }
   emit();
   const needsDetail = remoteOrgs
