@@ -83,7 +83,7 @@ export function periodRange(period: PeriodKey, today: Date = DEMO_TODAY, bounds?
 
 export function rangeForFilters(
   filters: { period: PeriodKey; from?: string; to?: string },
-  today: Date = DEMO_TODAY,
+  today: Date = liveToday(),
 ) {
   return periodRange(filters.period, today, { from: filters.from, to: filters.to });
 }

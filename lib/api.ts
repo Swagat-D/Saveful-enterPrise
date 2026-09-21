@@ -908,6 +908,63 @@ export function listAdminAppUsers() {
   return apiFetch<AdminAppUsersResponse>("/admin/app-users", { auth: true });
 }
 
+export type AdminAppActivityItem = {
+  id: string;
+  at: string;
+  kind: string;
+  detail: string;
+  organisationId: number;
+  organisationName: string;
+  organisationType?: string;
+};
+
+export type AdminAppListingRow = {
+  id: number;
+  organisationId: number;
+  siteId: number;
+  status: string;
+  createdAt: string;
+  listingType?: string | null;
+  recoveryPathway?: string | null;
+  totalQtyKg?: number;
+  remainingQtyKg?: number;
+  pickupAddress?: string | null;
+  pickupPostcode?: string | null;
+  pickupFromTime?: string | null;
+  pickupByTime?: string | null;
+  bestBefore?: string | null;
+  food?: string;
+  foodItems?: Array<{ name: string; totalQtyKg?: number }>;
+};
+
+export type AdminAppCollectionRow = {
+  id: number;
+  listingId: number;
+  organisationId: number;
+  siteId: number;
+  recipientOrgId?: number | null;
+  recipientName?: string;
+  status: string;
+  createdAt?: string | null;
+  collectedAt?: string | null;
+  confirmedAt?: string | null;
+  quantityKg: number;
+  listingTotalKg?: number;
+  listingRemainingKg?: number;
+  food?: string;
+  pathway?: string;
+  providerName?: string;
+  siteName?: string;
+};
+
+export function listAdminAppActivity() {
+  return apiFetch<{
+    activity: AdminAppActivityItem[];
+    listings?: AdminAppListingRow[];
+    collections?: AdminAppCollectionRow[];
+  }>("/admin/app-users/activity", { auth: true });
+}
+
 export type AdminAppClaim = {
   id: number;
   status: string;

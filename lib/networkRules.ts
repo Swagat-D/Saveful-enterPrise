@@ -1,4 +1,4 @@
-import { daysBetween, inDateRange, periodRange, rollingRange } from "@/lib/dates";
+import { daysBetween, inDateRange, liveToday, periodRange, rollingRange } from "@/lib/dates";
 import { getNotificationSettings } from "@/lib/notificationSettings";
 import type {
   ActivityStatus,
@@ -139,9 +139,10 @@ export const ATTENTION_COPY: Record<AttentionReason, { label: string; detail: st
 export function formatLastActivity(iso: string | null) {
   if (!iso) return "Never";
   const date = new Date(iso);
-  const today = new Date("2026-08-22T12:00:00.000Z");
-  const startToday = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const startThat = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  if (Number.isNaN(date.getTime())) return "Never";
+  const today = liveToday();
+  const startToday = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const startThat = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
   const days = Math.round((startToday - startThat) / 86400000);
   if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";

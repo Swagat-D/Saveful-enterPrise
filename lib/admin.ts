@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { appendAdminAudit, listAdminAudit } from "@/lib/adminAudit";
-import { ApiError, getAdminAppOrganisation, getEnterprise, listAdminAppUsers, listAdminNetworkUsers, listAdminSites, listAllOrganisationFoodListings, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminAppOrganisation, type AdminAppSite, type AdminAppUser, type AdminNetworkInvite, type AdminNetworkUser, type ApiFoodListing, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
+import { ApiError, getAdminAppOrganisation, getEnterprise, listAdminAppActivity, listAdminAppUsers, listAdminNetworkUsers, listAdminSites, listAllOrganisationFoodListings, listEnterprises, provisionEnterprise, uploadEnterpriseLogo, type AdminApiSiteRow, type AdminAppActivityItem, type AdminAppCollectionRow, type AdminAppListingRow, type AdminAppOrganisation, type AdminAppSite, type AdminAppUser, type AdminNetworkInvite, type AdminNetworkUser, type ApiFoodListing, type EnterpriseDetail, type EnterpriseListItem, type ProvisionEnterpriseInput } from "@/lib/api";
 import { inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams, type PeriodBounds } from "@/lib/dates";
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
@@ -305,6 +305,7 @@ let remoteSites: AdminSite[] = [];
 let remoteOrgs: AdminOrganisation[] = [];
 let remoteAppOrgs: AdminOrganisation[] = [];
 let remoteAppSites: AdminSite[] = [];
+let remoteAppActivity: AdminActivityItem[] = [];
 let remoteOrgUsers: Record<string, AdminOrgUser[]> = {};
 let remoteOrgProfiles: Record<string, AdminOrgProfile> = {};
 let remoteListingsByOrg: Record<string, AdminListing[]> = {};
@@ -599,13 +600,157 @@ function storeAppNetwork(payload: {
     .filter((site) => remoteAppOrgs.some((org) => org.id === site.orgId));
 }
 
+function appActivityHref(organisationId: string) {
+  return `/admin/app-users/${organisationId}`;
+}
+
+function storeAppActivity(rows: AdminAppActivityItem[] | undefined, users: AdminAppUser[]) {
+  if (rows?.length) {
+    remoteAppActivity = rows.map((row) => ({
+      id: row.id,
+      at: row.at,
+      kind: row.kind,
+      detail: row.detail,
+      organisationId: String(row.organisationId),
+      organisationName: row.organisationName,
+      href: appActivityHref(String(row.organisationId)),
+    }));
+    return;
+  }
+  const items: AdminActivityItem[] = [];
+  for (const org of remoteAppOrgs) {
+    if (!org.createdAt) continue;
+    items.push({
+      id: `app-org-${org.id}`,
+      at: org.createdAt,
+      kind: "Organisation created",
+      detail: `${org.name} · ${orgTypeLabel(org.type)}`,
+      organisationId: org.id,
+      organisationName: org.name,
+      href: appActivityHref(org.id),
+    });
+  }
+  for (const site of remoteAppSites) {
+    const org = remoteAppOrgs.find((item) => item.id === site.orgId);
+    items.push({
+      id: `app-site-${site.id}`,
+      at: site.createdAt || site.lastActivityAt || org?.createdAt || "",
+      kind: "Site added",
+      detail: `${site.name}${org ? ` · ${org.name}` : ""}`,
+      organisationId: site.orgId,
+      organisationName: org?.name || site.name,
+      href: appActivityHref(site.orgId),
+    });
+  }
+  for (const user of users) {
+    const orgId = String(user.organisationId);
+    const at = user.joinedAt || user.createdAt;
+    if (at) {
+      items.push({
+        id: `app-user-${user.id}-${orgId}`,
+        at,
+        kind: user.orgRole === "SUPER_ADMIN" ? "Account owner added" : "User added",
+        detail: `${user.name} · ${user.organisationTypeLabel}`,
+        organisationId: orgId,
+        organisationName: user.organisationName,
+        href: appActivityHref(orgId),
+      });
+    }
+    if (user.lastLoginAt) {
+      items.push({
+        id: `app-login-${user.id}-${orgId}`,
+        at: user.lastLoginAt,
+        kind: "User signed in",
+        detail: `${user.name} · ${user.organisationTypeLabel}`,
+        organisationId: orgId,
+        organisationName: user.organisationName,
+        href: appActivityHref(orgId),
+      });
+    }
+  }
+  remoteAppActivity = mergeActivity(items);
+}
+
+function storeAppOperations(listings: AdminAppListingRow[] | undefined, collections: AdminAppCollectionRow[] | undefined) {
+  const enterpriseIds = new Set(remoteOrgs.map((org) => org.id));
+  const listingsByOrg = new Map<string, AdminListing[]>();
+  for (const row of listings ?? []) {
+    const orgId = String(row.organisationId);
+    if (enterpriseIds.has(orgId)) continue;
+    const mapped: AdminListing = {
+      id: String(row.id),
+      orgId,
+      siteId: String(row.siteId),
+      code: `LST-${String(row.id).padStart(5, "0")}`,
+      food: row.food || (row.foodItems ?? []).map((item) => item.name).filter(Boolean).join(", ") || "Food listing",
+      pathway: mapListingPathway({ listingType: row.listingType ?? undefined, recoveryPathway: row.recoveryPathway }),
+      quantityKg: row.totalQtyKg ?? 0,
+      remainingQtyKg: row.remainingQtyKg ?? 0,
+      status: mapListingStatus({ status: row.status, foodClaims: [] }),
+      createdAt: row.createdAt,
+      pickupAddress: row.pickupAddress ?? undefined,
+      pickupPostcode: row.pickupPostcode ?? null,
+      pickupFromTime: row.pickupFromTime ?? null,
+      pickupByTime: row.pickupByTime ?? null,
+      bestBefore: row.bestBefore ?? null,
+      listingType: row.listingType ?? undefined,
+      items: (row.foodItems ?? []).map((item) => ({ name: item.name, totalQtyKg: item.totalQtyKg ?? 0 })),
+    };
+    const list = listingsByOrg.get(orgId) ?? [];
+    list.push(mapped);
+    listingsByOrg.set(orgId, list);
+  }
+  for (const [orgId, rows] of listingsByOrg) {
+    remoteListingsByOrg[orgId] = rows;
+  }
+
+  const collectionsByOrg = new Map<string, AdminCollection[]>();
+  for (const row of collections ?? []) {
+    const orgId = String(row.organisationId);
+    if (enterpriseIds.has(orgId) && remoteCollectionsByOrg[orgId]?.length) continue;
+    const status = (row.status || "").toUpperCase();
+    const mapped: AdminCollection = {
+      id: String(row.id),
+      orgId,
+      siteId: String(row.siteId),
+      listingId: String(row.listingId),
+      code: `COL-${String(row.id).padStart(5, "0")}`,
+      food: row.food || "Food listing",
+      pathway: (["people", "livestock", "circular", "bioenergy"].includes(row.pathway || "")
+        ? row.pathway
+        : "people") as AdminCollection["pathway"],
+      quantityKg: row.quantityKg || row.listingTotalKg || 0,
+      recipientName: row.recipientName || "Recipient",
+      recipientOrgId: row.recipientOrgId != null ? String(row.recipientOrgId) : undefined,
+      status: status === "COLLECTED" ? "completed" : status === "CANCELLED" ? "cancelled" : "claimed",
+      occurredAt: row.collectedAt || row.confirmedAt || row.createdAt || "",
+      claimStatus: status,
+      providerName: row.providerName,
+      siteName: row.siteName,
+      listingCode: `LST-${String(row.listingId).padStart(5, "0")}`,
+      listingTotalKg: row.listingTotalKg,
+      listingRemainingKg: row.listingRemainingKg,
+      collectedAt: row.collectedAt ?? null,
+    };
+    const list = collectionsByOrg.get(orgId) ?? [];
+    list.push(mapped);
+    collectionsByOrg.set(orgId, list);
+  }
+  for (const [orgId, rows] of collectionsByOrg) {
+    if (!remoteCollectionsByOrg[orgId]?.length) remoteCollectionsByOrg[orgId] = rows;
+  }
+}
+
 export async function refreshOrganisations() {
-  const [rows, appNetwork] = await Promise.all([
+  const [rows, appNetwork, appActivity] = await Promise.all([
     listEnterprises(),
     listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] })),
+    listAdminAppActivity().catch(() => ({ activity: [] as AdminAppActivityItem[] })),
   ]);
   remoteOrgs = rows.map(mapEnterprise);
   storeAppNetwork(appNetwork);
+  storeAppActivity(appActivity.activity, appNetwork.users ?? []);
+  storeAppOperations(appActivity.listings, appActivity.collections);
   if (!appNetwork.sites?.length && remoteAppOrgs.some((org) => org.type !== "food_business")) {
     const details = await Promise.all(
       remoteAppOrgs
@@ -997,7 +1142,7 @@ export function filteredNetworkSites(filters: AdminFilters) {
 }
 
 export function filteredListings(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
-  const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
+  const allowed = new Set(filteredNetworkOrganisations(filters).map((org) => org.id));
   const { startDate, endDate } = range ?? rangeForFilters(filters, liveToday());
   return listListings().filter((row) => {
     if (!allowed.has(row.orgId) || !inDateRange(row.createdAt, startDate, endDate)) return false;
@@ -1006,26 +1151,37 @@ export function filteredListings(filters: AdminFilters, range?: { startDate?: st
   });
 }
 
+function isCompletedCollection(row: AdminCollection) {
+  const status = (row.claimStatus || row.status || "").toUpperCase();
+  return row.status === "completed" || status === "COLLECTED" || status === "COMPLETED";
+}
+
+function collectionKg(row: AdminCollection) {
+  return row.quantityKg || row.listingTotalKg || 0;
+}
+
 export function filteredCollections(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
-  const allowed = new Set(filteredOrganisations(filters).map((org) => org.id));
+  const allowed = new Set(filteredNetworkOrganisations(filters).map((org) => org.id));
   const { startDate, endDate } = range ?? rangeForFilters(filters, liveToday());
   return listCollections().filter((row) => {
-    if (!allowed.has(row.orgId) || !inDateRange(row.occurredAt, startDate, endDate)) return false;
+    const inScope = allowed.has(row.orgId) || Boolean(row.recipientOrgId && allowed.has(row.recipientOrgId));
+    if (!inScope || !inDateRange(row.occurredAt, startDate, endDate)) return false;
     if (filters.pathway !== "all" && row.pathway !== filters.pathway) return false;
     return true;
   });
 }
 
 function recoveryPoints(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
-  const orgs = new Set(filteredOrganisations(filters).map((org) => org.id));
-  const { startDate, endDate } = range ?? rangeForFilters(filters);
+  const { startDate, endDate } = range ?? rangeForFilters(filters, liveToday());
   const rows: RecoveryTransaction[] = [];
+  const seen = new Set<string>();
   for (const row of filteredCollections(filters, { startDate, endDate })) {
-    if (row.orgId === "harbour" || row.status !== "completed") continue;
+    if (row.orgId === "harbour" || !isCompletedCollection(row) || seen.has(row.id)) continue;
+    seen.add(row.id);
     rows.push({
       id: row.id,
       occurredAt: row.occurredAt,
-      kg: row.quantityKg,
+      kg: collectionKg(row),
       pathway: row.pathway,
       recipientId: row.orgId,
       recipientName: row.recipientName,
@@ -1080,8 +1236,8 @@ export function buildAdminOverview(filters: AdminFilters) {
   const previousKg = previousRows.reduce((sum, row) => sum + row.kg, 0);
   const impact = calculateImpact(foodKg);
   const previousImpact = calculateImpact(previousKg);
-  const completed = collections.filter((row) => row.status === "completed").length;
-  const previousCompleted = previousCollections.filter((row) => row.status === "completed").length;
+  const completed = collections.filter(isCompletedCollection).length;
+  const previousCompleted = previousCollections.filter(isCompletedCollection).length;
   const currentRates = listingRates(listings);
   const previousRates = listingRates(previousListings);
   const previousSites = sites.filter((site) =>
@@ -1096,7 +1252,7 @@ export function buildAdminOverview(filters: AdminFilters) {
     const typeOrgs = filteredNetworkOrganisations(typeFilters);
     const typeSites = filteredNetworkSites(typeFilters);
     const typeListings = filteredListings(typeFilters);
-    const typeCollections = filteredCollections(typeFilters).filter((row) => row.status === "completed");
+    const typeCollections = filteredCollections(typeFilters).filter(isCompletedCollection);
     const typeRows = recoveryPoints(typeFilters);
     return {
       id: type.id,
@@ -1747,7 +1903,7 @@ function profileFromDetail(detail: EnterpriseDetail): AdminOrgProfile {
   };
 }
 
-function mapListingPathway(row: ApiFoodListing): RecoveryPathway {
+function mapListingPathway(row: Pick<ApiFoodListing, "recoveryPathway" | "listingType">): RecoveryPathway {
   const pathway = (row.recoveryPathway || "").toUpperCase();
   if (pathway === "LIVESTOCK_FEED") return "livestock";
   if (pathway === "CIRCULAR_RECOVERY") return "circular";
@@ -1758,7 +1914,7 @@ function mapListingPathway(row: ApiFoodListing): RecoveryPathway {
   return "people";
 }
 
-function mapListingStatus(row: ApiFoodListing): string {
+function mapListingStatus(row: Pick<ApiFoodListing, "status" | "foodClaims">): string {
   const status = (row.status || "").toUpperCase();
   const claims = row.foodClaims ?? [];
   const hasDriver = claims.some((claim) => (claim.driverPickups ?? []).some((pickup) => pickup.status !== "CANCELLED"));
@@ -2119,10 +2275,12 @@ function collectOrganisationActivity(org: AdminOrganisation): AdminActivityItem[
 
 export function listNetworkActivity(filters: AdminFilters, limit?: number): AdminActivityItem[] {
   const orgs = filteredOrganisations(filters);
+  const allowed = new Set(filteredNetworkOrganisations(filters).map((org) => org.id));
   const { startDate, endDate } = rangeForFilters(filters, liveToday());
-  const rows = mergeActivity(orgs.flatMap(collectOrganisationActivity)).filter(
-    (item) => filters.period === "all" || inDateRange(item.at, startDate, endDate),
-  );
+  const rows = mergeActivity([
+    ...orgs.flatMap(collectOrganisationActivity),
+    ...remoteAppActivity.filter((item) => allowed.has(item.organisationId)),
+  ]).filter((item) => filters.period === "all" || inDateRange(item.at, startDate, endDate));
   return limit ? rows.slice(0, limit) : rows;
 }
 

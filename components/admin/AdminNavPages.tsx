@@ -312,6 +312,7 @@ export function AdminActivity() {
       title: row.kind,
       detail: row.detail,
       orgId: row.organisationId,
+      orgName: row.organisationName,
       href: row.href ? `${row.href}${row.href.includes("?") ? "" : query}` : `/admin/organisations/${row.organisationId}${query}`,
     }));
   }, [filters, query, version]);
@@ -324,7 +325,7 @@ export function AdminActivity() {
       workspace
       crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
       title="Activity"
-      hint="Sites, users, listings, collections, and admin changes across the network."
+      hint="Enterprise, charity, and business app activity across the network."
     >
       <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
       <AdminSection title="Recent events">
@@ -339,7 +340,7 @@ export function AdminActivity() {
                   <p className="font-saveful-semibold text-sm text-gray-900">{row.title}</p>
                   <p className="truncate font-saveful text-xs text-gray-500">{row.detail}</p>
                   <p className="mt-0.5 font-saveful text-[11px] text-gray-400">
-                    {getOrganisation(row.orgId)?.name ?? row.orgId} · {row.type}
+                    {row.orgName || getOrganisation(row.orgId)?.name || row.orgId} · {row.type}
                   </p>
                 </div>
                 <span className="shrink-0 font-saveful text-xs text-gray-400">{formatLastActivity(row.at)}</span>
