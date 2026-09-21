@@ -745,7 +745,11 @@ export async function refreshOrganisations() {
   const [rows, appNetwork, appActivity] = await Promise.all([
     listEnterprises(),
     listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] })),
-    listAdminAppActivity().catch(() => ({ activity: [] as AdminAppActivityItem[] })),
+    listAdminAppActivity().catch(() => ({
+      activity: [] as AdminAppActivityItem[],
+      listings: [] as AdminAppListingRow[],
+      collections: [] as AdminAppCollectionRow[],
+    })),
   ]);
   remoteOrgs = rows.map(mapEnterprise);
   storeAppNetwork(appNetwork);
