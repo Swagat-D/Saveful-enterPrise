@@ -30,7 +30,7 @@ import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import { formatDisplayDate, periodLabel } from "@/lib/dates";
 import { calculateImpact, formatCount, formatKg, formatMoney, IMPACT } from "@/lib/impact";
 import { INSIGHTS_METRICS, INSIGHTS_PATHWAYS, type InsightsMetric } from "@/lib/insights";
-import { ACTIVITY_LABEL, formatLastActivity } from "@/lib/networkRules";
+import { formatLastActivity } from "@/lib/networkRules";
 import { PATHWAY_COLORS } from "@/lib/networkQuery";
 import { parseSiteTab, SITE_TABS, type SiteTab } from "@/lib/siteWorkspace";
 import type { PeriodKey, RecoveryPathway } from "@/types/enterprise";
@@ -448,7 +448,6 @@ function OverviewTab({
             <SupportRow label="Last activity" value={model.lastActivityAt ? formatLastActivity(model.lastActivityAt) : "Never"} />
             <SupportRow label="Last login / site users" value={model.lastUserActivityAt ? formatLastActivity(model.lastUserActivityAt) : "—"} />
             <SupportRow label="Site ID" value={directory.siteCode} />
-            <SupportRow label="Activity status" value={ACTIVITY_LABEL[directory.activity]} />
           </dl>
           <div>
             <p className="mb-2 font-saveful-semibold text-xs uppercase tracking-[0.12em] text-gray-400">Notifications / system events</p>

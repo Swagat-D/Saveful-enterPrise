@@ -3,9 +3,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
-import { AdminFiltersBar, AdminPage, AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
+import { AdminFiltersBar, AdminPage, AdminSection, FilterSelect, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { AdminCollectionPanel, AdminListingPanel, collectionChipStatus, listingChipStatus } from "@/components/admin/AdminRecordPanels";
 import {
+  collectionKg,
   EMPTY_ADMIN_FILTERS,
   filteredCollections,
   filteredListings,
@@ -13,9 +14,12 @@ import {
   getListing,
   getOrganisation,
   getSite,
+  isCompletedCollection,
+  listListings,
   pathwayLabel,
   refreshOrganisationListings,
   useAdminVersion,
+  type AdminListing,
 } from "@/lib/admin";
 import { formatKg } from "@/lib/impact";
 import { cn } from "@/lib/utils";
@@ -31,21 +35,84 @@ function contextOrgId(recordOrgId: string, filterOrgId: string) {
   return filterOrgId !== "all" ? filterOrgId : recordOrgId;
 }
 
+const LISTING_STATUSES = [
+  { id: "all", name: "All" },
+  { id: "ACTIVE", name: "Active" },
+  { id: "CLAIMED", name: "Claimed" },
+  { id: "COLLECTED", name: "Collected" },
+  { id: "EXPIRED", name: "Expired" },
+  { id: "CANCELLED", name: "Cancelled" },
+] as const;
+
+type ListingStatusFilter = (typeof LISTING_STATUSES)[number]["id"];
+
+function collectedKgByListing(filters: Parameters<typeof filteredCollections>[0]) {
+  const totals = new Map<string, number>();
+  for (const row of filteredCollections(filters)) {
+    if (!isCompletedCollection(row)) continue;
+    totals.set(row.listingId, (totals.get(row.listingId) ?? 0) + collectionKg(row));
+  }
+  return totals;
+}
+
+function listingsCollectedInPeriod(periodRows: AdminListing[], collectedKg: Map<string, number>) {
+  const rows = [...periodRows];
+  const byId = new Map(listListings().map((row) => [row.id, row]));
+  for (const id of collectedKg.keys()) {
+    if (rows.some((row) => row.id === id)) continue;
+    const listing = byId.get(id);
+    if (listing) rows.push(listing);
+  }
+  return rows;
+}
+
+function listingDisplayStatus(row: AdminListing, collectedKg: number) {
+  if (collectedKg > 0) return "COLLECTED";
+  return listingChipStatus(row);
+}
+
 export function AdminListings() {
   useAdminVersion();
   const { filters, update, reset, query } = useAdminFilters();
-  const rows = filteredListings(filters);
+  const [status, setStatus] = useState<ListingStatusFilter>("all");
+  const periodRows = filteredListings(filters);
+  const collectedKg = collectedKgByListing(filters);
+  const rows = status === "COLLECTED" ? listingsCollectedInPeriod(periodRows, collectedKg) : periodRows;
+  const visible = rows.filter((row) => status === "all" || listingDisplayStatus(row, collectedKg.get(row.id) ?? 0) === status);
+  const visibleCollectedKg = visible.reduce((sum, row) => sum + (collectedKg.get(row.id) ?? 0), 0);
   return (
     <AdminPage
       crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
       title="Listings"
-      hint={`${rows.length} listings in the selected period.`}
+      hint={
+        status === "COLLECTED"
+          ? `${visible.length} listings collected ${formatKg(visibleCollectedKg)} in the selected period.`
+          : `${periodRows.length} listings in the selected period. ${formatKg([...collectedKg.values()].reduce((sum, kg) => sum + kg, 0))} collected.`
+      }
     >
-      <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
-      <PagedTable noun="listings" rows={rows} columns={["Listing", "Organisation", "Site", "Pathway", "Kg", "Status"]}>
+      <AdminFiltersBar
+        filters={filters}
+        onChange={update}
+        onReset={() => {
+          setStatus("all");
+          reset();
+        }}
+        extraActive={status !== "all"}
+        extra={
+          <FilterSelect
+            compact
+            label="Status"
+            value={status}
+            onChange={(value) => setStatus(value as ListingStatusFilter)}
+            options={[...LISTING_STATUSES]}
+          />
+        }
+      />
+      <PagedTable noun="listings" rows={visible} columns={["Listing", "Organisation", "Site", "Pathway", "Kg", "Status"]}>
         {(row) => {
-          const org = getOrganisation(row.orgId);
-          const site = getSite(row.siteId);
+          const orgName = getOrganisation(row.orgId)?.name ?? row.orgName;
+          const siteName = getSite(row.siteId)?.name ?? row.siteName;
+          const recovered = collectedKg.get(row.id) ?? 0;
           return (
             <tr key={row.id} className="border-b border-gray-50 last:border-0">
               <td className="px-3 py-3">
@@ -55,19 +122,32 @@ export function AdminListings() {
                 <p className="font-saveful text-[11px] text-gray-400">{row.food}</p>
               </td>
               <td className="px-3 py-3">
-                <Link href={`/admin/organisations/${row.orgId}${query}`} className="font-saveful text-sm text-saveful-green hover:underline">
-                  {org?.name ?? row.orgId}
-                </Link>
+                {orgName ? (
+                  <Link href={`/admin/organisations/${row.orgId}${query}`} className="font-saveful text-sm text-saveful-green hover:underline">
+                    {orgName}
+                  </Link>
+                ) : (
+                  <span className="font-saveful text-sm text-gray-400">—</span>
+                )}
               </td>
               <td className="px-3 py-3">
-                <Link href={`/admin/sites/${row.siteId}${query}`} className="font-saveful text-sm text-saveful-green hover:underline">
-                  {site?.name ?? row.siteId}
-                </Link>
+                {siteName ? (
+                  <Link href={`/admin/sites/${row.siteId}${query}`} className="font-saveful text-sm text-saveful-green hover:underline">
+                    {siteName}
+                  </Link>
+                ) : (
+                  <span className="font-saveful text-sm text-gray-400">—</span>
+                )}
               </td>
               <td className="px-3 py-3 font-saveful text-sm text-gray-700">{pathwayLabel(row.pathway)}</td>
-              <td className="px-3 py-3 font-saveful text-sm tabular-nums text-gray-800">{formatKg(row.quantityKg)}</td>
+              <td className="px-3 py-3 font-saveful text-sm tabular-nums text-gray-800">
+                {formatKg(row.quantityKg)}
+                {recovered > 0 && recovered !== row.quantityKg ? (
+                  <p className="font-saveful text-[11px] text-gray-400">{formatKg(recovered)} collected</p>
+                ) : null}
+              </td>
               <td className="px-3 py-3">
-                <StatusPill status={row.status} />
+                <StatusPill status={listingDisplayStatus(row, recovered)} />
               </td>
             </tr>
           );
@@ -124,7 +204,7 @@ export function AdminCollections() {
 
 export function AdminListingDetail({ id }: { id: string }) {
   useAdminVersion();
-  const { query, filters } = useAdminFilters();
+  const { query } = useAdminFilters();
   const [openCollectionId, setOpenCollectionId] = useState<string | null>(null);
   const row = getListing(id);
   const org = row ? getOrganisation(row.orgId) : null;
@@ -137,7 +217,6 @@ export function AdminListingDetail({ id }: { id: string }) {
   const collections = filteredCollections({ ...EMPTY_ADMIN_FILTERS, period: "all", organisationId: row?.orgId ?? "all" }).filter(
     (item) => item.listingId === id,
   );
-  const contextOrg = getOrganisation(contextOrgId(row?.orgId ?? "", filters.organisationId)) ?? org;
   if (!row) {
     return (
       <AdminPage title="Listing">
@@ -149,11 +228,9 @@ export function AdminListingDetail({ id }: { id: string }) {
     <AdminPage
       workspace
       crumb={[
-        { href: `/admin/organisations${query}`, label: "Organisations" },
-        contextOrg || org
-          ? { href: orgTabHref(contextOrg?.id ?? org?.id ?? row.orgId, query, "listings"), label: contextOrg?.name ?? org?.name ?? "Organisation" }
-          : { href: `/admin/listings${query}`, label: "Listings" },
-        site ? { href: `/admin/sites/${site.id}${query}`, label: site.name } : { href: `/admin/listings${query}`, label: "Listing" },
+        { href: `/admin/listings${query}`, label: "Listings" },
+        ...(org ? [{ href: orgTabHref(org.id, query, "listings"), label: org.name }] : row.orgName ? [{ href: `/admin/organisations/${row.orgId}${query}`, label: row.orgName }] : []),
+        ...(site ? [{ href: `/admin/sites/${site.id}${query}`, label: site.name }] : row.siteName ? [{ href: `/admin/sites/${row.siteId}${query}`, label: row.siteName }] : []),
       ]}
       title={row.code}
       hint={`${row.food} · ${pathwayLabel(row.pathway)}`}

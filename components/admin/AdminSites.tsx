@@ -12,7 +12,6 @@ import { useSession } from "@/lib/auth";
 import { periodLabel } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import {
-  ACTIVITY_LABEL,
   formatLastActivity,
 } from "@/lib/networkRules";
 import {
@@ -39,19 +38,11 @@ import {
 } from "@/lib/admin";
 import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { PeriodFilter } from "@/components/filters/PeriodFilter";
-import type { ActivityStatus, PeriodKey, SiteLifecycleStatus } from "@/types/enterprise";
+import type { PeriodKey } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
 const headerBtn =
   "inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white px-3 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]";
-
-const activityOptions = [
-  { id: "all", name: "All" },
-  { id: "in_period", name: ACTIVITY_LABEL.in_period },
-  { id: "none_in_period", name: ACTIVITY_LABEL.none_in_period },
-  { id: "never_used", name: ACTIVITY_LABEL.never_used },
-  { id: "never_activated", name: ACTIVITY_LABEL.never_activated },
-];
 
 function addAdminSiteHref(query: string, organisationId?: string) {
   const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
@@ -125,13 +116,37 @@ export function AdminSites() {
     };
   }, []);
 
-  const toggleSiteStatus = (status: SiteLifecycleStatus) => {
-    updateTable({ siteStatus: table.siteStatus === status ? "all" : status });
+  const selectSnapshot = (next: "all" | "active" | "recovered" | "none" | "deactivated") => {
+    const selected =
+      table.recovery === "recovered"
+        ? "recovered"
+        : table.recovery === "none"
+          ? "none"
+          : table.siteStatus === "active"
+            ? "active"
+            : table.siteStatus === "deactivated"
+              ? "deactivated"
+              : "all";
+    const choice = selected === next ? "all" : next;
+    updateTable({
+      siteStatus: choice === "active" || choice === "deactivated" ? choice : "all",
+      activity: "all",
+      recovery: choice === "recovered" || choice === "none" ? choice : "all",
+    });
   };
 
-  const toggleActivity = (status: ActivityStatus) => {
-    updateTable({ activity: table.activity === status ? "all" : status });
-  };
+  const snapshot =
+    table.recovery === "recovered"
+      ? "recovered"
+      : table.recovery === "none"
+        ? "none"
+        : table.siteStatus === "active" && table.activity === "all"
+          ? "active"
+          : table.siteStatus === "deactivated" && table.activity === "all"
+            ? "deactivated"
+            : table.siteStatus === "all" && table.activity === "all"
+              ? "all"
+              : "";
 
   const filterCount = [
     admin.orgType !== "all",
@@ -140,7 +155,7 @@ export function AdminSites() {
     table.territoryId !== "all",
     table.clusterId !== "all",
     table.siteStatus !== "all",
-    table.activity !== "all",
+    table.recovery !== "all",
   ].filter(Boolean).length;
 
   return (
@@ -202,37 +217,37 @@ export function AdminSites() {
                 {loadError} Restart the API with the latest admin sites endpoint, then refresh this page.
               </p>
             ) : null}
-            <AdminSection title="Network snapshot" action={<span className="font-saveful text-[11px] text-gray-400">{periodLabel(admin.period)} · Site status and activity are separate</span>}>
+            <AdminSection title="Network snapshot" action={<span className="font-saveful text-[11px] text-gray-400">{periodLabel(admin.period)} · One filter at a time</span>}>
               <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-3 xl:grid-cols-5">
                 <SummaryCell
                   label="Total sites"
                   value={directory.counts.total}
-                  active={table.siteStatus === "all" && table.activity === "all"}
-                  onClick={() => updateTable({ siteStatus: "all", activity: "all" })}
+                  active={snapshot === "all"}
+                  onClick={() => selectSnapshot("all")}
                 />
                 <SummaryCell
                   label="Active"
                   value={directory.counts.active}
-                  active={table.siteStatus === "active"}
-                  onClick={() => toggleSiteStatus("active")}
+                  active={snapshot === "active"}
+                  onClick={() => selectSnapshot("active")}
                 />
                 <SummaryCell
-                  label="No recent activity"
-                  value={directory.counts.noRecent}
-                  active={table.activity === "none_in_period"}
-                  onClick={() => toggleActivity("none_in_period")}
+                  label="Recovered food"
+                  value={directory.counts.recovered}
+                  active={snapshot === "recovered"}
+                  onClick={() => selectSnapshot("recovered")}
                 />
                 <SummaryCell
-                  label="Never activated"
-                  value={directory.counts.neverActivated}
-                  active={table.activity === "never_activated"}
-                  onClick={() => toggleActivity("never_activated")}
+                  label="No food recovered"
+                  value={directory.counts.noRecovery}
+                  active={snapshot === "none"}
+                  onClick={() => selectSnapshot("none")}
                 />
                 <SummaryCell
                   label="Deactivated"
                   value={directory.counts.deactivated}
-                  active={table.siteStatus === "deactivated"}
-                  onClick={() => toggleSiteStatus("deactivated")}
+                  active={snapshot === "deactivated"}
+                  onClick={() => selectSnapshot("deactivated")}
                 />
               </div>
             </AdminSection>
@@ -273,7 +288,7 @@ export function AdminSites() {
                           directory.territories.find((item) => item.id === table.territoryId)?.name,
                           directory.clusters.find((item) => item.id === table.clusterId)?.name,
                           table.siteStatus !== "all" ? (table.siteStatus === "active" ? "Active" : "Deactivated") : "",
-                          table.activity !== "all" ? ACTIVITY_LABEL[table.activity] : "",
+                          table.recovery === "recovered" ? "Recovered food" : table.recovery === "none" ? "No food recovered" : "",
                         ]
                           .filter(Boolean)
                           .join(" · ") || "All sites"
@@ -291,14 +306,23 @@ export function AdminSites() {
                         <FilterSelect
                           label="Site status"
                           value={table.siteStatus}
-                          onChange={(siteStatus) => updateTable({ siteStatus: siteStatus as AdminSitesTableFilters["siteStatus"] })}
+                          onChange={(siteStatus) => updateTable({ siteStatus: siteStatus as AdminSitesTableFilters["siteStatus"], activity: "all", recovery: "all" })}
                           options={[
                             { id: "all", name: "All" },
                             { id: "active", name: "Active" },
                             { id: "deactivated", name: "Deactivated" },
                           ]}
                         />
-                        <FilterSelect label="Activity status" value={table.activity} onChange={(activity) => updateTable({ activity: activity as AdminSitesTableFilters["activity"] })} options={activityOptions} />
+                        <FilterSelect
+                          label="Food recovered"
+                          value={table.recovery}
+                          onChange={(recovery) => updateTable({ recovery: recovery as AdminSitesTableFilters["recovery"], activity: "all", siteStatus: "all" })}
+                          options={[
+                            { id: "all", name: "All" },
+                            { id: "recovered", name: "Recovered food" },
+                            { id: "none", name: "No food recovered" },
+                          ]}
+                        />
                       </div>
                     </MoreFilters>
                   </div>
@@ -331,7 +355,7 @@ export function AdminSites() {
                     />
                     <FilterSelect
                       value={table.siteStatus}
-                      onChange={(siteStatus) => updateTable({ siteStatus: siteStatus as AdminSitesTableFilters["siteStatus"] })}
+                      onChange={(siteStatus) => updateTable({ siteStatus: siteStatus as AdminSitesTableFilters["siteStatus"], activity: "all", recovery: "all" })}
                       options={[
                         { id: "all", name: "Site status: All" },
                         { id: "active", name: "Site status: Active" },
@@ -339,12 +363,13 @@ export function AdminSites() {
                       ]}
                     />
                     <FilterSelect
-                      value={table.activity}
-                      onChange={(activity) => updateTable({ activity: activity as AdminSitesTableFilters["activity"] })}
-                      options={activityOptions.map((item) => ({
-                        id: item.id,
-                        name: item.id === "all" ? "Activity status: All" : item.name,
-                      }))}
+                      value={table.recovery}
+                      onChange={(recovery) => updateTable({ recovery: recovery as AdminSitesTableFilters["recovery"], activity: "all", siteStatus: "all" })}
+                      options={[
+                        { id: "all", name: "Food recovered: All" },
+                        { id: "recovered", name: "Food recovered: Yes" },
+                        { id: "none", name: "Food recovered: No" },
+                      ]}
                     />
                     </div>
                     <FilterResetButton
@@ -373,7 +398,6 @@ export function AdminSites() {
                       <th className="pb-2 pr-3 font-saveful">Territory</th>
                       <th className="pb-2 pr-3 font-saveful">Cluster</th>
                       <th className="pb-2 pr-3 font-saveful">Site status</th>
-                      <th className="pb-2 pr-3 font-saveful">Activity status</th>
                       <th className="pb-2 pr-3 font-saveful">Last activity</th>
                       <th className="pb-2 pr-3 font-saveful">Food recovered</th>
                       <th className="pb-2 font-saveful"> </th>
@@ -402,7 +426,6 @@ export function AdminSites() {
                         <td className="py-2.5 pr-3">
                           <SiteStatusPill active={site.siteStatus === "active"} />
                         </td>
-                        <td className="py-2.5 pr-3 font-saveful text-xs text-gray-600">{ACTIVITY_LABEL[site.activity]}</td>
                         <td className="py-2.5 pr-3 font-saveful text-sm text-gray-600">{formatLastActivity(site.lastActivityAt)}</td>
                         <td className="py-2.5 pr-3 font-saveful text-sm tabular-nums text-gray-800">{site.recoveredKg > 0 ? formatKg(site.recoveredKg) : "—"}</td>
                         <td className="py-2.5" onClick={(event) => event.stopPropagation()}>
@@ -430,7 +453,6 @@ export function AdminSites() {
                       <p className="mt-1.5 font-saveful text-xs text-gray-500">
                         {site.orgName} · {site.groupLabel} · {site.territoryLabel} · {site.clusterLabel}
                       </p>
-                      <p className="mt-0.5 font-saveful text-xs text-gray-500">{ACTIVITY_LABEL[site.activity]}</p>
                       <p className="mt-0.5 font-saveful text-xs text-gray-500">
                         {formatLastActivity(site.lastActivityAt)} · {site.recoveredKg > 0 ? formatKg(site.recoveredKg) : "No food recovered"}
                       </p>
@@ -495,7 +517,6 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
             <th className="px-3.5 py-2.5 font-saveful">Territory</th>
             <th className="px-3.5 py-2.5 font-saveful">Cluster</th>
             <th className="px-3.5 py-2.5 font-saveful">Site status</th>
-            <th className="px-3.5 py-2.5 font-saveful">Activity status</th>
             <th className="px-3.5 py-2.5 font-saveful">Last activity</th>
             <th className="px-3.5 py-2.5 font-saveful">Food recovered</th>
             <th className="px-3.5 py-2.5 font-saveful"> </th>
@@ -519,7 +540,6 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
               <td className="px-3.5 py-2.5">
                 <SiteStatusPill active={site.siteStatus === "active"} />
               </td>
-              <td className="px-3.5 py-2.5 font-saveful text-xs text-gray-600">{ACTIVITY_LABEL[site.activity]}</td>
               <td className="px-3.5 py-2.5 font-saveful text-sm text-gray-600">{formatLastActivity(site.lastActivityAt)}</td>
               <td className="px-3.5 py-2.5 font-saveful text-sm tabular-nums text-gray-800">{site.recoveredKg > 0 ? formatKg(site.recoveredKg) : "—"}</td>
               <td className="px-3.5 py-2.5" onClick={(event) => event.stopPropagation()}>

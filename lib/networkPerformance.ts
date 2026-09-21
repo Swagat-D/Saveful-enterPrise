@@ -125,6 +125,7 @@ export function sitesDirectoryHref(
     clusterId: extra.clusterId ?? filters.clusterId,
     siteStatus: extra.siteStatus ?? "all",
     activity: extra.activity ?? "all",
+    recovery: "all",
     summary: extra.summary ?? "all",
     attention: extra.attention === "all" ? "all" : null,
     period: filters.period,

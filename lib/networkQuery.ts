@@ -1,5 +1,5 @@
 import { calculateImpact, percentChange } from "@/lib/impact";
-import { inDateRange, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams } from "@/lib/dates";
+import { inDateRange, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams, type PeriodBounds } from "@/lib/dates";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import { listUnits, resolveSite } from "@/lib/orgStructure";
 import {
@@ -231,8 +231,13 @@ export function performanceByGroup(
     .filter((row): row is NonNullable<typeof row> => row !== null);
 }
 
-export function impactOverTime(rows: RecoveryTransaction[], period: PeriodKey) {
-  const { endDate } = periodRange(period);
+export function impactOverTime(
+  rows: RecoveryTransaction[],
+  period: PeriodKey,
+  today?: Date,
+  bounds?: PeriodBounds,
+) {
+  const { startDate, endDate } = periodRange(period, today, bounds);
   if (!endDate) return [];
 
   if (period === "all") {
@@ -252,7 +257,17 @@ export function impactOverTime(rows: RecoveryTransaction[], period: PeriodKey) {
       }));
   }
 
-  const days = period === "custom" || !Number.isFinite(Number(period)) ? 30 : Number(period);
+  const days =
+    startDate && endDate
+      ? Math.max(
+          1,
+          Math.round(
+            (new Date(`${endDate}T12:00:00Z`).getTime() - new Date(`${startDate}T12:00:00Z`).getTime()) / 86_400_000,
+          ) + 1,
+        )
+      : period === "custom" || !Number.isFinite(Number(period))
+        ? 30
+        : Number(period);
   const bucket = days <= 7 ? 1 : days <= 30 ? 3 : 7;
   const points: { label: string; kg: number; collections: number }[] = [];
   const end = new Date(`${endDate}T00:00:00Z`);

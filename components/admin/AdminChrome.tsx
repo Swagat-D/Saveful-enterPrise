@@ -83,7 +83,7 @@ export function AdminPage({
         {crumb?.length ? (
           <nav className="flex flex-wrap items-center gap-1.5 font-saveful text-xs text-gray-500">
             {crumb.map((item, index) => (
-              <span key={item.href} className="flex items-center gap-1.5">
+              <span key={`${item.label}-${index}`} className="flex items-center gap-1.5">
                 {index > 0 ? <span className="text-gray-300">/</span> : null}
                 <Link href={item.href} className="hover:text-saveful-green">
                   {item.label}
@@ -154,11 +154,15 @@ export function AdminFiltersBar({
   onChange,
   onReset,
   organisations,
+  extra,
+  extraActive,
 }: {
   filters: AdminFilters;
   onChange: (patch: Partial<AdminFilters>) => void;
   onReset: () => void;
   organisations?: { id: string; name: string }[];
+  extra?: ReactNode;
+  extraActive?: boolean;
 }) {
   const options = adminFilterOptions(filters);
   const orgOptions = organisations ?? options.organisations;
@@ -174,12 +178,13 @@ export function AdminFiltersBar({
     Boolean(filters.q) ||
     filters.accountStatus !== "all" ||
     filters.activityStatus !== "all" ||
-    filters.plan !== "all";
+    filters.plan !== "all" ||
+    Boolean(extraActive);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white">
       <div className="flex items-end gap-2 overflow-x-auto px-3 py-2.5">
-        <div className="grid min-w-[980px] flex-1 grid-cols-7 gap-2">
+        <div className={cn("grid min-w-[980px] flex-1 grid-cols-7 gap-2", extra && "min-w-[1120px] grid-cols-8")}>
           <PeriodFilter
             compact
             showDates={false}
@@ -234,6 +239,7 @@ export function AdminFiltersBar({
             onChange={(pathway) => onChange({ pathway: pathway as AdminFilters["pathway"] })}
             options={[{ id: "all", name: "All" }, ...options.pathways]}
           />
+          {extra}
         </div>
         <FilterResetButton onReset={onReset} active={active} />
       </div>
@@ -487,5 +493,5 @@ export function StatusPill({ status }: { status: string }) {
               status === "CANCELLED"
             ? "bg-gray-100 text-gray-600"
             : "bg-[#F7F6F2] text-gray-700";
-  return <span className={cn("rounded-full px-2 py-0.5 font-saveful text-[11px] capitalize", tone)}>{status.replaceAll("_", " ")}</span>;
+  return <span className={cn("rounded-full px-2 py-0.5 font-saveful text-[11px]", tone)}>{status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())}</span>;
 }

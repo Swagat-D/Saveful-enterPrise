@@ -1,4 +1,4 @@
-import { daysBetween, inDateRange, liveToday, periodRange, rollingRange } from "@/lib/dates";
+import { daysBetween, DEMO_TODAY, inDateRange, liveToday, periodRange, rollingRange, type PeriodBounds } from "@/lib/dates";
 import { getNotificationSettings } from "@/lib/notificationSettings";
 import type {
   ActivityStatus,
@@ -74,11 +74,18 @@ export function neverActivatedPastGrace(site: OrganizationSite, days: number) {
   return daysBetween(site.createdAt) >= days;
 }
 
-export function activityStatus(site: OrganizationSite, period: PeriodKey): ActivityStatus {
+export function activityStatus(
+  site: OrganizationSite,
+  period: PeriodKey,
+  today: Date = DEMO_TODAY,
+  bounds?: PeriodBounds,
+): ActivityStatus {
   if (!isActivated(site)) return "never_activated";
-  if (!site.lastActivityAt) return "never_used";
-  const { startDate, endDate } = periodRange(period);
-  if (hasActivityInPeriod(site, startDate, endDate)) return "in_period";
+  const { startDate, endDate } = periodRange(period, today, bounds);
+  const active =
+    hasActivityInPeriod(site, startDate, endDate) || hasListingInPeriod(site, startDate, endDate);
+  if (active) return "in_period";
+  if (!site.lastActivityAt && !site.lastListingAt) return "never_used";
   return "none_in_period";
 }
 

@@ -15,7 +15,7 @@ import { periodLabel } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import { scopeFromUser } from "@/lib/scope";
 import { sitePermissions } from "@/lib/permissions";
-import { ACTIVITY_LABEL, activityStatus, formatLastActivity } from "@/lib/networkRules";
+import { formatLastActivity } from "@/lib/networkRules";
 import { useOrgStructureVersion } from "@/lib/orgStructure";
 import { getSiteStatus, setSiteStatus, useSiteLifecycleVersion } from "@/lib/siteLifecycle";
 import {
@@ -34,7 +34,7 @@ import {
 } from "@/lib/sitesDirectory";
 import { formatSiteAddress } from "@/lib/siteForm";
 import { PeriodFilter } from "@/components/filters/PeriodFilter";
-import type { ActivityStatus, OrganizationSite, SiteLifecycleStatus } from "@/types/enterprise";
+import type { OrganizationSite } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
 const selectClass =
@@ -78,28 +78,44 @@ function SitesDirectory() {
     setFilters({ ...filters, ...patch, page: patch.page ?? 1 });
   };
 
-  const toggleSiteStatus = (status: SiteLifecycleStatus) => {
-    update({ siteStatus: filters.siteStatus === status ? "all" : status });
+  const selectSnapshot = (next: "all" | "active" | "recovered" | "none" | "deactivated") => {
+    const selected =
+      filters.recovery === "recovered"
+        ? "recovered"
+        : filters.recovery === "none"
+          ? "none"
+          : filters.siteStatus === "active"
+            ? "active"
+            : filters.siteStatus === "deactivated"
+              ? "deactivated"
+              : "all";
+    const choice = selected === next ? "all" : next;
+    update({
+      siteStatus: choice === "active" || choice === "deactivated" ? choice : "all",
+      activity: "all",
+      recovery: choice === "recovered" || choice === "none" ? choice : "all",
+    });
   };
 
-  const toggleActivity = (status: ActivityStatus) => {
-    update({ activity: filters.activity === status ? "all" : status });
-  };
-
-  const activityOptions = [
-    { id: "all", name: "All" },
-    { id: "in_period", name: ACTIVITY_LABEL.in_period },
-    { id: "none_in_period", name: ACTIVITY_LABEL.none_in_period },
-    { id: "never_used", name: ACTIVITY_LABEL.never_used },
-    { id: "never_activated", name: ACTIVITY_LABEL.never_activated },
-  ];
+  const snapshot =
+    filters.recovery === "recovered"
+      ? "recovered"
+      : filters.recovery === "none"
+        ? "none"
+        : filters.siteStatus === "active" && filters.activity === "all"
+          ? "active"
+          : filters.siteStatus === "deactivated" && filters.activity === "all"
+            ? "deactivated"
+            : filters.siteStatus === "all" && filters.activity === "all"
+              ? "all"
+              : "";
 
   const filterCount = [
     filters.groupId !== "all",
     filters.territoryId !== "all",
     filters.clusterId !== "all",
     filters.siteStatus !== "all",
-    filters.activity !== "all",
+    filters.recovery !== "all",
   ].filter(Boolean).length;
 
   return (
@@ -156,37 +172,37 @@ function SitesDirectory() {
           </header>
 
           <div className="space-y-4 p-4 sm:p-5">
-            <WorkspaceSection title="Network snapshot" hint={`${periodLabel(filters.period)} · Site status and activity are separate`}>
+            <WorkspaceSection title="Network snapshot" hint={`${periodLabel(filters.period)} · One filter at a time`}>
               <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-3 xl:grid-cols-5">
                 <SummaryCell
                   label="Total sites"
                   value={counts.total}
-                  active={filters.siteStatus === "all" && filters.activity === "all"}
-                  onClick={() => update({ siteStatus: "all", activity: "all" })}
+                  active={snapshot === "all"}
+                  onClick={() => selectSnapshot("all")}
                 />
                 <SummaryCell
                   label="Active"
                   value={counts.active}
-                  active={filters.siteStatus === "active"}
-                  onClick={() => toggleSiteStatus("active")}
+                  active={snapshot === "active"}
+                  onClick={() => selectSnapshot("active")}
                 />
                 <SummaryCell
-                  label="No recent activity"
-                  value={counts.noRecent}
-                  active={filters.activity === "none_in_period"}
-                  onClick={() => toggleActivity("none_in_period")}
+                  label="Recovered food"
+                  value={counts.recovered}
+                  active={snapshot === "recovered"}
+                  onClick={() => selectSnapshot("recovered")}
                 />
                 <SummaryCell
-                  label="Never activated"
-                  value={counts.neverActivated}
-                  active={filters.activity === "never_activated"}
-                  onClick={() => toggleActivity("never_activated")}
+                  label="No food recovered"
+                  value={counts.noRecovery}
+                  active={snapshot === "none"}
+                  onClick={() => selectSnapshot("none")}
                 />
                 <SummaryCell
                   label="Deactivated"
                   value={counts.deactivated}
-                  active={filters.siteStatus === "deactivated"}
-                  onClick={() => toggleSiteStatus("deactivated")}
+                  active={snapshot === "deactivated"}
+                  onClick={() => selectSnapshot("deactivated")}
                 />
               </div>
             </WorkspaceSection>
@@ -225,7 +241,7 @@ function SitesDirectory() {
                           options.territories.find((item) => item.id === filters.territoryId)?.name,
                           options.clusters.find((item) => item.id === filters.clusterId)?.name,
                           filters.siteStatus !== "all" ? (filters.siteStatus === "active" ? "Active" : "Deactivated") : "",
-                          filters.activity !== "all" ? ACTIVITY_LABEL[filters.activity] : "",
+                          filters.recovery === "recovered" ? "Recovered food" : filters.recovery === "none" ? "No food recovered" : "",
                         ]
                           .filter(Boolean)
                           .join(" · ") || "All sites"
@@ -256,7 +272,7 @@ function SitesDirectory() {
                         <FilterSelect
                           label="Site status"
                           value={filters.siteStatus}
-                          onChange={(siteStatus) => update({ siteStatus: siteStatus as SitesTableFilters["siteStatus"] })}
+                          onChange={(siteStatus) => update({ siteStatus: siteStatus as SitesTableFilters["siteStatus"], activity: "all", recovery: "all" })}
                           options={[
                             { id: "all", name: "All" },
                             { id: "active", name: "Active" },
@@ -264,10 +280,14 @@ function SitesDirectory() {
                           ]}
                         />
                         <FilterSelect
-                          label="Activity status"
-                          value={filters.activity}
-                          onChange={(activity) => update({ activity: activity as SitesTableFilters["activity"] })}
-                          options={activityOptions}
+                          label="Food recovered"
+                          value={filters.recovery}
+                          onChange={(recovery) => update({ recovery: recovery as SitesTableFilters["recovery"], activity: "all", siteStatus: "all" })}
+                          options={[
+                            { id: "all", name: "All" },
+                            { id: "recovered", name: "Recovered food" },
+                            { id: "none", name: "No food recovered" },
+                          ]}
                         />
                       </div>
                     </MoreFilters>
@@ -291,7 +311,7 @@ function SitesDirectory() {
                     />
                     <FilterSelect
                       value={filters.siteStatus}
-                      onChange={(siteStatus) => update({ siteStatus: siteStatus as SitesTableFilters["siteStatus"] })}
+                      onChange={(siteStatus) => update({ siteStatus: siteStatus as SitesTableFilters["siteStatus"], activity: "all", recovery: "all" })}
                       options={[
                         { id: "all", name: "Site status: All" },
                         { id: "active", name: "Site status: Active" },
@@ -299,12 +319,13 @@ function SitesDirectory() {
                       ]}
                     />
                     <FilterSelect
-                      value={filters.activity}
-                      onChange={(activity) => update({ activity: activity as SitesTableFilters["activity"] })}
-                      options={activityOptions.map((item) => ({
-                        id: item.id,
-                        name: item.id === "all" ? "Activity status: All" : item.name,
-                      }))}
+                      value={filters.recovery}
+                      onChange={(recovery) => update({ recovery: recovery as SitesTableFilters["recovery"], activity: "all", siteStatus: "all" })}
+                      options={[
+                        { id: "all", name: "Food recovered: All" },
+                        { id: "recovered", name: "Food recovered: Yes" },
+                        { id: "none", name: "Food recovered: No" },
+                      ]}
                     />
                     </div>
                     <FilterResetButton onReset={() => setFilters({ ...EMPTY_SITES_FILTERS })} active={hasActiveSitesFilters(filters)} />
@@ -322,7 +343,6 @@ function SitesDirectory() {
                       <th className="pb-2 pr-3 font-saveful">Territory</th>
                       <th className="pb-2 pr-3 font-saveful">Cluster</th>
                       <th className="pb-2 pr-3 font-saveful">Site status</th>
-                      <th className="pb-2 pr-3 font-saveful">Activity status</th>
                       <th className="pb-2 pr-3 font-saveful">Last activity</th>
                       <th className="pb-2 pr-3 font-saveful">Food recovered</th>
                       <th className="pb-2 font-saveful"> </th>
@@ -347,9 +367,6 @@ function SitesDirectory() {
                           <td className="py-2.5 pr-3 font-saveful text-sm text-gray-700">{lookupLabel("cluster", site.clusterId)}</td>
                           <td className="py-2.5 pr-3">
                             <StatusPill active={getSiteStatus(site) === "active"} />
-                          </td>
-                          <td className="py-2.5 pr-3 font-saveful text-xs text-gray-600">
-                            {ACTIVITY_LABEL[activityStatus(site, filters.period)]}
                           </td>
                           <td className="py-2.5 pr-3 font-saveful text-sm text-gray-600">
                             {formatLastActivity(site.lastActivityAt)}
@@ -391,9 +408,6 @@ function SitesDirectory() {
                         <p className="mt-1.5 font-saveful text-xs text-gray-500">
                           {lookupLabel("group", site.groupId)} · {lookupLabel("territory", site.territoryId)} ·{" "}
                           {lookupLabel("cluster", site.clusterId)}
-                        </p>
-                        <p className="mt-0.5 font-saveful text-xs text-gray-500">
-                          {ACTIVITY_LABEL[activityStatus(site, filters.period)]}
                         </p>
                         <p className="mt-0.5 font-saveful text-xs text-gray-500">
                           {formatLastActivity(site.lastActivityAt)} · {kg > 0 ? formatKg(kg) : "No food recovered"}

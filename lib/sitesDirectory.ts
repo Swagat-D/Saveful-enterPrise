@@ -4,7 +4,6 @@ import { formatKg } from "@/lib/impact";
 import { demoNetworkSites, getNetworkSitesVersion, recoveryTransactions, subscribeNetworkSites } from "@/lib/network";
 import { getUnit, resolveSite, type OrgStructureKind } from "@/lib/orgStructure";
 import {
-  ACTIVITY_LABEL,
   activityStatus,
   attentionReasons,
   formatLastActivity,
@@ -31,6 +30,7 @@ export type SitesTableFilters = {
   clusterId: string;
   siteStatus: "all" | SiteLifecycleStatus;
   activity: "all" | ActivityStatus;
+  recovery: "all" | "recovered" | "none";
   summary: "all" | SiteSummaryKey;
   attention: string | null;
   period: PeriodKey;
@@ -51,6 +51,7 @@ export const EMPTY_SITES_FILTERS: SitesTableFilters = {
   clusterId: "all",
   siteStatus: "all",
   activity: "all",
+  recovery: "all",
   summary: "all",
   attention: null,
   period: "30",
@@ -80,6 +81,8 @@ export function parseSitesFilters(params: URLSearchParams): SitesTableFilters {
     }
   }
 
+  const recovery = params.get("recovery");
+
   return {
     q: params.get("q") ?? "",
     groupId: params.get("group") || "all",
@@ -90,6 +93,7 @@ export function parseSitesFilters(params: URLSearchParams): SitesTableFilters {
       activity === "in_period" || activity === "none_in_period" || activity === "never_used" || activity === "never_activated"
         ? activity
         : "all",
+    recovery: recovery === "recovered" || recovery === "none" ? recovery : "all",
     summary: "all",
     attention: attention === "all" ? "all" : null,
     period: parsePeriodKey(params.get("period")),
@@ -107,6 +111,7 @@ export function sitesFiltersToQuery(filters: SitesTableFilters) {
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
   if (filters.siteStatus !== "all") params.set("status", filters.siteStatus);
   if (filters.activity !== "all") params.set("activity", filters.activity);
+  if (filters.recovery !== "all") params.set("recovery", filters.recovery);
   writePeriodParams(params, filters.period, { from: filters.from, to: filters.to });
   if (filters.attention === "all") params.set("attention", "all");
   if (filters.page > 1) params.set("page", String(filters.page));
@@ -122,7 +127,8 @@ export function hasActiveSitesFilters(filters: SitesTableFilters) {
     filters.territoryId !== "all" ||
     filters.clusterId !== "all" ||
     filters.siteStatus !== "all" ||
-    filters.activity !== "all"
+    filters.activity !== "all" ||
+    filters.recovery !== "all"
   );
 }
 
@@ -146,6 +152,10 @@ export function filterDirectorySites(scope: AccessScope, filters: SitesTableFilt
     if (filters.clusterId !== "all" && site.clusterId !== filters.clusterId) return false;
     if (filters.siteStatus !== "all" && site.status !== filters.siteStatus) return false;
     if (filters.activity !== "all" && activityStatus(site, filters.period) !== filters.activity) return false;
+    if (filters.recovery !== "all") {
+      const recovered = foodRecoveredKg(site.id, filters.period) > 0;
+      if (filters.recovery === "recovered" ? !recovered : recovered) return false;
+    }
     if (filters.attention === "all" && attentionReasons(site, { ...EMPTY_FILTERS, period: filters.period }).length === 0) {
       return false;
     }
@@ -158,13 +168,13 @@ export function filterDirectorySites(scope: AccessScope, filters: SitesTableFilt
 }
 
 export function summaryCounts(scope: AccessScope, filters: SitesTableFilters) {
-  const base: SitesTableFilters = { ...filters, summary: "all", siteStatus: "all", activity: "all" };
+  const base: SitesTableFilters = { ...filters, summary: "all", siteStatus: "all", activity: "all", recovery: "all" };
   const sites = filterDirectorySites(scope, base);
   return {
     total: sites.length,
     active: sites.filter((site) => site.status === "active").length,
-    noRecent: sites.filter((site) => activityStatus(site, filters.period) === "none_in_period").length,
-    neverActivated: sites.filter((site) => activityStatus(site, filters.period) === "never_activated").length,
+    recovered: sites.filter((site) => foodRecoveredKg(site.id, filters.period) > 0).length,
+    noRecovery: sites.filter((site) => foodRecoveredKg(site.id, filters.period) <= 0).length,
     deactivated: sites.filter(isDeactivated).length,
   };
 }
@@ -187,7 +197,7 @@ export function lookupLabel(kind: OrgStructureKind, id?: string | null) {
 
 export function exportSitesCsv(sites: OrganizationSite[], period: PeriodKey) {
   const rows = [
-    ["Site", "Site ID", "Address", "Group", "Territory", "Cluster", "Site status", "Last activity", "Food recovered", "Activity status"],
+    ["Site", "Site ID", "Address", "Group", "Territory", "Cluster", "Site status", "Last activity", "Food recovered"],
     ...sites.map((site) => {
       const kg = foodRecoveredKg(site.id, period);
       return [
@@ -200,7 +210,6 @@ export function exportSitesCsv(sites: OrganizationSite[], period: PeriodKey) {
         site.status === "deactivated" ? "Deactivated" : "Active",
         formatLastActivity(site.lastActivityAt),
         kg > 0 ? formatKg(kg) : "—",
-        ACTIVITY_LABEL[activityStatus(site, period)],
       ];
     }),
   ];

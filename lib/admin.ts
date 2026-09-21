@@ -7,7 +7,7 @@ import { inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange,
 import { calculateImpact, formatKg } from "@/lib/impact";
 import { demoUsers } from "@/lib/demo";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
-import { ACTIVITY_LABEL, activityStatus, formatLastActivity, isActivated } from "@/lib/networkRules";
+import { activityStatus, formatLastActivity, isActivated } from "@/lib/networkRules";
 import { foodInsights, organisationInsights } from "@/lib/insights";
 import { foodCategoryFor, impactOverTime, PATHWAY_LABEL } from "@/lib/networkQuery";
 import { isSiteAdminRole } from "@/lib/enterpriseRole";
@@ -208,6 +208,8 @@ export type AdminListing = {
   pickupByTime?: string | null;
   bestBefore?: string | null;
   listingType?: string;
+  orgName?: string;
+  siteName?: string;
   items?: Array<{ name: string; totalQtyKg: number; remainingQtyKg?: number }>;
   claims?: AdminListingClaim[];
 };
@@ -311,6 +313,8 @@ let remoteOrgProfiles: Record<string, AdminOrgProfile> = {};
 let remoteListingsByOrg: Record<string, AdminListing[]> = {};
 let remoteCollectionsByOrg: Record<string, AdminCollection[]> = {};
 let loaded = false;
+let bootstrapped = false;
+let refreshInFlight: Promise<AdminOrganisation[]> | null = null;
 
 function site(
   orgId: string,
@@ -337,6 +341,15 @@ function subscribe(listener: () => void) {
 
 export function useAdminVersion() {
   return useSyncExternalStore(subscribe, () => version, () => 0);
+}
+
+export function isAdminReady() {
+  return bootstrapped;
+}
+
+export function useAdminReady() {
+  useAdminVersion();
+  return bootstrapped;
 }
 
 function ensureLoaded() {
@@ -594,10 +607,13 @@ function storeAppNetwork(payload: {
         activeSiteCount: 0,
       }));
   const enterpriseIds = new Set(remoteOrgs.map((org) => org.id));
-  remoteAppOrgs = organisations.map(mapAppOrganisation).filter((org) => !enterpriseIds.has(org.id));
-  remoteAppSites = (payload.sites ?? [])
+  const nextOrgs = organisations.map(mapAppOrganisation).filter((org) => !enterpriseIds.has(org.id));
+  if (!nextOrgs.length && remoteAppOrgs.length) return;
+  remoteAppOrgs = nextOrgs;
+  const nextSites = (payload.sites ?? [])
     .map(mapAppSite)
     .filter((site) => remoteAppOrgs.some((org) => org.id === site.orgId));
+  if (nextSites.length || !remoteAppSites.length) remoteAppSites = nextSites;
 }
 
 function appActivityHref(organisationId: string) {
@@ -605,6 +621,7 @@ function appActivityHref(organisationId: string) {
 }
 
 function storeAppActivity(rows: AdminAppActivityItem[] | undefined, users: AdminAppUser[]) {
+  if (!rows?.length && !users.length && remoteAppActivity.length) return;
   if (rows?.length) {
     remoteAppActivity = rows.map((row) => ({
       id: row.id,
@@ -673,14 +690,25 @@ function storeAppActivity(rows: AdminAppActivityItem[] | undefined, users: Admin
 
 function storeAppOperations(listings: AdminAppListingRow[] | undefined, collections: AdminAppCollectionRow[] | undefined) {
   const enterpriseIds = new Set(remoteOrgs.map((org) => org.id));
+  const orgNames = new Map<string, string>();
+  const siteNames = new Map<string, string>();
+  for (const org of [...remoteOrgs, ...remoteAppOrgs]) orgNames.set(org.id, org.name);
+  for (const site of [...remoteSites, ...remoteAppSites]) siteNames.set(site.id, site.name);
+  for (const row of collections ?? []) {
+    if (row.providerName) orgNames.set(String(row.organisationId), row.providerName);
+    if (row.siteName) siteNames.set(String(row.siteId), row.siteName);
+  }
   const listingsByOrg = new Map<string, AdminListing[]>();
   for (const row of listings ?? []) {
     const orgId = String(row.organisationId);
     if (enterpriseIds.has(orgId)) continue;
+    const siteId = String(row.siteId);
     const mapped: AdminListing = {
       id: String(row.id),
       orgId,
-      siteId: String(row.siteId),
+      siteId,
+      orgName: orgNames.get(orgId),
+      siteName: siteNames.get(siteId),
       code: `LST-${String(row.id).padStart(5, "0")}`,
       food: row.food || (row.foodItems ?? []).map((item) => item.name).filter(Boolean).join(", ") || "Food listing",
       pathway: mapListingPathway({ listingType: row.listingType ?? undefined, recoveryPathway: row.recoveryPathway }),
@@ -742,52 +770,60 @@ function storeAppOperations(listings: AdminAppListingRow[] | undefined, collecti
 }
 
 export async function refreshOrganisations() {
-  const [rows, appNetwork, appActivity] = await Promise.all([
-    listEnterprises(),
-    listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] })),
-    listAdminAppActivity().catch(() => ({
-      activity: [] as AdminAppActivityItem[],
-      listings: [] as AdminAppListingRow[],
-      collections: [] as AdminAppCollectionRow[],
-    })),
-  ]);
-  remoteOrgs = rows.map(mapEnterprise);
-  storeAppNetwork(appNetwork);
-  storeAppActivity(appActivity.activity, appNetwork.users ?? []);
-  storeAppOperations(appActivity.listings, appActivity.collections);
-  if (!appNetwork.sites?.length && remoteAppOrgs.some((org) => org.type !== "food_business")) {
-    const details = await Promise.all(
-      remoteAppOrgs
-        .filter((org) => org.type !== "food_business")
-        .slice(0, 40)
-        .map((org) => getAdminAppOrganisation(org.id).catch(() => null)),
-    );
-    remoteAppSites = details.flatMap((detail) => {
-      if (!detail) return [];
-      return (detail.sites ?? []).map((site) =>
-        mapAppSite({
-          id: site.id,
-          organisationId: detail.organisation.id,
-          name: site.name,
-          address: site.address,
-          postcode: site.postcode ?? null,
-          isActive: site.isActive,
-          createdAt: site.createdAt ?? null,
-          lastActivityAt: null,
-        }),
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const [rows, appNetwork, appActivity] = await Promise.all([
+      listEnterprises(),
+      listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] })),
+      listAdminAppActivity().catch(() => ({
+        activity: [] as AdminAppActivityItem[],
+        listings: [] as AdminAppListingRow[],
+        collections: [] as AdminAppCollectionRow[],
+      })),
+    ]);
+    if (rows.length || !remoteOrgs.length) remoteOrgs = rows.map(mapEnterprise);
+    storeAppNetwork(appNetwork);
+    storeAppActivity(appActivity.activity, appNetwork.users ?? []);
+    storeAppOperations(appActivity.listings, appActivity.collections);
+    if (!appNetwork.sites?.length && remoteAppOrgs.some((org) => org.type !== "food_business")) {
+      const details = await Promise.all(
+        remoteAppOrgs
+          .filter((org) => org.type !== "food_business")
+          .slice(0, 40)
+          .map((org) => getAdminAppOrganisation(org.id).catch(() => null)),
       );
-    });
-  }
-  emit();
-  const needsDetail = remoteOrgs
-    .filter((org) => org.status === "Prospect" || !org.lastLoginAt)
-    .slice(0, 8);
-  if (needsDetail.length) {
-    await Promise.all(needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)));
-  }
-  await Promise.all([refreshSites().catch(() => undefined), refreshEnterpriseUsers().catch(() => undefined)]);
-  await Promise.all(listLiveEnterprises().slice(0, 30).map((org) => refreshOrganisationListings(org.id).catch(() => undefined)));
-  return listOrganisations();
+      const nextSites = details.flatMap((detail) => {
+        if (!detail) return [];
+        return (detail.sites ?? []).map((site) =>
+          mapAppSite({
+            id: site.id,
+            organisationId: detail.organisation.id,
+            name: site.name,
+            address: site.address,
+            postcode: site.postcode ?? null,
+            isActive: site.isActive,
+            createdAt: site.createdAt ?? null,
+            lastActivityAt: null,
+          }),
+        );
+      });
+      if (nextSites.length) remoteAppSites = nextSites;
+    }
+    bootstrapped = true;
+    emit();
+    const needsDetail = remoteOrgs
+      .filter((org) => org.status === "Prospect" || !org.lastLoginAt)
+      .slice(0, 8);
+    if (needsDetail.length) {
+      await Promise.all(needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)));
+    }
+    await Promise.all([refreshSites().catch(() => undefined), refreshEnterpriseUsers().catch(() => undefined)]);
+    await Promise.all(listLiveEnterprises().slice(0, 30).map((org) => refreshOrganisationListings(org.id).catch(() => undefined)));
+    return listOrganisations();
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 function mapAdminApiSite(row: AdminApiSiteRow): AdminSite {
@@ -971,7 +1007,7 @@ export function listOrganisations(): AdminOrganisation[] {
 }
 
 export function getOrganisation(id: string) {
-  return listOrganisations().find((org) => org.id === id) ?? null;
+  return listNetworkOrganisations().find((org) => org.id === id) ?? null;
 }
 
 export function listLiveEnterprises() {
@@ -1031,7 +1067,7 @@ export function listCollections(): AdminCollection[] {
 }
 
 export function getSite(id: string) {
-  return listSites().find((row) => row.id === id) ?? null;
+  return listNetworkSites().find((row) => row.id === id) ?? null;
 }
 
 export function organizationSiteFromAdmin(site: AdminSite): OrganizationSite {
@@ -1155,12 +1191,12 @@ export function filteredListings(filters: AdminFilters, range?: { startDate?: st
   });
 }
 
-function isCompletedCollection(row: AdminCollection) {
+export function isCompletedCollection(row: AdminCollection) {
   const status = (row.claimStatus || row.status || "").toUpperCase();
   return row.status === "completed" || status === "COLLECTED" || status === "COMPLETED";
 }
 
-function collectionKg(row: AdminCollection) {
+export function collectionKg(row: AdminCollection) {
   return row.quantityKg || row.listingTotalKg || 0;
 }
 
@@ -1175,7 +1211,7 @@ export function filteredCollections(filters: AdminFilters, range?: { startDate?:
   });
 }
 
-function recoveryPoints(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
+export function recoveryPoints(filters: AdminFilters, range?: { startDate?: string; endDate?: string }) {
   const { startDate, endDate } = range ?? rangeForFilters(filters, liveToday());
   const rows: RecoveryTransaction[] = [];
   const seen = new Set<string>();
@@ -1197,7 +1233,7 @@ function recoveryPoints(filters: AdminFilters, range?: { startDate?: string; end
         clusterId: "",
         clusterName: "",
         siteId: row.siteId,
-        siteName: "",
+        siteName: row.siteName || "",
       },
     });
   }
@@ -1301,7 +1337,7 @@ export function buildAdminOverview(filters: AdminFilters) {
     types,
     pathways,
     recoveredKg: foodKg,
-    series: impactOverTime(currentRows, filters.period),
+    series: impactOverTime(currentRows, filters.period, liveToday(), { from: filters.from, to: filters.to }),
     headlines: {
       organisations: { value: organisations.length, delta: 0 },
       sites: { value: sites.length, delta: currentActiveSites - previousSites },
@@ -1573,6 +1609,7 @@ export type AdminSitesTableFilters = {
   clusterId: string;
   siteStatus: "all" | SiteLifecycleStatus;
   activity: "all" | ActivityStatus;
+  recovery: "all" | "recovered" | "none";
   page: number;
   pageSize: 10 | 25 | 50;
 };
@@ -1584,6 +1621,7 @@ export const EMPTY_ADMIN_SITES_FILTERS: AdminSitesTableFilters = {
   clusterId: "all",
   siteStatus: "all",
   activity: "all",
+  recovery: "all",
   page: 1,
   pageSize: 10,
 };
@@ -1615,6 +1653,7 @@ export function parseAdminSitesTable(params: URLSearchParams): AdminSitesTableFi
   const page = Number(params.get("page"));
   const siteStatus = params.get("status");
   const activity = params.get("activity");
+  const recovery = params.get("recovery");
   return {
     q: params.get("q") ?? "",
     groupId: params.get("group") || "all",
@@ -1625,6 +1664,7 @@ export function parseAdminSitesTable(params: URLSearchParams): AdminSitesTableFi
       activity === "in_period" || activity === "none_in_period" || activity === "never_used" || activity === "never_activated"
         ? activity
         : "all",
+    recovery: recovery === "recovered" || recovery === "none" ? recovery : "all",
     page: page > 0 ? page : 1,
     pageSize: SITE_PAGE_SIZES.includes(pageSize as 10) ? (pageSize as 10 | 25 | 50) : 10,
   };
@@ -1638,6 +1678,7 @@ export function adminSitesTableToQuery(filters: AdminSitesTableFilters) {
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
   if (filters.siteStatus !== "all") params.set("status", filters.siteStatus);
   if (filters.activity !== "all") params.set("activity", filters.activity);
+  if (filters.recovery !== "all") params.set("recovery", filters.recovery);
   if (filters.page > 1) params.set("page", String(filters.page));
   if (filters.pageSize !== 10) params.set("pageSize", String(filters.pageSize));
   return params;
@@ -1650,7 +1691,8 @@ export function hasActiveAdminSitesFilters(filters: AdminSitesTableFilters) {
     filters.territoryId !== "all" ||
     filters.clusterId !== "all" ||
     filters.siteStatus !== "all" ||
-    filters.activity !== "all"
+    filters.activity !== "all" ||
+    filters.recovery !== "all"
   );
 }
 
@@ -1660,19 +1702,40 @@ function siteLifecycle(row: AdminSite): SiteLifecycleStatus {
   return row.status === "Deactivated" ? "deactivated" : "active";
 }
 
-function toDirectorySite(row: AdminSite, period: PeriodKey): AdminDirectorySite {
+function toDirectorySite(row: AdminSite, period: PeriodKey, bounds?: PeriodBounds): AdminDirectorySite {
   const org = getOrganisation(row.orgId);
   const harbour = row.orgId === "harbour" ? demoNetworkSites.find((item) => item.id === row.id) : undefined;
   const siteStatus = siteLifecycle(row);
   const groupId = harbour?.groupId ?? row.groupId ?? null;
   const territoryId = harbour?.territoryId ?? row.territoryId ?? null;
   const clusterId = harbour?.clusterId ?? row.clusterId ?? null;
+  const range = periodRange(period, liveToday(), bounds);
+  const siteCollections = listCollections().filter(
+    (item) => item.siteId === row.id && isCompletedCollection(item),
+  );
+  const latestCollectionAt = siteCollections
+    .map((item) => item.collectedAt || item.occurredAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
+  const recoveredKg =
+    row.orgId === "harbour"
+      ? foodRecoveredKg(row.id, period)
+      : siteCollections
+          .filter((item) => inDateRange(item.collectedAt || item.occurredAt, range.startDate, range.endDate))
+          .reduce((sum, item) => sum + collectionKg(item), 0);
+  const lastActivityAt = [harbour?.lastActivityAt, row.lastActivityAt, latestCollectionAt]
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
   const activatedAt =
     harbour?.activatedAt ??
     row.activatedAt ??
-    (row.status === "Never activated" ? null : row.lastActivityAt);
-  const lastActivityAt = harbour?.lastActivityAt ?? row.lastActivityAt;
-  const activity = activityStatus(
+    (row.status === "Never activated" ? null : lastActivityAt);
+  const activity =
+    recoveredKg > 0
+      ? "in_period"
+      : activityStatus(
     {
       id: row.id,
       siteCode: harbour?.siteCode ?? row.siteCode ?? (row.id.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || row.id),
@@ -1694,13 +1757,9 @@ function toDirectorySite(row: AdminSite, period: PeriodKey): AdminDirectorySite 
       lastListingAt: harbour?.lastListingAt ?? lastActivityAt,
     },
     period,
+    liveToday(),
+    bounds,
   );
-  const recoveredKg =
-    row.orgId === "harbour"
-      ? foodRecoveredKg(row.id, period)
-      : listCollections()
-          .filter((item) => item.siteId === row.id && item.status === "completed" && inDateRange(item.occurredAt, periodRange(period, liveToday()).startDate, periodRange(period, liveToday()).endDate))
-          .reduce((sum, item) => sum + item.quantityKg, 0);
   return {
     id: row.id,
     orgId: row.orgId,
@@ -1725,7 +1784,9 @@ function toDirectorySite(row: AdminSite, period: PeriodKey): AdminDirectorySite 
 export function buildSitesDirectory(adminFilters: AdminFilters, table: AdminSitesTableFilters) {
   const scope: AdminFilters = { ...adminFilters, q: "" };
   const query = table.q.trim().toLowerCase();
-  const mapped = filteredSites(scope).map((row) => toDirectorySite(row, adminFilters.period));
+  const mapped = filteredSites(scope).map((row) =>
+    toDirectorySite(row, adminFilters.period, { from: adminFilters.from, to: adminFilters.to }),
+  );
   const scoped = mapped.filter((row) => {
     if (table.groupId !== "all" && row.groupId !== table.groupId) return false;
     if (table.territoryId !== "all" && row.territoryId !== table.territoryId) return false;
@@ -1736,13 +1797,15 @@ export function buildSitesDirectory(adminFilters: AdminFilters, table: AdminSite
   const rows = scoped.filter((row) => {
     if (table.siteStatus !== "all" && row.siteStatus !== table.siteStatus) return false;
     if (table.activity !== "all" && row.activity !== table.activity) return false;
+    if (table.recovery === "recovered" && row.recoveredKg <= 0) return false;
+    if (table.recovery === "none" && row.recoveredKg > 0) return false;
     return true;
   });
   const counts = {
     total: scoped.length,
     active: scoped.filter((row) => row.siteStatus === "active").length,
-    noRecent: scoped.filter((row) => row.activity === "none_in_period").length,
-    neverActivated: scoped.filter((row) => row.activity === "never_activated").length,
+    recovered: scoped.filter((row) => row.recoveredKg > 0).length,
+    noRecovery: scoped.filter((row) => row.recoveredKg <= 0).length,
     deactivated: scoped.filter((row) => row.siteStatus === "deactivated").length,
   };
   const groups = unique(mapped.map((row) => row.groupId).filter((id): id is string => Boolean(id))).map((id) => ({
@@ -1762,7 +1825,7 @@ export function buildSitesDirectory(adminFilters: AdminFilters, table: AdminSite
 
 export function exportAdminSitesCsv(rows: AdminDirectorySite[], period: PeriodKey) {
   const lines = [
-    ["Site", "Site ID", "Organisation", "Address", "Group", "Territory", "Cluster", "Site status", "Activity status", "Last activity", "Food recovered"],
+    ["Site", "Site ID", "Organisation", "Address", "Group", "Territory", "Cluster", "Site status", "Last activity", "Food recovered"],
     ...rows.map((row) => [
       row.name,
       row.siteCode,
@@ -1772,7 +1835,6 @@ export function exportAdminSitesCsv(rows: AdminDirectorySite[], period: PeriodKe
       row.territoryLabel,
       row.clusterLabel,
       row.siteStatus === "deactivated" ? "Deactivated" : "Active",
-      ACTIVITY_LABEL[row.activity],
       formatLastActivity(row.lastActivityAt),
       row.recoveredKg > 0 ? `${row.recoveredKg}` : "—",
     ]),
@@ -2433,7 +2495,7 @@ export function buildOrgDetail(orgId: string, period: PeriodKey = "30", bounds?:
       value: allImpact.foodValue || impact.foodValue,
       collections: allRows.length || collections.filter((row) => row.status === "completed").length,
     },
-    series: impactOverTime(currentRows.length ? currentRows : allRows, period),
+    series: impactOverTime(currentRows.length ? currentRows : allRows, period, liveToday(), bounds),
     pathways,
     relationships: {
       isProvider: org.roles.includes("surplus_provider"),
@@ -2459,7 +2521,7 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30", bounds
   if (!site) return null;
   const org = getOrganisation(site.orgId);
   if (!org) return null;
-  const directory = toDirectorySite(site, period);
+  const directory = toDirectorySite(site, period, bounds);
   const harbour = site.orgId === "harbour" ? demoNetworkSites.find((item) => item.id === site.id) : undefined;
   const profile = orgProfile(org);
   const { startDate, endDate } = periodRange(period, liveToday(), bounds);
@@ -2631,7 +2693,7 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30", bounds
     pathways,
     foods: foodInsights(currentRows),
     organisations: organisationInsights(currentRows),
-    series: impactOverTime(currentRows.length ? currentRows : allRows, period),
+    series: impactOverTime(currentRows.length ? currentRows : allRows, period, liveToday(), bounds),
     recent,
     activityFeed,
     notifications,
