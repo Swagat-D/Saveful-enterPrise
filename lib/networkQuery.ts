@@ -1,5 +1,5 @@
 import { calculateImpact, percentChange } from "@/lib/impact";
-import { inDateRange, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams, type PeriodBounds } from "@/lib/dates";
+import { inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, previousPeriodRange, rangeForFilters, writePeriodParams, type PeriodBounds } from "@/lib/dates";
 import { demoNetworkSites, recoveryTransactions } from "@/lib/network";
 import { listUnits, resolveSite } from "@/lib/orgStructure";
 import {
@@ -106,14 +106,28 @@ export function scopedTransactions(
   scope: AccessScope,
   range?: { startDate?: string; endDate?: string },
 ) {
-  const allowedSites = new Set(
-    visibleSites(demoNetworkSites, scope, filters).map((site) => site.id),
-  );
-  const { startDate, endDate } = range ?? rangeForFilters(filters);
+  const { startDate, endDate } = range ?? rangeForFilters(filters, liveToday());
 
   return recoveryTransactions.filter((row) => {
-    if (!allowedSites.has(row.snapshot.siteId)) return false;
-    return inDateRange(row.occurredAt, startDate, endDate);
+    if (!inDateRange(row.occurredAt, startDate, endDate)) return false;
+    const site = demoNetworkSites.find((item) => item.id === row.snapshot.siteId);
+    if (site) {
+      if (!siteInScope(site, scope) || !siteMatchesFilters(site, filters)) return false;
+    } else {
+      if (scope.siteIds != null && !scope.siteIds.includes(row.snapshot.siteId)) return false;
+      if (scope.groupIds != null && row.snapshot.groupId && !scope.groupIds.includes(row.snapshot.groupId)) return false;
+      if (scope.territoryIds != null && row.snapshot.territoryId && !scope.territoryIds.includes(row.snapshot.territoryId)) {
+        return false;
+      }
+      if (scope.clusterIds != null && row.snapshot.clusterId && !scope.clusterIds.includes(row.snapshot.clusterId)) {
+        return false;
+      }
+      if (filters.groupId !== "all" && row.snapshot.groupId !== filters.groupId) return false;
+      if (filters.territoryId !== "all" && row.snapshot.territoryId !== filters.territoryId) return false;
+      if (filters.clusterId !== "all" && row.snapshot.clusterId !== filters.clusterId) return false;
+      if (filters.siteId !== "all" && row.snapshot.siteId !== filters.siteId) return false;
+    }
+    return true;
   });
 }
 
@@ -148,6 +162,7 @@ const FOOD_BY_PATHWAY: Record<RecoveryPathway, string[]> = {
 };
 
 export function foodCategoryFor(row: RecoveryTransaction) {
+  if (row.food?.trim()) return row.food.trim();
   const options = FOOD_BY_PATHWAY[row.pathway];
   const index = row.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % options.length;
   return options[index];
@@ -182,7 +197,7 @@ export function recoveryPathways(rows: RecoveryTransaction[]) {
 }
 
 export function networkHealth(sites: OrganizationSite[], filters: NetworkFilters) {
-  const { startDate, endDate } = rangeForFilters(filters);
+  const { startDate, endDate } = rangeForFilters(filters, liveToday());
   const activated = sites.filter((site) => site.status === "active" && isActivated(site));
   const withActivity = activated.filter((site) => hasActivityInPeriod(site, startDate, endDate));
   return {
@@ -216,7 +231,7 @@ export function performanceByGroup(
       const previous = previousRows.filter((row) => row.snapshot.groupId === group.id);
       const foodKg = current.reduce((sum, row) => sum + row.kg, 0);
       const prevKg = previous.reduce((sum, row) => sum + row.kg, 0);
-      const { startDate, endDate } = periodRange(period);
+      const { startDate, endDate } = periodRange(period, liveToday());
       return {
         id: group.id,
         name: group.name,

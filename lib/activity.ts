@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import type { ApiFoodListing } from "@/lib/api";
 import { daysAgoIso, inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, rangeForFilters, writePeriodParams } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
-import { demoNetworkSites } from "@/lib/network";
+import { demoNetworkSites, replaceRecoveryTransactions } from "@/lib/network";
 import { PATHWAY_LABEL } from "@/lib/networkQuery";
 import { getUnit, listUnits, resolveSite } from "@/lib/orgStructure";
 import { siteInScope } from "@/lib/scope";
@@ -297,6 +297,12 @@ export function replaceActivityFromListings(rows: ApiFoodListing[]) {
     for (const claim of row.foodClaims ?? []) {
       if ((claim.status || "").toUpperCase() === "CANCELLED") continue;
       const kg = (claim.claimItems ?? []).reduce((sum, item) => sum + (item.qtyKg ?? 0), 0);
+      const recipientId =
+        claim.claimantOrg?.id != null
+          ? String(claim.claimantOrg.id)
+          : claim.claimantSite?.id != null
+            ? String(claim.claimantSite.id)
+            : String(claim.id);
       collections.push({
         id: String(claim.id),
         code: `COL-${String(claim.id).padStart(5, "0")}`,
@@ -313,6 +319,7 @@ export function replaceActivityFromListings(rows: ApiFoodListing[]) {
         food,
         pathway,
         quantityKg: kg || row.totalQtyKg || 0,
+        recipientId,
         recipientName:
           claim.claimantSite?.name ||
           claim.claimantSite?.organisationName ||
@@ -328,6 +335,29 @@ export function replaceActivityFromListings(rows: ApiFoodListing[]) {
   }
   activityListings = listings;
   activityCollections = collections;
+  replaceRecoveryTransactions(
+    collections
+      .filter((row) => row.status === "completed")
+      .map((row) => ({
+        id: row.id,
+        occurredAt: row.occurredAt,
+        kg: row.quantityKg,
+        pathway: row.pathway,
+        recipientId: row.recipientId || row.id,
+        recipientName: row.recipientName,
+        food: row.food,
+        snapshot: {
+          groupId: row.groupId,
+          groupName: row.groupName,
+          territoryId: row.territoryId,
+          territoryName: row.territoryName,
+          clusterId: row.clusterId,
+          clusterName: row.clusterName,
+          siteId: row.siteId,
+          siteName: row.siteName,
+        },
+      })),
+  );
   emit();
 }
 

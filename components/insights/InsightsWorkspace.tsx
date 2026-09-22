@@ -44,7 +44,8 @@ import {
 } from "@/lib/insights";
 import { buildNetworkPerformanceModel } from "@/lib/networkPerformance";
 import { filterOptions, PATHWAY_COLORS, PATHWAY_LABEL } from "@/lib/networkQuery";
-import { demoNetworkSites } from "@/lib/network";
+import { demoNetworkSites, useRecoveryVersion } from "@/lib/network";
+import { useLiveSitesVersion } from "@/lib/sitesDirectory";
 import { useOrgStructureVersion } from "@/lib/orgStructure";
 import { scopeFromUser } from "@/lib/scope";
 import { cn } from "@/lib/utils";
@@ -60,12 +61,20 @@ export function InsightsWorkspace() {
   const user = useSession();
   const scope = scopeFromUser(user);
   const structureVersion = useOrgStructureVersion();
+  const sitesVersion = useLiveSitesVersion();
+  const recoveryVersion = useRecoveryVersion();
   const filters = useMemo(() => parseInsightsFilters(searchParams), [searchParams]);
-  const options = useMemo(() => filterOptions(demoNetworkSites, scope, filters), [scope, filters, structureVersion]);
-  const model = useMemo(() => buildInsightsModel(filters, scope), [filters, scope, structureVersion]);
+  const options = useMemo(
+    () => filterOptions(demoNetworkSites, scope, filters),
+    [scope, filters, structureVersion, sitesVersion],
+  );
+  const model = useMemo(
+    () => buildInsightsModel(filters, scope),
+    [filters, scope, structureVersion, sitesVersion, recoveryVersion],
+  );
   const networkModel = useMemo(
     () => buildNetworkPerformanceModel(filters, scope),
-    [filters, scope, structureVersion],
+    [filters, scope, structureVersion, sitesVersion, recoveryVersion],
   );
 
   const setFilters = (next: InsightsFilters) => {

@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { DEMO_TODAY, toApiDate } from "@/lib/dates";
 import type { OrgUnit, OrganizationSite, OrganizationSnapshot, RecoveryTransaction } from "@/types/enterprise";
 
@@ -16,10 +17,17 @@ const clusterName = (id?: string | null) =>
 
 const siteListeners = new Set<() => void>();
 let sitesVersion = 0;
+const recoveryListeners = new Set<() => void>();
+let recoveryVersion = 0;
 
 function emitSites() {
   sitesVersion += 1;
   siteListeners.forEach((listener) => listener());
+}
+
+function emitRecovery() {
+  recoveryVersion += 1;
+  recoveryListeners.forEach((listener) => listener());
 }
 
 export function replaceNetworkSites(rows: OrganizationSite[]) {
@@ -53,6 +61,26 @@ export function subscribeNetworkSites(listener: () => void) {
   return () => {
     siteListeners.delete(listener);
   };
+}
+
+export function replaceRecoveryTransactions(rows: RecoveryTransaction[]) {
+  recoveryTransactions.splice(0, recoveryTransactions.length, ...rows);
+  emitRecovery();
+}
+
+export function getRecoveryVersion() {
+  return recoveryVersion;
+}
+
+export function subscribeRecovery(listener: () => void) {
+  recoveryListeners.add(listener);
+  return () => {
+    recoveryListeners.delete(listener);
+  };
+}
+
+export function useRecoveryVersion() {
+  return useSyncExternalStore(subscribeRecovery, getRecoveryVersion, () => 0);
 }
 
 export function replaceNetworkUnits(next: { groups?: OrgUnit[]; territories?: OrgUnit[]; clusters?: OrgUnit[] }) {

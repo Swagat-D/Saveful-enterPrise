@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { parsePeriodBounds, parsePeriodKey, periodRange, writePeriodParams } from "@/lib/dates";
+import { inDateRange, liveToday, parsePeriodBounds, parsePeriodKey, periodRange, writePeriodParams } from "@/lib/dates";
 import { formatKg } from "@/lib/impact";
 import { demoNetworkSites, getNetworkSitesVersion, recoveryTransactions, subscribeNetworkSites } from "@/lib/network";
 import { getUnit, resolveSite, type OrgStructureKind } from "@/lib/orgStructure";
@@ -11,7 +11,6 @@ import {
 } from "@/lib/networkRules";
 import { EMPTY_FILTERS } from "@/lib/scope";
 import { filterOptions, type NetworkFilters } from "@/lib/networkQuery";
-import { inDateRange } from "@/lib/dates";
 import { siteInScope } from "@/lib/scope";
 import { getSiteStatus } from "@/lib/siteLifecycle";
 import type {
@@ -133,7 +132,7 @@ export function hasActiveSitesFilters(filters: SitesTableFilters) {
 }
 
 export function foodRecoveredKg(siteId: string, period: PeriodKey) {
-  const { startDate, endDate } = periodRange(period);
+  const { startDate, endDate } = periodRange(period, liveToday());
   return recoveryTransactions
     .filter((row) => row.snapshot.siteId === siteId && inDateRange(row.occurredAt, startDate, endDate))
     .reduce((sum, row) => sum + row.kg, 0);

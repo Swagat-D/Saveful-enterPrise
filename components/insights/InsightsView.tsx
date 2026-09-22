@@ -12,15 +12,22 @@ import {
   type InsightsFilters,
 } from "@/lib/insights";
 import { PeriodFilter } from "@/components/filters/PeriodFilter";
+import { useRecoveryVersion } from "@/lib/network";
+import { useLiveSitesVersion } from "@/lib/sitesDirectory";
 import { scopeFromUser } from "@/lib/scope";
 
 export function InsightsView({ lockedSiteId }: { lockedSiteId: string }) {
   const scope = scopeFromUser(useSession());
+  const sitesVersion = useLiveSitesVersion();
+  const recoveryVersion = useRecoveryVersion();
   const [filters, setFilters] = useState<InsightsFilters>({
     ...EMPTY_INSIGHTS_FILTERS,
     siteId: lockedSiteId,
   });
-  const model = useMemo(() => buildInsightsModel(filters, scope), [filters, scope]);
+  const model = useMemo(
+    () => buildInsightsModel(filters, scope),
+    [filters, scope, sitesVersion, recoveryVersion],
+  );
   const update = (patch: Partial<InsightsFilters>) =>
     setFilters((current) => ({ ...current, ...patch, siteId: lockedSiteId }));
 

@@ -1,4 +1,4 @@
-import { parsePeriodBounds, parsePeriodKey, periodLabel, rangeLabel, writePeriodParams } from "@/lib/dates";
+import { parsePeriodBounds, parsePeriodKey, periodLabel, rangeLabel, liveToday, writePeriodParams } from "@/lib/dates";
 import { calculateImpact, IMPACT } from "@/lib/impact";
 import {
   EMPTY_FILTERS,
@@ -242,12 +242,14 @@ export function buildInsightsModel(
     organisations,
     selectedFood,
     selectedOrg,
-    series: impactOverTime(rows, filters.period).map((point) => ({
+    series: impactOverTime(rows, filters.period, liveToday(), { from: filters.from, to: filters.to }).map((point) => ({
       ...point,
       value: seriesValue(point.kg, point.collections, filters.metric),
     })),
     metric,
-    periodLabel: range ? rangeLabel(range.startDate, range.endDate) : periodLabel(filters.period),
+    periodLabel: range
+      ? rangeLabel(range.startDate, range.endDate)
+      : periodLabel(filters.period, { from: filters.from, to: filters.to }),
     scopeLabel: insightsScopeLabel(filters),
     methodology: IMPACT,
   };

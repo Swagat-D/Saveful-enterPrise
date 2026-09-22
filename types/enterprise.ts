@@ -149,6 +149,7 @@ export type ActivityCollection = {
   food: string;
   pathway: RecoveryPathway;
   quantityKg: number;
+  recipientId?: string;
   recipientName: string;
   driverName: string | null;
   confirmedBy: string | null;
@@ -164,6 +165,7 @@ export type RecoveryTransaction = {
   pathway: RecoveryPathway;
   recipientId: string;
   recipientName: string;
+  food?: string;
   snapshot: OrganizationSnapshot;
 };
 
