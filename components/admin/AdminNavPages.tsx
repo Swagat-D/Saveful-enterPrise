@@ -608,7 +608,7 @@ export function AdminCreateReport() {
         <div className="grid gap-2 p-3.5 sm:grid-cols-2 xl:grid-cols-4">
           <PreviewStat label="Food recovered" value={formatKg(story.overview.metrics.recoveredKg)} />
           <PreviewStat label="Meals" value={formatCount(story.equivalents.meals)} />
-          <PreviewStat label="CO₂ avoided" value={formatKg(story.equivalents.co2)} />
+          <PreviewStat label="CO₂ emissions avoided" value={formatKg(story.equivalents.co2)} />
           <PreviewStat label="Food value" value={formatMoney(story.equivalents.value)} />
         </div>
         <p className="border-t border-gray-100 px-3.5 py-3 font-saveful text-sm text-gray-600">{adminInsightSummary(story)}</p>

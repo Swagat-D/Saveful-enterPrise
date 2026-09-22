@@ -974,6 +974,7 @@ export type AdminAppClaim = {
   confirmedAt?: string | null;
   collectedAt?: string | null;
   claimant?: { id: number; name: string; type: string } | null;
+  claimantSiteId?: number | null;
   collectedBy?: string | null;
   driver?: { id: number; name: string; email: string; mobile?: string | null; status: string } | null;
   listingId?: number;
@@ -1033,6 +1034,7 @@ export type AdminAppOrganisationDetail = {
     mobile?: string | null;
     orgRole?: string | null;
     siteRole?: string | null;
+    siteIds?: number[];
     status: string;
     lastLoginAt?: string | null;
     joinedAt?: string | null;
@@ -1170,6 +1172,7 @@ export type ApiFoodClaim = {
   collectedAt?: string | null;
   confirmedAt?: string | null;
   claimantOrg?: { id: number; name: string } | null;
+  claimantSite?: { id?: number; name?: string | null; organisationName?: string | null } | null;
   claimItems?: Array<{ qtyKg?: number; foodItem?: { name?: string } | null }>;
   driverPickups?: Array<{
     id: number;

@@ -124,7 +124,7 @@ function headlineMetrics(story: AdminInsightStory): [string, string][] {
   const { metrics, operations } = story.overview;
   return [
     ["Meals created", formatCount(metrics.mealsCreated)],
-    ["CO2 avoided", formatKg(metrics.co2AvoidedKg)],
+    ["CO2 emissions avoided", formatKg(metrics.co2AvoidedKg)],
     ["Food value", formatMoney(metrics.foodValue)],
     ["Collections", formatCount(metrics.collections)],
     ["Listings", formatCount(operations.listingsPublished)],
@@ -132,9 +132,9 @@ function headlineMetrics(story: AdminInsightStory): [string, string][] {
     ["Recovery rate", `${operations.recoveryRate}%`],
     ["Organisations", formatCount(metrics.organisations)],
     ["Sites", formatCount(metrics.sites)],
-    ["Car km", formatCount(story.equivalents.carKm)],
-    ["Trees / year", formatCount(story.equivalents.trees)],
-    ["Households / wk", formatCount(story.equivalents.households)],
+    ["Orgs supported", formatCount(story.equivalents.organisationsSupported)],
+    ["Edible surplus", formatKg(story.equivalents.edibleKg)],
+    ["Non-edible surplus", formatKg(story.equivalents.nonEdibleKg)],
     [story.annualised ? "Food / year" : "All-time food", formatKg(story.projection.yearKg)],
     [story.annualised ? "Value / year" : "All-time value", formatMoney(story.projection.yearValue)],
   ];
@@ -189,7 +189,7 @@ function drawImpact(doc: jsPDF, y: number, story: AdminInsightStory) {
   doc.setFont("helvetica", "normal");
   fit(
     doc,
-    `Enough for ${formatCount(story.equivalents.meals)} meals and ${formatKg(story.equivalents.co2)} of CO2 avoided.`,
+    `Enough for ${formatCount(story.equivalents.meals)} meals and ${formatKg(story.equivalents.co2)} of CO2 emissions avoided.`,
     copyW,
     9.4,
     copyX,
@@ -450,7 +450,7 @@ function drawFooter(doc: jsPDF, story: AdminInsightStory) {
   doc.setTextColor(...MUTED);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6);
-  const text = `Saveful for Business  ·  Official factors: 1 meal = ${IMPACT.MEAL_WEIGHT_KG} kg  ·  CO2 = ${IMPACT.CO2_PER_KG} kg per kg food  ·  value = ${formatMoney(IMPACT.FOOD_VALUE_PER_KG)} / kg. Car km, trees and households are illustrated equivalents only. Generated ${formatStamp(story.generatedAt)}.`;
+  const text = `Saveful for Business  ·  Official factors: 1 meal = ${IMPACT.MEAL_WEIGHT_KG} kg  ·  CO2 emissions = ${IMPACT.CO2_PER_KG} kg per kg food  ·  value = ${formatMoney(IMPACT.FOOD_VALUE_PER_KG)} / kg. Edible = food for people; non-edible = livestock, circular and bioenergy. Generated ${formatStamp(story.generatedAt)}.`;
   doc.text(clip(doc, text, INNER), M, PAGE_H - M - 3.5);
 }
 

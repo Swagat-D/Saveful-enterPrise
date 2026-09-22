@@ -3,16 +3,18 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  Car,
+  Building2,
   CheckCircle2,
   Copy,
   Download,
   FileText,
-  Home,
   Leaf,
   List,
+  Package,
+  Recycle,
   Truck,
   UtensilsCrossed,
+  type LucideIcon,
 } from "lucide-react";
 import {
   CartesianGrid,
@@ -136,7 +138,7 @@ export function AdminInsights() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <HeroStat label="Meals created" value={formatCount(story.equivalents.meals)} />
-            <HeroStat label="CO₂ avoided" value={formatKg(story.equivalents.co2)} />
+            <HeroStat label="CO₂ emissions avoided" value={formatKg(story.equivalents.co2)} />
             <HeroStat label="Food value" value={formatMoney(story.equivalents.value)} />
             <HeroStat label="Collections" value={formatCount(overview.metrics.collections)} />
           </div>
@@ -151,22 +153,22 @@ export function AdminInsights() {
           hint="Official Saveful factor · 0.42 kg per meal"
         />
         <EquivalentCard
-          icon={Car}
-          label="Car kilometres avoided"
-          value={formatCount(story.equivalents.carKm)}
-          hint="Illustrated · 0.192 kg CO₂ per km"
+          icon={Building2}
+          label="Organisations supported"
+          value={formatCount(story.equivalents.organisationsSupported)}
+          hint="Providers and recipients with collections"
         />
         <EquivalentCard
-          icon={Leaf}
-          label="Trees working for a year"
-          value={formatCount(story.equivalents.trees)}
-          hint="Illustrated · 21 kg CO₂ per tree per year"
+          icon={Package}
+          label="Surplus food · edible"
+          value={formatKg(story.equivalents.edibleKg)}
+          hint="Food for people pathway"
         />
         <EquivalentCard
-          icon={Home}
-          label="Households fed for a week"
-          value={formatCount(story.equivalents.households)}
-          hint="Illustrated · 21 meals per household"
+          icon={Recycle}
+          label="Surplus food · non edible"
+          value={formatKg(story.equivalents.nonEdibleKg)}
+          hint="Livestock, circular and bioenergy"
         />
       </div>
 
@@ -332,9 +334,9 @@ export function AdminInsights() {
 
       <footer className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-3 font-saveful text-[11px] leading-5 text-gray-400 sm:flex-row sm:items-end sm:justify-between">
         <p>
-          Official impact uses Saveful factors: 1 meal = {IMPACT.MEAL_WEIGHT_KG} kg, CO₂ = {IMPACT.CO2_PER_KG} kg per kg
-          food, value = {formatMoney(IMPACT.FOOD_VALUE_PER_KG)} per kg.
-          Car kilometres, trees and households are illustrated equivalents only.
+          Official impact uses Saveful factors: 1 meal = {IMPACT.MEAL_WEIGHT_KG} kg, CO₂ emissions = {IMPACT.CO2_PER_KG}{" "}
+          kg per kg food, value = {formatMoney(IMPACT.FOOD_VALUE_PER_KG)} per kg. Edible surplus is food for people;
+          non-edible covers livestock, circular and bioenergy recovery.
         </p>
         <p className="inline-flex items-center gap-1.5">
           <Leaf className="h-3 w-3 text-saveful-green" />
@@ -360,7 +362,7 @@ function EquivalentCard({
   value,
   hint,
 }: {
-  icon: typeof Car;
+  icon: LucideIcon;
   label: string;
   value: string;
   hint: string;

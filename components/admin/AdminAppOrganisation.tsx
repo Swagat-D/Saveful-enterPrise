@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { ChevronDown, Clock3, MapPin, Package, Truck } from "lucide-react";
 import { AdminPage, AdminSection, StatusPill, useAdminFilters } from "@/components/admin/AdminChrome";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
@@ -64,7 +65,31 @@ function foodSummary(listing: AdminAppListing) {
 }
 
 
-export function AdminAppOrganisation({ organisationId }: { organisationId: string }) {
+function siteActivity(data: AdminAppOrganisationDetail, siteId: number) {
+  const listings = data.listings.filter((row) => row.site.id === siteId);
+  const collections = data.collections.filter((row) => row.claimantSiteId === siteId);
+  return {
+    listings,
+    collections,
+    collectedKg: collections.reduce((sum, row) => sum + (row.collectedKg || 0), 0),
+  };
+}
+
+function memberOnSite(
+  member: AdminAppOrganisationDetail["members"][number],
+  siteId: number,
+) {
+  if (member.orgRole === "SUPER_ADMIN") return true;
+  return (member.siteIds ?? []).includes(siteId);
+}
+
+export function AdminAppOrganisation({
+  organisationId,
+  siteId,
+}: {
+  organisationId: string;
+  siteId?: string;
+}) {
   const { query } = useAdminFilters();
   const [tab, setTab] = useState<(typeof PAGE_TABS)[number]["id"]>("overview");
   const [status, setStatus] = useState<(typeof LISTING_STATUSES)[number]["id"]>("all");
@@ -81,9 +106,11 @@ export function AdminAppOrganisation({ organisationId }: { organisationId: strin
         if (cancelled) return;
         setData(payload);
         setError("");
-        const isCharity = /charity/i.test(payload.organisation.organisationTypeLabel || payload.organisation.organisationType);
-        if (isCharity && payload.collections.length > 0 && payload.listings.length === 0) {
-          setTab("collections");
+        if (!siteId) {
+          const isCharity = /charity/i.test(payload.organisation.organisationTypeLabel || payload.organisation.organisationType);
+          if (isCharity && payload.collections.length > 0 && payload.listings.length === 0) {
+            setTab("collections");
+          }
         }
       })
       .catch((err) => {
@@ -96,7 +123,13 @@ export function AdminAppOrganisation({ organisationId }: { organisationId: strin
     return () => {
       cancelled = true;
     };
-  }, [organisationId]);
+  }, [organisationId, siteId]);
+
+  useEffect(() => {
+    setTab("overview");
+    setOpenListingId(null);
+    setStatus("all");
+  }, [siteId]);
 
   const listingCounts = useMemo(() => {
     const counts: Record<string, number> = { all: data?.listings.length ?? 0 };
@@ -113,6 +146,18 @@ export function AdminAppOrganisation({ organisationId }: { organisationId: strin
     return rows.filter((row) => listingDisplayStatus(row) === status);
   }, [data, status]);
 
+  const selectedSite = siteId && data ? data.sites.find((site) => String(site.id) === String(siteId)) ?? null : null;
+  const siteRows = selectedSite && data ? siteActivity(data, selectedSite.id) : null;
+  const siteListingCounts = useMemo(() => {
+    const rows = siteRows?.listings ?? [];
+    const counts: Record<string, number> = { all: rows.length };
+    for (const item of LISTING_STATUSES) {
+      if (item.id === "all") continue;
+      counts[item.id] = rows.filter((row) => listingDisplayStatus(row) === item.id).length;
+    }
+    return counts;
+  }, [siteRows]);
+
   if (loading) return <SavefulPageLoader message="Loading organisation…" />;
   if (error || !data) {
     return (
@@ -123,13 +168,47 @@ export function AdminAppOrganisation({ organisationId }: { organisationId: strin
   }
 
   const org = data.organisation;
+  const siteMembers = selectedSite
+    ? data.members.filter((member) => memberOnSite(member, selectedSite.id))
+    : data.members;
+  const visibleListings = siteRows ? siteRows.listings : data.listings;
+  const visibleCollections = siteRows ? siteRows.collections : data.collections;
+  const tabListings = siteId
+    ? status === "all"
+      ? visibleListings
+      : visibleListings.filter((row) => listingDisplayStatus(row) === status)
+    : listings;
+  const tabListingCounts = siteId ? siteListingCounts : listingCounts;
+
+  if (siteId && !selectedSite) {
+    return (
+      <AdminPage
+        crumb={[
+          { href: `/admin/app-users${query}`, label: "App users" },
+          { href: `/admin/app-users/${organisationId}${query}`, label: org.name },
+        ]}
+        title="Site"
+      >
+        <p className="font-saveful text-sm text-red-700">Site not found on this organisation.</p>
+      </AdminPage>
+    );
+  }
 
   return (
     <AdminPage
       workspace
-      crumb={[{ href: `/admin/app-users${query}`, label: "App users" }]}
-      title={org.name}
-      hint={`${org.organisationTypeLabel}${org.plan ? ` · ${org.plan}` : ""}`}
+      crumb={[
+        { href: `/admin/app-users${query}`, label: "App users" },
+        ...(selectedSite
+          ? [{ href: `/admin/app-users/${organisationId}${query}`, label: org.name }]
+          : []),
+      ]}
+      title={selectedSite?.name || org.name}
+      hint={
+        selectedSite
+          ? `${org.name} · ${selectedSite.isActive ? "Active site" : "Deactivated site"}`
+          : `${org.organisationTypeLabel}${org.plan ? ` · ${org.plan}` : ""}`
+      }
     >
       <div className="flex flex-wrap gap-1.5">
         {PAGE_TABS.map((item) => (
@@ -142,30 +221,65 @@ export function AdminAppOrganisation({ organisationId }: { organisationId: strin
               tab === item.id ? "bg-saveful-green text-white" : "bg-[#F7F6F2] text-gray-600 hover:bg-[#EFEDE6]",
             )}
           >
-            {item.label}
-            {item.id === "listings" ? ` · ${listingCounts.all ?? 0}` : null}
-            {item.id === "collections" ? ` · ${data.collections.length}` : null}
+            {item.id === "overview" && selectedSite ? "Site" : item.label}
+            {item.id === "listings" ? ` · ${tabListingCounts.all ?? 0}` : null}
+            {item.id === "collections" ? ` · ${visibleCollections.length}` : null}
           </button>
         ))}
       </div>
 
-      {tab === "overview" ? <Overview data={data} /> : null}
+      {tab === "overview" ? (
+        selectedSite ? (
+          <SiteOverview
+            orgName={org.name}
+            site={selectedSite}
+            members={siteMembers}
+            collections={siteRows?.collections.length ?? 0}
+            listings={siteRows?.listings.length ?? 0}
+            collectedKg={siteRows?.collectedKg ?? 0}
+          />
+        ) : (
+          <Overview data={data} organisationId={organisationId} query={query} />
+        )
+      ) : null}
       {tab === "listings" ? (
         <Listings
-          listings={listings}
-          counts={listingCounts}
+          listings={tabListings}
+          counts={tabListingCounts}
           status={status}
           onStatus={setStatus}
           openId={openListingId}
           onToggle={setOpenListingId}
+          empty={
+            selectedSite
+              ? "This site has not listed any food."
+              : "No listings in this status."
+          }
         />
       ) : null}
-      {tab === "collections" ? <Collections rows={data.collections} /> : null}
+      {tab === "collections" ? (
+        <Collections
+          rows={visibleCollections}
+          empty={
+            selectedSite
+              ? "This site has not collected any listings yet."
+              : undefined
+          }
+        />
+      ) : null}
     </AdminPage>
   );
 }
 
-function Overview({ data }: { data: AdminAppOrganisationDetail }) {
+function Overview({
+  data,
+  organisationId,
+  query,
+}: {
+  data: AdminAppOrganisationDetail;
+  organisationId: string;
+  query: string;
+}) {
   const org = data.organisation;
   return (
     <div className="space-y-3">
@@ -200,14 +314,108 @@ function Overview({ data }: { data: AdminAppOrganisationDetail }) {
       </AdminSection>
 
       <AdminSection title="Sites">
+        {data.sites.length === 0 ? (
+          <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">No sites on this account.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left">
+              <thead>
+                <tr className="border-b border-gray-100 font-saveful text-[11px] uppercase tracking-wide text-gray-400">
+                  {["Site", "Address", "Contact", "Activity", "Status"].map((column) => (
+                    <th key={column} className="px-3 py-2.5 font-saveful">
+                      {column}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.sites.map((site) => {
+                  const activity = siteActivity(data, site.id);
+                  return (
+                    <tr key={site.id} className="border-b border-gray-50 last:border-0">
+                      <td className="px-3 py-3">
+                        <Link
+                          href={`/admin/app-users/${organisationId}/sites/${site.id}${query}`}
+                          className="font-saveful-semibold text-sm text-saveful-green hover:underline"
+                        >
+                          {site.name}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3 font-saveful text-sm text-gray-700">
+                        {[site.address, site.postcode].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                      <td className="px-3 py-3 font-saveful text-sm text-gray-700">
+                        {[site.contactName, site.contactEmail, site.contactMobile].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                      <td className="px-3 py-3 font-saveful text-sm text-gray-700">
+                        {activity.collections.length} collected
+                        {activity.collectedKg ? ` · ${formatKg(activity.collectedKg)}` : ""}
+                        {activity.listings.length ? ` · ${activity.listings.length} listed` : ""}
+                      </td>
+                      <td className="px-3 py-3 font-saveful text-sm text-gray-700">
+                        {site.isActive ? "Active" : "Deactivated"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </AdminSection>
+    </div>
+  );
+}
+
+function SiteOverview({
+  orgName,
+  site,
+  members,
+  collections,
+  listings,
+  collectedKg,
+}: {
+  orgName: string;
+  site: AdminAppOrganisationDetail["sites"][number];
+  members: AdminAppOrganisationDetail["members"];
+  collections: number;
+  listings: number;
+  collectedKg: number;
+}) {
+  return (
+    <div className="space-y-3">
+      <AdminSection title="Site">
+        <dl className="grid gap-3 p-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          <Info label="Site" value={site.name} />
+          <Info label="Organisation" value={orgName} />
+          <Info label="Status" value={site.isActive ? "Active" : "Deactivated"} />
+          <Info label="Added" value={site.createdAt ? formatDisplayDate(site.createdAt) : "—"} />
+          <Info label="Address" value={[site.address, site.postcode].filter(Boolean).join(", ") || "—"} />
+          <Info label="Contact" value={site.contactName || "—"} />
+          <Info label="Email" value={site.contactEmail || "—"} />
+          <Info label="Mobile" value={site.contactMobile || "—"} />
+        </dl>
+      </AdminSection>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Metric icon={Truck} label="Collections by this site" value={String(collections)} />
+        <Metric icon={Package} label="Food collected" value={formatKg(collectedKg)} />
+        <Metric icon={MapPin} label="Listings from this site" value={String(listings)} />
+      </div>
+
+      <AdminSection title="People on this site">
         <Table
-          columns={["Site", "Address", "Contact", "Status"]}
-          empty="No sites on this account."
-          rows={data.sites.map((site) => [
-            site.name,
-            [site.address, site.postcode].filter(Boolean).join(" · ") || "—",
-            [site.contactName, site.contactEmail, site.contactMobile].filter(Boolean).join(" · ") || "—",
-            site.isActive ? "Active" : "Deactivated",
+          columns={["Name", "Email", "Role", "Status", "Last login"]}
+          empty="No people assigned to this site."
+          rows={members.map((member) => [
+            <span key={`${member.id}-name`}>
+              <span className="block font-saveful-semibold text-sm text-gray-900">{member.name}</span>
+              {member.mobile ? <span className="block font-saveful text-[11px] text-gray-400">{member.mobile}</span> : null}
+            </span>,
+            member.email,
+            roleLabel(member.orgRole, member.siteRole),
+            <StatusPill key={`${member.id}-status`} status={member.status} />,
+            member.lastLoginAt ? formatLastActivity(member.lastLoginAt) : "—",
           ])}
         />
       </AdminSection>
@@ -222,6 +430,7 @@ function Listings({
   onStatus,
   openId,
   onToggle,
+  empty,
 }: {
   listings: AdminAppListing[];
   counts: Record<string, number>;
@@ -229,6 +438,7 @@ function Listings({
   onStatus: (next: (typeof LISTING_STATUSES)[number]["id"]) => void;
   openId: number | null;
   onToggle: (id: number | null) => void;
+  empty?: string;
 }) {
   return (
     <div className="space-y-3">
@@ -253,7 +463,7 @@ function Listings({
 
       <AdminSection title="Listings" action={<span className="font-saveful text-xs text-gray-500">{listings.length}</span>}>
         {listings.length === 0 ? (
-          <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">No listings in this status.</p>
+          <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">{empty || "No listings in this status."}</p>
         ) : (
           <div className="divide-y divide-gray-100">
             {listings.map((listing) => {
@@ -364,7 +574,7 @@ const COLLECTION_STATUSES = [
   { id: "CANCELLED", label: "Cancelled" },
 ] as const;
 
-function Collections({ rows }: { rows: AdminAppClaim[] }) {
+function Collections({ rows, empty }: { rows: AdminAppClaim[]; empty?: string }) {
   const [status, setStatus] = useState<(typeof COLLECTION_STATUSES)[number]["id"]>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const counts = useMemo(() => {
@@ -401,7 +611,7 @@ function Collections({ rows }: { rows: AdminAppClaim[] }) {
       <AdminSection title="Collections" action={<span className="font-saveful text-xs text-gray-500">{filtered.length}</span>}>
         {filtered.length === 0 ? (
           <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">
-            This organisation has not collected any listings in this status.
+            {empty || "This organisation has not collected any listings in this status."}
           </p>
         ) : (
           <div className="divide-y divide-gray-100">

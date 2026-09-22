@@ -14,10 +14,6 @@ import { downloadAdminInsightPdf } from "@/lib/adminInsightPdf";
 import { liveToday, periodLabel, rangeForFilters } from "@/lib/dates";
 import { IMPACT, calculateImpact, formatCount, formatKg, formatMoney } from "@/lib/impact";
 
-const CAR_KG_PER_KM = 0.192;
-const TREE_KG_PER_YEAR = 21;
-const MEALS_PER_HOUSEHOLD_WEEK = 21;
-
 export type InsightRankedRow = {
   id: string;
   name: string;
@@ -42,9 +38,9 @@ export type AdminInsightStory = {
     meals: number;
     value: number;
     co2: number;
-    carKm: number;
-    trees: number;
-    households: number;
+    organisationsSupported: number;
+    edibleKg: number;
+    nonEdibleKg: number;
   };
   projection: {
     yearKg: number;
@@ -67,6 +63,13 @@ export function buildAdminInsightStory(filters: AdminFilters): AdminInsightStory
   const annualised = filters.period !== "all";
   const yearKg = annualised ? (foodKg / days) * 365 : foodKg;
   const yearImpact = calculateImpact(yearKg);
+  const edibleKg = overview.pathways.find((item) => item.pathway === "people")?.kg ?? 0;
+  const nonEdibleKg = overview.pathways
+    .filter((item) => item.pathway !== "people")
+    .reduce((sum, item) => sum + item.kg, 0);
+  const organisationsSupported = new Set(
+    collections.flatMap((row) => [row.orgId, row.recipientOrgId].filter(Boolean)),
+  ).size;
 
   return {
     periodLabel: periodLabel(filters.period, { from: filters.from, to: filters.to }),
@@ -85,9 +88,9 @@ export function buildAdminInsightStory(filters: AdminFilters): AdminInsightStory
       meals: impact.mealsCreated,
       value: impact.foodValue,
       co2: impact.co2AvoidedKg,
-      carKm: impact.co2AvoidedKg / CAR_KG_PER_KM,
-      trees: impact.co2AvoidedKg / TREE_KG_PER_YEAR,
-      households: impact.mealsCreated / MEALS_PER_HOUSEHOLD_WEEK,
+      organisationsSupported: organisationsSupported || overview.metrics.organisations,
+      edibleKg,
+      nonEdibleKg,
     },
     projection: {
       yearKg,
@@ -100,7 +103,7 @@ export function buildAdminInsightStory(filters: AdminFilters): AdminInsightStory
 
 export function adminInsightSummary(story: AdminInsightStory) {
   const { overview, periodLabel, equivalents } = story;
-  return `Saveful recovered ${formatKg(overview.metrics.recoveredKg)} of food in ${periodLabel.toLowerCase()} - enough for ${formatCount(equivalents.meals)} meals, ${formatKg(equivalents.co2)} of CO₂ avoided, and about ${formatMoney(equivalents.value)} of food value.`;
+  return `Saveful recovered ${formatKg(overview.metrics.recoveredKg)} of food in ${periodLabel.toLowerCase()} - enough for ${formatCount(equivalents.meals)} meals, ${formatKg(equivalents.co2)} of CO₂ emissions avoided, and about ${formatMoney(equivalents.value)} of food value.`;
 }
 
 export function downloadAdminInsightExcel(story: AdminInsightStory) {
@@ -135,9 +138,9 @@ export function downloadAdminInsightExcel(story: AdminInsightStory) {
         ["organisations", overview.metrics.organisations],
         ["sites", overview.metrics.sites],
         ["projected_year_kg", round(story.projection.yearKg)],
-        ["equivalent_car_km", round(story.equivalents.carKm)],
-        ["equivalent_trees", round(story.equivalents.trees, 2)],
-        ["equivalent_households_week", round(story.equivalents.households, 2)],
+        ["organisations_supported", story.equivalents.organisationsSupported],
+        ["surplus_food_edible_kg", round(story.equivalents.edibleKg)],
+        ["surplus_food_non_edible_kg", round(story.equivalents.nonEdibleKg)],
       ],
     },
     {

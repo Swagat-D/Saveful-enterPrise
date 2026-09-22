@@ -2037,7 +2037,11 @@ function mapLiveListing(row: ApiFoodListing): AdminListing {
         collectedAt: claim.collectedAt ?? null,
         confirmedAt: claim.confirmedAt ?? null,
         claimantName: claim.claimantOrg?.name ?? null,
-        collectedBy: claim.claimantOrg?.name ?? null,
+        collectedBy:
+          claim.claimantSite?.name ||
+          claim.claimantSite?.organisationName ||
+          claim.claimantOrg?.name ||
+          null,
         driverName: claimDriverName(claim),
       };
     }),
@@ -2063,7 +2067,11 @@ function mapLiveCollections(row: ApiFoodListing): AdminCollection[] {
       food: listing.food,
       pathway: listing.pathway,
       quantityKg: kg || listing.quantityKg,
-      recipientName: claim.claimantOrg?.name || "Recipient",
+      recipientName:
+        claim.claimantSite?.name ||
+        claim.claimantSite?.organisationName ||
+        claim.claimantOrg?.name ||
+        "Recipient",
       recipientOrgId: claim.claimantOrg?.id != null ? String(claim.claimantOrg.id) : undefined,
       status: claimStatus === "COLLECTED" ? "completed" : claimStatus === "CANCELLED" ? "cancelled" : "claimed",
       occurredAt: claim.collectedAt || claim.confirmedAt || claim.createdAt || listing.createdAt,

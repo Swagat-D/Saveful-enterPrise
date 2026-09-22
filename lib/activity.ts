@@ -313,7 +313,11 @@ export function replaceActivityFromListings(rows: ApiFoodListing[]) {
         food,
         pathway,
         quantityKg: kg || row.totalQtyKg || 0,
-        recipientName: claim.claimantOrg?.name || "Recipient",
+        recipientName:
+          claim.claimantSite?.name ||
+          claim.claimantSite?.organisationName ||
+          claim.claimantOrg?.name ||
+          "Recipient",
         driverName: liveDriverName(claim),
         confirmedBy: claim.confirmedAt ? claim.claimantOrg?.name || null : null,
         notes: "",
