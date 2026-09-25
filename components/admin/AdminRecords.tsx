@@ -16,6 +16,7 @@ import {
   getSite,
   isCompletedCollection,
   listListings,
+  organisationProfileHref,
   pathwayLabel,
   refreshOrganisationListings,
   useAdminVersion,
@@ -189,7 +190,15 @@ export function AdminCollections() {
                   {getListing(row.listingId)?.code ?? row.listingId}
                 </Link>
               </td>
-              <td className="px-3 py-3 font-saveful text-sm text-gray-700">{row.recipientName}</td>
+              <td className="px-3 py-3 font-saveful text-sm text-gray-700">
+                {row.recipientOrgId ? (
+                  <Link href={organisationProfileHref(row.recipientOrgId, query)} className="text-saveful-green hover:underline">
+                    {row.recipientName}
+                  </Link>
+                ) : (
+                  row.recipientName
+                )}
+              </td>
               <td className="px-3 py-3 font-saveful text-sm tabular-nums text-gray-800">{formatKg(row.quantityKg)}</td>
               <td className="px-3 py-3">
                 <StatusPill status={row.status} />
@@ -256,7 +265,15 @@ export function AdminListingDetail({ id }: { id: string }) {
                     className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] items-center gap-3 px-3.5 py-3 text-left hover:bg-[#FAF7F0]"
                   >
                     <div className="min-w-0">
-                      <p className="font-saveful-semibold text-sm text-gray-900">{item.recipientName}</p>
+                      <p className="font-saveful-semibold text-sm text-gray-900">
+                        {item.recipientOrgId ? (
+                          <Link href={organisationProfileHref(item.recipientOrgId, query)} className="text-saveful-green hover:underline" onClick={(event) => event.stopPropagation()}>
+                            {item.recipientName}
+                          </Link>
+                        ) : (
+                          item.recipientName
+                        )}
+                      </p>
                       <p className="truncate font-saveful text-xs text-gray-500">{item.food}</p>
                     </div>
                     <div className="hidden min-w-0 sm:block">
@@ -328,7 +345,7 @@ export function AdminCollectionDetail({ id }: { id: string }) {
       {recipientOrg ? (
         <p className="px-1 font-saveful text-sm text-gray-500">
           Recipient{" "}
-          <Link href={orgTabHref(recipientOrg.id, query, "overview")} className="font-saveful-semibold text-saveful-green hover:underline">
+          <Link href={organisationProfileHref(recipientOrg.id, query)} className="font-saveful-semibold text-saveful-green hover:underline">
             {recipientOrg.name}
           </Link>
         </p>

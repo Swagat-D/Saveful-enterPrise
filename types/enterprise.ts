@@ -181,7 +181,8 @@ export type EnterpriseRole =
   | "enterprise_admin"
   | "group_admin"
   | "reporting"
-  | "site_admin";
+  | "site_admin"
+  | "site_user";
 
 export type DirectoryUserStatus = "active" | "invited" | "deactivated";
 

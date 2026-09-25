@@ -15,6 +15,7 @@ const ROLE_ICONS: Record<EnterpriseRole, typeof Shield> = {
   group_admin: Layers3,
   reporting: ChartColumn,
   site_admin: Building2,
+  site_user: UserRound,
 };
 
 function parseRole(value: string | null): EnterpriseRole {

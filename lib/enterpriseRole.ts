@@ -6,7 +6,8 @@ export function mapEnterpriseRole(role?: string | null, orgRole?: string | null)
   if (value === "ENTERPRISE_ADMIN") return "enterprise_admin";
   if (value === "GROUP_ADMIN" || value === "CLUSTER_ADMIN") return "group_admin";
   if (value === "REPORTING_USER" || value === "REPORTING") return "reporting";
-  if (value === "SITE_ADMIN" || value === "SITE_USER") return "site_admin";
+  if (value === "SITE_USER") return "site_user";
+  if (value === "SITE_ADMIN") return "site_admin";
   if ((orgRole || "").toUpperCase() === "SUPER_ADMIN") return "enterprise_super_admin";
   return "site_admin";
 }
@@ -39,7 +40,7 @@ export function scopeFromApi(
 
 export function isSiteAdminRole(role?: string | null) {
   const value = (role || "").toUpperCase().replace(/[\s-]+/g, "_");
-  return value === "SITE_ADMIN" || value === "SITE_USER" || value.includes("SITE_ADMIN");
+  return value === "SITE_ADMIN" || value.includes("SITE_ADMIN");
 }
 
 export function accessScopeFromUserScope(scope: UserAccessScope): AccessScope {
@@ -59,6 +60,7 @@ export function toApiRole(role: EnterpriseRole): string {
   if (role === "enterprise_admin") return "ENTERPRISE_ADMIN";
   if (role === "group_admin") return "GROUP_ADMIN";
   if (role === "reporting") return "REPORTING_USER";
+  if (role === "site_user") return "SITE_USER";
   return "SITE_ADMIN";
 }
 

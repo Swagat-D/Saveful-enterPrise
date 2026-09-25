@@ -328,7 +328,7 @@ async function resolveEnterpriseScope(
 export function homePath(user: SessionUser | null) {
   if (!user) return "/login";
   if (user.portal === "admin") return "/admin/dashboard";
-  if (user.enterpriseRole === "site_admin") return "/sites";
+  if (user.enterpriseRole === "site_admin" || user.enterpriseRole === "site_user") return "/sites";
   return "/dashboard";
 }
 

@@ -1010,6 +1010,15 @@ export function getOrganisation(id: string) {
   return listNetworkOrganisations().find((org) => org.id === id) ?? null;
 }
 
+export function isAppOrganisation(id: string) {
+  if (listOrganisations().some((org) => org.id === id)) return false;
+  return listNetworkOrganisations().some((org) => org.id === id);
+}
+
+export function organisationProfileHref(id: string, query = "") {
+  return isAppOrganisation(id) ? `/admin/app-users/${id}${query}` : `/admin/organisations/${id}${query}`;
+}
+
 export function listLiveEnterprises() {
   return listOrganisations().filter((org) => Boolean(org.enterpriseId));
 }
@@ -1264,7 +1273,7 @@ function priorLabel(period: PeriodKey) {
 
 export function buildAdminOverview(filters: AdminFilters) {
   const previousRange = previousPeriodRange(filters.period, liveToday(), { from: filters.from, to: filters.to });
-  const organisations = filteredNetworkOrganisations(filters);
+  const organisations = filteredOrganisations(filters);
   const sites = filteredNetworkSites(filters);
   const listings = filteredListings(filters);
   const previousListings = filteredListings(filters, previousRange);
@@ -1289,7 +1298,7 @@ export function buildAdminOverview(filters: AdminFilters) {
 
   const types = ORG_TYPES.filter((type) => filters.orgType === "all" || filters.orgType === type.id).map((type) => {
     const typeFilters = { ...filters, orgType: type.id, organisationId: "all" as const };
-    const typeOrgs = filteredNetworkOrganisations(typeFilters);
+    const typeOrgs = filteredOrganisations(typeFilters);
     const typeSites = filteredNetworkSites(typeFilters);
     const typeListings = filteredListings(typeFilters);
     const typeCollections = filteredCollections(typeFilters).filter(isCompletedCollection);

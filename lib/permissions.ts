@@ -61,6 +61,19 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
     manageSettings: false,
     viewAudit: false,
   },
+  site_user: {
+    viewDashboard: false,
+    viewSites: true,
+    manageSites: false,
+    viewActivity: true,
+    createListings: true,
+    viewInsights: true,
+    createReports: false,
+    manageUsers: false,
+    manageStructure: false,
+    manageSettings: false,
+    viewAudit: false,
+  },
 };
 
 export function sessionRole(user: SessionUser | null): EnterpriseRole | null {

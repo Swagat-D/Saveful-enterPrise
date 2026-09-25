@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import {
   ApiError,
   inviteEnterpriseUser,
+  inviteSiteUser,
   listEnterpriseInvites,
   resendEnterpriseInvite,
   resendEnterpriseUserInvite,
@@ -59,6 +60,7 @@ const ROLE_RANK: Record<EnterpriseRole, number> = {
   enterprise_admin: 4,
   group_admin: 3,
   site_admin: 2,
+  site_user: 1,
   reporting: 1,
 };
 
@@ -142,6 +144,7 @@ export function getUser(id: string) {
 }
 
 export function roleLabel(role: EnterpriseRole) {
+  if (role === "site_user") return "Site User";
   return ENTERPRISE_ROLES.find((item) => item.id === role)?.label ?? role;
 }
 
@@ -581,6 +584,58 @@ export async function saveUser(
       ok: false as const,
       error: apiErrorMessage(err, existingId ? "The user could not be saved." : "The invitation could not be sent."),
     };
+  }
+}
+
+export async function inviteSiteMember(
+  siteId: string,
+  input: { firstName: string; lastName: string; email: string; mobile?: string },
+  actor = "Enterprise user",
+) {
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+  const email = input.email.trim();
+  const mobile = input.mobile?.trim() ?? "";
+  if (!firstName || !lastName) return { ok: false as const, error: "First name and last name are required." };
+  if (!email) return { ok: false as const, error: "Email is required." };
+  if (!/^\d+$/.test(siteId)) return { ok: false as const, error: "This site cannot be invited from here." };
+  if (!uniqueEmail(email)) return { ok: false as const, error: "A user with this email already exists on our platform." };
+  try {
+    const invited = await inviteSiteUser(Number(siteId), {
+      firstName,
+      lastName,
+      email,
+      mobile: mobile || undefined,
+    });
+    const name = `${firstName} ${lastName}`.trim();
+    const user: DirectoryUser = {
+      id: `invite-${invited.invitation.id}`,
+      firstName,
+      lastName,
+      name,
+      email,
+      mobile,
+      role: "site_user",
+      scope: { siteIds: [siteId] },
+      status: "invited",
+      lastActiveAt: null,
+      invitedAt: daysAgoIso(0),
+      inviteToken: token(),
+      invitationId: invited.invitation.id,
+    };
+    users = [user, ...users];
+    appendAudit({
+      actor,
+      action: "User added",
+      area: "users",
+      entity: name,
+      detail: `${name} · Site User · ${email}`,
+      changes: [{ field: "Role", previous: "—", next: "Site User" }],
+    });
+    emit();
+    return { ok: true as const };
+  } catch (err) {
+    return { ok: false as const, error: apiErrorMessage(err, "The invitation could not be sent.") };
   }
 }
 

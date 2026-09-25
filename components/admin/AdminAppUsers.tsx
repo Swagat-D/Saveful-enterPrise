@@ -19,13 +19,7 @@ const KINDS: { id: AppUserKind; label: string }[] = [
   { id: "farmer_consumer", label: "Farmer consumer" },
 ];
 
-function isDriver(user: Pick<AdminAppUser, "siteRole" | "email">) {
-  if ((user.siteRole || "").toUpperCase() === "DRIVER") return true;
-  return (user.email || "").toLowerCase().startsWith("driver@");
-}
-
 function isAppAccountHolder(user: AdminAppUser) {
-  if (isDriver(user)) return false;
   const role = (user.orgRole || "").toUpperCase();
   return role === "SUPER_ADMIN" || role === "ORG_ADMIN";
 }
@@ -41,9 +35,9 @@ function matchesKind(user: AdminAppUser, kind: AppUserKind) {
 }
 
 function roleLabel(role?: string | null, siteRole?: string | null) {
-  if ((siteRole || "").toUpperCase() === "DRIVER") return "Driver";
   if (role === "SUPER_ADMIN") return "Account owner";
   if (role === "ORG_ADMIN") return "Org admin";
+  if ((siteRole || "").toUpperCase() === "DRIVER") return "Driver";
   if (role === "ORG_MEMBER") return "Team member";
   return role || "—";
 }
@@ -90,7 +84,7 @@ export function AdminAppUsers() {
         const covered = new Set(holders.map((row) => row.organisationId));
         const extras: AdminAppUser[] = [];
         for (const row of members) {
-          if (covered.has(row.organisationId) || isDriver(row)) continue;
+          if (covered.has(row.organisationId)) continue;
           covered.add(row.organisationId);
           extras.push(row);
         }

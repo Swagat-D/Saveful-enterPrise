@@ -201,6 +201,35 @@ export function updateOrganisationSite(siteId: number, input: Partial<CreateOrga
   });
 }
 
+export function inviteSiteUser(
+  siteId: number,
+  input: { firstName: string; lastName: string; email: string; mobile?: string },
+) {
+  return apiFetch<{ message: string; invitation: { id: number; email: string; status: string } }>(
+    `/enterprise/users/sites/${siteId}/users`,
+    {
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function inviteAdminSiteUser(
+  organisationId: string | number,
+  siteId: number,
+  input: { firstName: string; lastName: string; email: string; mobile?: string },
+) {
+  return apiFetch<{ message: string; invitation: { id: number; email: string; status: string } }>(
+    `/admin/enterprise/${organisationId}/sites/${siteId}/users`,
+    {
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function inviteEnterpriseUser(input: {
   firstName: string;
   lastName: string;

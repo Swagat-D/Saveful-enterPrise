@@ -229,10 +229,9 @@ function directoryFromLive(
 ) {
   const members = asList<ApiEnterpriseUser>(membersPayload, ["rows", "users", "members", "data"]);
   const invites = asList<ApiEnterpriseInvite>(invitesPayload, ["invitations", "invites", "data"]);
-  const fromSites = siteRows.flatMap((row) => [
-    ...(row.managers ?? []).map((manager) => managerToUser(manager, row.id)),
-    contactToUser(row),
-  ]);
+  const fromSites = siteRows.flatMap((row) =>
+    (row.managers ?? []).map((manager) => managerToUser(manager, row.id)),
+  );
   const fromSession = session && session.portal !== "admin" ? [sessionToUser(session)] : [];
 
   const seen = new Set<string>();

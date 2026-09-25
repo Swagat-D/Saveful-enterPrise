@@ -15,7 +15,7 @@ import { UsersDirectory } from "@/components/users/UsersDirectory";
 import { periodLabel } from "@/lib/dates";
 import { formatCount, formatKg, formatMoney } from "@/lib/impact";
 import { impactFromTransactions, recoveryPathways, scopedTransactions } from "@/lib/networkQuery";
-import { sitePermissions } from "@/lib/permissions";
+import { sessionRole, sitePermissions } from "@/lib/permissions";
 import { setSiteStatus, useSiteStatus } from "@/lib/siteLifecycle";
 import { parseSiteTab, SITE_TABS, siteOperations, siteRecoveryRows, type SiteTab } from "@/lib/siteWorkspace";
 import { resolveSite, useOrgStructureVersion } from "@/lib/orgStructure";
@@ -186,7 +186,13 @@ export function SiteWorkspace({
             {tab === "activity" ? <ActivityFeed siteId={site.id} siteName={site.name} compact /> : null}
             {tab === "insights" ? <InsightsView lockedSiteId={site.id} /> : null}
             {tab === "access" ? (
-              <UsersDirectory siteId={site.id} siteName={site.name} canInvite={permissions.manageAccess} compact />
+              <UsersDirectory
+                siteId={site.id}
+                siteName={site.name}
+                canInvite={permissions.manageAccess}
+                canAddSiteUser={sessionRole(user) === "enterprise_super_admin" || sessionRole(user) === "site_admin"}
+                compact
+              />
             ) : null}
           </div>
         </section>

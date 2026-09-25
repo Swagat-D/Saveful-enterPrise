@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { getOrganisationSiteDetails, type ApiSiteRow } from "@/lib/api";
 import { demoSites } from "@/lib/demo";
 import {
   formatScope,
+  inviteSiteMember,
   lastSeenLabel,
   listUsers,
   roleLabel,
@@ -31,6 +33,7 @@ function directoryUserFromContact(input: {
   mobile?: string;
   siteId: string;
   status?: DirectoryUser["status"];
+  role?: DirectoryUser["role"];
 }): DirectoryUser {
   const names = splitName(input.name);
   return {
@@ -40,7 +43,7 @@ function directoryUserFromContact(input: {
     name: input.name.trim() || input.email,
     email: input.email,
     mobile: input.mobile ?? "",
-    role: "site_admin",
+    role: input.role ?? "site_admin",
     scope: { siteIds: [input.siteId] },
     status: input.status ?? "active",
     lastActiveAt: null,
@@ -53,11 +56,12 @@ function mergeSitePeople(
   siteId: string,
   fromDirectory: DirectoryUser[],
   managers: NonNullable<ApiSiteRow["managers"]>,
-  contact?: { name: string; email: string; mobile?: string; userId?: string | null },
+  staff: NonNullable<ApiSiteRow["managers"]>,
 ) {
   const rows = [...fromDirectory];
   const seen = new Set(rows.map((user) => user.email.trim().toLowerCase()).filter(Boolean));
   const seenIds = new Set(rows.map((user) => user.id));
+  const known = listUsers();
 
   for (const manager of managers) {
     const email = manager.user?.email?.trim() ?? "";
@@ -65,6 +69,7 @@ function mergeSitePeople(
     const id = String(manager.userId);
     if ((key && seen.has(key)) || seenIds.has(id)) continue;
     const name = `${manager.user?.firstName ?? ""} ${manager.user?.lastName ?? ""}`.trim() || email || "Site Admin";
+    const existing = known.find((user) => user.id === id || user.email.trim().toLowerCase() === key);
     rows.push(
       directoryUserFromContact({
         id,
@@ -73,24 +78,32 @@ function mergeSitePeople(
         mobile: manager.user?.phoneNumber,
         siteId,
         status: "active",
+        role: existing?.role ?? "site_admin",
       }),
     );
     if (key) seen.add(key);
     seenIds.add(id);
   }
 
-  const contactKey = contact?.email.trim().toLowerCase() ?? "";
-  if ((contact?.email || contact?.name) && !(contactKey && seen.has(contactKey))) {
-    const id = contact?.userId && !seenIds.has(contact.userId) ? contact.userId : `contact-${siteId}`;
-    rows.unshift(
+  for (const member of staff) {
+    const email = member.user?.email?.trim() ?? "";
+    const key = email.toLowerCase();
+    const id = String(member.userId);
+    if ((key && seen.has(key)) || seenIds.has(id)) continue;
+    const name = `${member.user?.firstName ?? ""} ${member.user?.lastName ?? ""}`.trim() || email || "Site User";
+    rows.push(
       directoryUserFromContact({
         id,
-        name: contact?.name || contact?.email || "Site Admin",
-        email: contact?.email ?? "",
-        mobile: contact?.mobile,
+        name,
+        email,
+        mobile: member.user?.phoneNumber,
         siteId,
+        status: "active",
+        role: "site_user",
       }),
     );
+    if (key) seen.add(key);
+    seenIds.add(id);
   }
 
   return rows;
@@ -99,26 +112,33 @@ function mergeSitePeople(
 export function UsersDirectory({
   siteId,
   canInvite,
+  canAddSiteUser,
   compact,
 }: {
   siteId?: string;
   siteName?: string;
   canInvite?: boolean;
+  canAddSiteUser?: boolean;
   compact?: boolean;
 }) {
   useUsersVersion();
   const site = siteId ? demoSites.find((item) => item.id === siteId) : undefined;
   const [managers, setManagers] = useState<NonNullable<ApiSiteRow["managers"]>>([]);
+  const [staff, setStaff] = useState<NonNullable<ApiSiteRow["managers"]>>([]);
 
   useEffect(() => {
     if (!siteId || !/^\d+$/.test(siteId)) return;
     let cancelled = false;
     getOrganisationSiteDetails(Number(siteId))
       .then((detail) => {
-        if (!cancelled) setManagers(detail.managers ?? detail.site.managers ?? []);
+        if (cancelled) return;
+        setManagers(detail.managers ?? detail.site.managers ?? []);
+        setStaff(detail.staff ?? []);
       })
       .catch(() => {
-        if (!cancelled) setManagers([]);
+        if (cancelled) return;
+        setManagers([]);
+        setStaff([]);
       });
     return () => {
       cancelled = true;
@@ -126,14 +146,13 @@ export function UsersDirectory({
   }, [siteId]);
 
   const rows = useMemo(() => {
-    if (!site) return listUsers();
-    return mergeSitePeople(site.id, usersForSite(site), managers, {
-      name: site.managerName || site.primaryContact || "",
-      email: site.email,
-      mobile: site.mobile,
-      userId: site.managerUserId,
+    const directory = listUsers().filter((user) => {
+      if (user.role === "enterprise_super_admin" || user.role === "enterprise_admin") return true;
+      if (site && usersForSite(site).some((row) => row.id === user.id)) return true;
+      return Boolean(siteId && user.scope.siteIds?.includes(siteId));
     });
-  }, [managers, site]);
+    return mergeSitePeople(siteId ?? site?.id ?? "", directory, managers, staff);
+  }, [managers, site, siteId, staff]);
   const invited = rows.filter((user) => user.status === "invited").length;
   const active = rows.filter((user) => user.status === "active").length;
 
@@ -145,9 +164,21 @@ export function UsersDirectory({
         <CompactStat label="Invited" value={String(invited)} />
       </div>
 
-      <div className={siteId ? "grid gap-5 lg:grid-cols-5" : ""}>
-        <div className={siteId ? "lg:col-span-3" : undefined}>
-          <p className="mb-2 font-saveful-semibold text-xs uppercase tracking-[0.14em] text-gray-400">Directory</p>
+      <div>
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="font-saveful-semibold text-xs uppercase tracking-[0.14em] text-gray-400">Directory</p>
+            {siteId && canAddSiteUser ? <SiteUserInvite siteId={siteId} /> : null}
+            {siteId && canInvite && !canAddSiteUser ? (
+              <Link
+                href={`/users/new?site=${siteId}`}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add user
+              </Link>
+            ) : null}
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-left">
               <thead>
@@ -198,23 +229,88 @@ export function UsersDirectory({
             </table>
           </div>
         </div>
-
-        {siteId && canInvite ? (
-          <div className="lg:col-span-2">
-            <p className="mb-2 font-saveful-semibold text-xs uppercase tracking-[0.14em] text-gray-400">Invite</p>
-            <p className="mb-3 font-saveful text-xs text-gray-500">
-              Role is what they can do. Scope is what they can access. Invitations are managed in Users & Access.
-            </p>
-            <Link
-              href={`/users/new?site=${siteId}`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add user
-            </Link>
-          </div>
-        ) : null}
       </div>
+    </div>
+  );
+}
+
+function SiteUserInvite({ siteId }: { siteId: string }) {
+  const [open, setOpen] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setError("");
+    setNotice("");
+    setSaving(true);
+    const result = await inviteSiteMember(siteId, { firstName, lastName, email, mobile });
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setMobile("");
+    setOpen(false);
+    setNotice("Invitation sent. They will set their own password.");
+  };
+
+  const dialog = open ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 p-4" onClick={() => { if (!saving) setOpen(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="site-user-invite-title" className="w-full max-w-md rounded-2xl border border-black/[0.05] bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-1 flex items-start justify-between gap-3">
+              <h2 id="site-user-invite-title" className="font-saveful-bold text-lg text-gray-900">Add site user</h2>
+              <button type="button" onClick={() => setOpen(false)} disabled={saving} className="rounded-lg p-1 text-gray-400 hover:bg-[#F7F6F2] hover:text-gray-700" aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mb-4 font-saveful text-sm text-gray-500">They join this site only, not as a site admin. An activation link is emailed so they set their own password.</p>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">First name</span>
+                <input value={firstName} onChange={(event) => setFirstName(event.target.value)} className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">Last name</span>
+                <input value={lastName} onChange={(event) => setLastName(event.target.value)} className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">Email</span>
+                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">Mobile (optional)</span>
+                <input value={mobile} onChange={(event) => setMobile(event.target.value)} className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              {error ? <p className="font-saveful text-sm text-red-600">{error}</p> : null}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setOpen(false)} disabled={saving} className="h-10 rounded-lg px-3 font-saveful text-sm text-gray-600">Cancel</button>
+                <button type="button" disabled={saving} onClick={() => void submit()} className="h-10 rounded-lg bg-saveful-green px-4 font-saveful-semibold text-sm text-white disabled:opacity-60">{saving ? "Sending…" : "Send invitation"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+  ) : null;
+
+  return (
+    <div className="flex items-center gap-3">
+      {notice ? <p className="font-saveful text-xs text-saveful-green">{notice}</p> : null}
+      <button
+        type="button"
+        onClick={() => { setError(""); setOpen(true); }}
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add user
+      </button>
+      {dialog && typeof document !== "undefined" ? createPortal(dialog, document.body) : null}
     </div>
   );
 }

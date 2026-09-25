@@ -40,9 +40,9 @@ function listingDisplayStatus(listing: AdminAppListing) {
 }
 
 function roleLabel(role?: string | null, siteRole?: string | null) {
-  if ((siteRole || "").toUpperCase() === "DRIVER") return "Driver";
   if (role === "SUPER_ADMIN") return "Account owner";
   if (role === "ORG_ADMIN") return "Org admin";
+  if ((siteRole || "").toUpperCase() === "DRIVER") return "Driver";
   if (role === "ORG_MEMBER") return "Team member";
   return role || "—";
 }

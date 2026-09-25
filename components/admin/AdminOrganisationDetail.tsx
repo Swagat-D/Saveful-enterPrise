@@ -32,13 +32,16 @@ import { AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } 
 import { AdminOrgSitesTable } from "@/components/admin/AdminSites";
 import { AdminOrganisationStructure } from "@/components/admin/AdminOrganisationStructure";
 import { PortalPageShell } from "@/components/ui/Portal";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import {
   ORG_DETAIL_TABS,
   buildOrgDetail,
   adminFiltersToQuery,
   formatEnterpriseId,
+  isAppOrganisation,
   lastAdminFilters,
   orgTypeLabel,
+  organisationProfileHref,
   parseOrgDetailTab,
   participationLabel,
   planLabel,
@@ -71,6 +74,11 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
   const [to, setTo] = useState<string | undefined>();
   const [menuOpen, setMenuOpen] = useState(false);
   const model = buildOrgDetail(id, period, { from, to });
+  const appRecipient = isAppOrganisation(id);
+
+  useEffect(() => {
+    if (appRecipient) router.replace(organisationProfileHref(id, query));
+  }, [appRecipient, id, query, router]);
 
   useEffect(() => {
     void refreshOrganisationDetail(id).catch(() => undefined);
@@ -84,6 +92,16 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
     const nextQuery = params.toString();
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
   };
+
+  if (appRecipient) {
+    return (
+      <AdminPortalShell>
+        <PortalPageShell>
+          <SavefulPageLoader message="Opening recipient…" fullScreen={false} />
+        </PortalPageShell>
+      </AdminPortalShell>
+    );
+  }
 
   if (!model) {
     return (
@@ -243,7 +261,13 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
                 rows={model.collections.map((row) => [
                   <Link key={row.id} href={`/admin/collections/${row.id}${orgQuery}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">{row.code}</Link>,
                   row.food,
-                  row.recipientName,
+                  row.recipientOrgId ? (
+                    <Link key={`${row.id}-recipient`} href={organisationProfileHref(row.recipientOrgId, orgQuery)} className="font-saveful text-sm text-saveful-green hover:underline">
+                      {row.recipientName}
+                    </Link>
+                  ) : (
+                    row.recipientName
+                  ),
                   formatKg(row.quantityKg),
                   <StatusPill key={`${row.id}-s`} status={row.status} />,
                 ])}
@@ -719,11 +743,7 @@ function orgIconTone(type: OrgTypeId) {
 }
 
 function partnerHref(orgId: string, query?: string) {
-  const params = new URLSearchParams(query?.startsWith("?") ? query.slice(1) : query ?? "");
-  params.set("org", orgId);
-  params.delete("tab");
-  const next = params.toString();
-  return next ? `/admin/organisations/${orgId}?${next}` : `/admin/organisations/${orgId}`;
+  return organisationProfileHref(orgId, query);
 }
 
 function withTab(query: string, tab: OrgDetailTab, orgId?: string) {

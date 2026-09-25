@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MoreHorizontal, Pencil } from "lucide-react";
+import { MoreHorizontal, Pencil, Plus, X } from "lucide-react";
 import {
   CartesianGrid,
   Cell,
@@ -21,7 +21,8 @@ import { AdminSiteActivity } from "@/components/admin/AdminSiteActivity";
 import { AdminSection, StatusPill, useAdminFilters } from "@/components/admin/AdminChrome";
 import { PortalPageShell, StatusBadge } from "@/components/ui/Portal";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
-import { buildSiteDetail, getSite, orgTypeLabel, participationLabel, refreshOrganisationListings, refreshSites, updateSiteStatus, useAdminVersion } from "@/lib/admin";
+import { buildSiteDetail, getSite, orgTypeLabel, participationLabel, refreshEnterpriseUsers, refreshOrganisationListings, refreshSites, updateSiteStatus, useAdminVersion } from "@/lib/admin";
+import { inviteAdminSiteUser } from "@/lib/api";
 import { formatSiteAddress } from "@/lib/siteForm";
 import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
@@ -784,6 +785,49 @@ function InsightsTab({ siteId, query }: { siteId: string; query: string }) {
 
 function AccessTab({ model }: { model: NonNullable<ReturnType<typeof buildSiteDetail>> }) {
   const rows = model.users;
+  const [open, setOpen] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    const siteId = Number(model.site.id);
+    const orgId = Number(model.org.id);
+    if (!Number.isFinite(siteId) || !Number.isFinite(orgId)) {
+      setError("This site cannot be invited from here.");
+      return;
+    }
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      setError("First name, last name, and email are required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await inviteAdminSiteUser(orgId, siteId, {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        mobile: mobile.trim() || undefined,
+      });
+      await refreshEnterpriseUsers();
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setMobile("");
+      setOpen(false);
+      setNotice("Invitation sent. They will set their own password.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The invitation could not be sent.");
+    } finally {
+      setSaving(false);
+    }
+  };
   const invited = rows.filter((row) => row.status === "Invited").length;
   const active = rows.filter((row) => row.status === "Active").length;
 
@@ -794,6 +838,63 @@ function AccessTab({ model }: { model: NonNullable<ReturnType<typeof buildSiteDe
         <CompactStat label="Active" value={String(active)} muted />
         <CompactStat label="Invited" value={String(invited)} />
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          {notice ? <p className="font-saveful text-sm text-saveful-green">{notice}</p> : null}
+        </div>
+        <button type="button" onClick={() => { setError(""); setOpen(true); }} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white">
+          <Plus className="h-3.5 w-3.5" />
+          Add user
+        </button>
+      </div>
+      {open ? (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/30 p-4 sm:items-center" onClick={() => { if (!saving) setOpen(false); }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-site-user-title"
+            className="w-full max-w-md rounded-2xl border border-black/[0.05] bg-white p-5 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-1 flex items-start justify-between gap-3">
+              <h2 id="add-site-user-title" className="font-saveful-bold text-lg text-gray-900">Add site user</h2>
+              <button type="button" onClick={() => setOpen(false)} disabled={saving} className="rounded-lg p-1 text-gray-400 hover:bg-[#F7F6F2] hover:text-gray-700" aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mb-4 font-saveful text-sm text-gray-500">
+              They join this site only, not as a site admin. An activation link is emailed so they set their own password.
+            </p>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">First name</span>
+                <input value={firstName} onChange={(event) => setFirstName(event.target.value)} className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">Last name</span>
+                <input value={lastName} onChange={(event) => setLastName(event.target.value)} className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">Email</span>
+                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-saveful text-xs text-gray-500">Mobile (optional)</span>
+                <input value={mobile} onChange={(event) => setMobile(event.target.value)} className="h-11 w-full rounded-xl border border-black/[0.06] bg-[#F7F6F2] px-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white" />
+              </label>
+              {error ? <p className="font-saveful text-sm text-red-600">{error}</p> : null}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setOpen(false)} disabled={saving} className="h-10 rounded-lg px-3 font-saveful text-sm text-gray-600">
+                  Cancel
+                </button>
+                <button type="button" disabled={saving} onClick={() => void submit()} className="h-10 rounded-lg bg-saveful-green px-4 font-saveful-semibold text-sm text-white disabled:opacity-60">
+                  {saving ? "Sending…" : "Send invitation"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div>
         <p className="mb-2 font-saveful-semibold text-xs uppercase tracking-[0.14em] text-gray-400">Directory</p>
         <div className="overflow-x-auto">
