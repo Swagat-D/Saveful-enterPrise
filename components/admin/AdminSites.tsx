@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download, Plus, Search } from "lucide-react";
+import { Download, Plus, Search, X } from "lucide-react";
 import { FilterResetButton, MoreFilters } from "@/components/network/FilterBar";
 import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
 import { AdminRowMenu, AdminSection, FilterSelect, TablePager, type PageSize } from "@/components/admin/AdminChrome";
@@ -267,16 +267,26 @@ export function AdminSites() {
               }
             >
               <div className="space-y-3 p-3.5">
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={table.q}
+                    onChange={(event) => updateTable({ q: event.target.value })}
+                    placeholder="Search by site name, site ID, organisation or address"
+                    className="h-9 w-full rounded-lg border border-black/[0.06] bg-[#F7F6F2] pl-8 pr-8 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white"
+                  />
+                  {table.q ? (
+                    <button
+                      type="button"
+                      onClick={() => updateTable({ q: "" })}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </label>
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                  <label className="relative min-w-0 flex-1">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                    <input
-                      value={table.q}
-                      onChange={(event) => updateTable({ q: event.target.value })}
-                      placeholder="Search by site name or site ID"
-                      className="h-9 w-full rounded-lg border border-black/[0.06] bg-[#F7F6F2] pl-8 pr-3 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white"
-                    />
-                  </label>
                   <div className="lg:hidden">
                     <MoreFilters
                       count={filterCount}
@@ -465,7 +475,9 @@ export function AdminSites() {
               </div>
 
               {directory.rows.length === 0 ? (
-                <p className="px-3.5 pb-3.5 font-saveful text-sm text-gray-500">No sites match these filters.</p>
+                <p className="px-3.5 pb-3.5 font-saveful text-sm text-gray-500">
+                  {table.q.trim() ? "No sites match your search." : "No sites match these filters."}
+                </p>
               ) : (
                 <TablePager
                   page={page}

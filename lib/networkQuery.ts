@@ -286,8 +286,11 @@ export function impactOverTime(
   const bucket = days <= 7 ? 1 : days <= 30 ? 3 : 7;
   const points: { label: string; kg: number; collections: number }[] = [];
   const end = new Date(`${endDate}T00:00:00Z`);
+  // Buckets stay aligned to the period end, but the series is emitted oldest → newest
+  // so every time chart reads left to right.
+  const firstOffset = (days - 1) % bucket;
 
-  for (let offset = days - 1; offset >= 0; offset -= bucket) {
+  for (let offset = firstOffset; offset < days; offset += bucket) {
     const bucketEnd = new Date(end);
     bucketEnd.setUTCDate(bucketEnd.getUTCDate() - (days - 1 - offset));
     const bucketStart = new Date(bucketEnd);

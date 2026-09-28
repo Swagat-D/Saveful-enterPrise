@@ -1351,6 +1351,7 @@ export function buildAdminOverview(filters: AdminFilters) {
       organisations: { value: organisations.length, delta: 0 },
       sites: { value: sites.length, delta: currentActiveSites - previousSites },
       recovered: { value: foodKg, delta: foodKg - previousKg },
+      meals: { value: impact.mealsCreated, delta: impact.mealsCreated - previousImpact.mealsCreated },
       collections: { value: completed || currentRows.length, delta: (completed || currentRows.length) - (previousCompleted || previousRows.length) },
       co2: { value: impact.co2AvoidedKg, delta: impact.co2AvoidedKg - previousImpact.co2AvoidedKg },
     },
@@ -1681,7 +1682,7 @@ export function parseAdminSitesTable(params: URLSearchParams): AdminSitesTableFi
 
 export function adminSitesTableToQuery(filters: AdminSitesTableFilters) {
   const params = new URLSearchParams();
-  if (filters.q.trim()) params.set("q", filters.q.trim());
+  if (filters.q.trim()) params.set("q", filters.q);
   if (filters.groupId !== "all") params.set("group", filters.groupId);
   if (filters.territoryId !== "all") params.set("territory", filters.territoryId);
   if (filters.clusterId !== "all") params.set("cluster", filters.clusterId);
@@ -1800,7 +1801,8 @@ export function buildSitesDirectory(adminFilters: AdminFilters, table: AdminSite
     if (table.groupId !== "all" && row.groupId !== table.groupId) return false;
     if (table.territoryId !== "all" && row.territoryId !== table.territoryId) return false;
     if (table.clusterId !== "all" && row.clusterId !== table.clusterId) return false;
-    if (query && !`${row.name} ${row.siteCode} ${row.orgName}`.toLowerCase().includes(query)) return false;
+    const haystack = `${row.name} ${row.siteCode} ${row.orgName} ${row.address} ${row.groupLabel} ${row.territoryLabel} ${row.clusterLabel}`.toLowerCase();
+    if (query && !haystack.includes(query)) return false;
     return true;
   });
   const rows = scoped.filter((row) => {

@@ -26,6 +26,7 @@ import {
   MapPin,
   RefreshCw,
   Truck,
+  UtensilsCrossed,
 } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, useAdminFilters } from "@/components/admin/AdminChrome";
 import { buildAdminOverview, type OrgTypeId } from "@/lib/admin";
@@ -51,6 +52,7 @@ export function AdminDashboard() {
     { key: "organisations", label: "Organisations", value: formatCount(model.headlines.organisations.value), delta: model.headlines.organisations.delta, unit: "", href: `/admin/organisations${query}`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green" },
     { key: "sites", label: "Sites", value: formatCount(model.headlines.sites.value), delta: model.headlines.sites.delta, unit: "", href: `/admin/sites${query}`, icon: MapPin, tone: "bg-sky-50 text-sky-700" },
     { key: "recovered", label: "Food recovered", value: formatKg(model.headlines.recovered.value), delta: Math.round(model.headlines.recovered.delta), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green" },
+    { key: "meals", label: "Meals created", value: formatCount(model.headlines.meals.value), delta: Math.round(model.headlines.meals.delta), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700" },
     { key: "collections", label: "Collections", value: formatCount(model.headlines.collections.value), delta: model.headlines.collections.delta, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700" },
     { key: "co2", label: "CO₂ avoided", value: formatKg(model.headlines.co2.value), delta: Math.round(model.headlines.co2.delta), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700" },
   ];
@@ -72,7 +74,7 @@ export function AdminDashboard() {
     >
       <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
         {headlines.map((card) => {
           const Icon = card.icon;
           return (
