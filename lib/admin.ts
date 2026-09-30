@@ -314,6 +314,7 @@ let remoteListingsByOrg: Record<string, AdminListing[]> = {};
 let remoteCollectionsByOrg: Record<string, AdminCollection[]> = {};
 let loaded = false;
 let bootstrapped = false;
+let loadError = "";
 let refreshInFlight: Promise<AdminOrganisation[]> | null = null;
 
 function site(
@@ -345,6 +346,10 @@ export function useAdminVersion() {
 
 export function isAdminReady() {
   return bootstrapped;
+}
+
+export function adminLoadError() {
+  return loadError;
 }
 
 export function useAdminReady() {
@@ -772,8 +777,20 @@ function storeAppOperations(listings: AdminAppListingRow[] | undefined, collecti
 export async function refreshOrganisations() {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
-    const [rows, appNetwork, appActivity] = await Promise.all([
-      listEnterprises(),
+    try {
+      const rows = await listEnterprises();
+      if (rows.length || !remoteOrgs.length) remoteOrgs = rows.map(mapEnterprise);
+      loadError = "";
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : "Organisations could not be loaded.";
+      bootstrapped = true;
+      emit();
+      throw error;
+    }
+
+    const [, , appNetwork, appActivity] = await Promise.all([
+      refreshSites().catch(() => undefined),
+      refreshEnterpriseUsers().catch(() => undefined),
       listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] })),
       listAdminAppActivity().catch(() => ({
         activity: [] as AdminAppActivityItem[],
@@ -781,7 +798,6 @@ export async function refreshOrganisations() {
         collections: [] as AdminAppCollectionRow[],
       })),
     ]);
-    if (rows.length || !remoteOrgs.length) remoteOrgs = rows.map(mapEnterprise);
     storeAppNetwork(appNetwork);
     storeAppActivity(appActivity.activity, appNetwork.users ?? []);
     storeAppOperations(appActivity.listings, appActivity.collections);
@@ -809,16 +825,15 @@ export async function refreshOrganisations() {
       });
       if (nextSites.length) remoteAppSites = nextSites;
     }
-    bootstrapped = true;
-    emit();
     const needsDetail = remoteOrgs
       .filter((org) => org.status === "Prospect" || !org.lastLoginAt)
       .slice(0, 8);
-    if (needsDetail.length) {
-      await Promise.all(needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)));
-    }
-    await Promise.all([refreshSites().catch(() => undefined), refreshEnterpriseUsers().catch(() => undefined)]);
-    await Promise.all(listLiveEnterprises().slice(0, 30).map((org) => refreshOrganisationListings(org.id).catch(() => undefined)));
+    await Promise.all([
+      ...(needsDetail.length ? needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)) : []),
+      ...listLiveEnterprises().slice(0, 30).map((org) => refreshOrganisationListings(org.id).catch(() => undefined)),
+    ]);
+    bootstrapped = true;
+    emit();
     return listOrganisations();
   })().finally(() => {
     refreshInFlight = null;

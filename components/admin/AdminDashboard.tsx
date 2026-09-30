@@ -29,7 +29,8 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, useAdminFilters } from "@/components/admin/AdminChrome";
-import { buildAdminOverview, type OrgTypeId } from "@/lib/admin";
+import { adminLoadError, buildAdminOverview, useAdminReady, type OrgTypeId } from "@/lib/admin";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { CHART_TOOLTIP } from "@/lib/demo";
 import { formatCount, formatKg } from "@/lib/impact";
 import type { RecoveryPathway } from "@/types/enterprise";
@@ -44,6 +45,8 @@ const TYPE_DOT: Record<string, string> = {
 
 export function AdminDashboard() {
   const { filters, update, reset, query } = useAdminFilters();
+  const ready = useAdminReady();
+  const loadError = adminLoadError();
   const model = buildAdminOverview(filters);
   const insightsHref = `/admin/insights${query}`;
   const [chartMetric, setChartMetric] = useState<"kg" | "collections">("kg");
@@ -56,6 +59,23 @@ export function AdminDashboard() {
     { key: "collections", label: "Collections", value: formatCount(model.headlines.collections.value), delta: model.headlines.collections.delta, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700" },
     { key: "co2", label: "CO₂ avoided", value: formatKg(model.headlines.co2.value), delta: Math.round(model.headlines.co2.delta), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700" },
   ];
+
+  if (!ready || loadError) {
+    return (
+      <AdminPage
+        workspace
+        title="Dashboard"
+        hint="Network, activity and impact across Saveful for Business."
+      >
+        <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
+        {loadError ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">{loadError}</p>
+        ) : (
+          <SavefulPageLoader message="Loading dashboard…" fullScreen={false} />
+        )}
+      </AdminPage>
+    );
+  }
 
   return (
     <AdminPage

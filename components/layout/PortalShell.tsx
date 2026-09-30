@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 import { getEnterpriseSidebarLinks } from "@/config/sidebar";
 import { ensureLiveSession, homePath, isAdminSession, logout, useSession } from "@/lib/auth";
-import { refreshEnterpriseWorkspace } from "@/lib/enterpriseLive";
+import { enterpriseWorkspaceError, refreshEnterpriseWorkspace, useEnterpriseReady } from "@/lib/enterpriseLive";
 import { getOrganization, useOrganizationVersion } from "@/lib/organization";
 import { useOrgStructureVersion } from "@/lib/orgStructure";
 import { useUsersVersion } from "@/lib/users";
@@ -25,6 +25,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isClient = useIsClient();
   const user = useSession();
+  const ready = useEnterpriseReady();
+  const loadError = enterpriseWorkspaceError();
   useOrganizationVersion();
   useUsersVersion();
   useOrgStructureVersion();
@@ -82,7 +84,14 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         },
       }}
     >
-      {children}
+      {loadError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">{loadError}</p>
+      ) : null}
+      {!ready ? (
+        <SavefulPageLoader message="Loading Saveful…" fullScreen={false} className="min-h-[70vh]" />
+      ) : (
+        children
+      )}
     </DashboardLayout>
   );
 }

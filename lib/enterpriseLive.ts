@@ -19,11 +19,40 @@ import { applyOrganization, getOrganization } from "@/lib/organization";
 import { listUnits, replaceStructure, type OrgStructureUnit } from "@/lib/orgStructure";
 import { mapEnterpriseRole, scopeFromApi } from "@/lib/enterpriseRole";
 import { replaceNetworkSites, replaceNetworkUnits } from "@/lib/network";
+import { useSyncExternalStore } from "react";
 import { getSession, updateSession, type SessionUser } from "@/lib/auth";
 import { listUsers, replaceUsers } from "@/lib/users";
 import type { DirectoryUser, DirectoryUserStatus, OrganizationSite, Weekday } from "@/types/enterprise";
 
 const WEEKDAYS: Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+let enterpriseReady = false;
+let enterpriseLoadError = "";
+let enterpriseVersion = 0;
+const enterpriseListeners = new Set<() => void>();
+
+function emitEnterpriseReady() {
+  enterpriseVersion += 1;
+  enterpriseListeners.forEach((listener) => listener());
+}
+
+function subscribeEnterpriseReady(listener: () => void) {
+  enterpriseListeners.add(listener);
+  return () => enterpriseListeners.delete(listener);
+}
+
+export function isEnterpriseReady() {
+  return enterpriseReady;
+}
+
+export function enterpriseWorkspaceError() {
+  return enterpriseLoadError;
+}
+
+export function useEnterpriseReady() {
+  useSyncExternalStore(subscribeEnterpriseReady, () => enterpriseVersion, () => 0);
+  return enterpriseReady;
+}
 
 function toWeekdays(days?: string[]): Weekday[] | undefined {
   if (!days?.length) return undefined;
@@ -363,6 +392,18 @@ export async function refreshEnterpriseStructure() {
 }
 
 export async function refreshEnterpriseWorkspace(options?: { session?: SessionUser | null }) {
+  try {
+    return await loadEnterpriseWorkspace(options);
+  } catch (error) {
+    enterpriseLoadError = error instanceof Error ? error.message : "Enterprise data could not be loaded.";
+    throw error;
+  } finally {
+    enterpriseReady = true;
+    emitEnterpriseReady();
+  }
+}
+
+async function loadEnterpriseWorkspace(options?: { session?: SessionUser | null }) {
   const [profile, auth, sites, membersPayload, invitesPayload, structure, listedGroups, listedClusters, listedTerritories] =
     await Promise.all([
       getEnterpriseProfile().catch(() => null),
@@ -440,7 +481,8 @@ export async function refreshEnterpriseWorkspace(options?: { session?: SessionUs
   }
 
   const organisationId = auth?.organisation?.id ?? getOrganization().organisationId;
-  void refreshEnterpriseActivity(organisationId).catch(() => undefined);
+  await refreshEnterpriseActivity(organisationId).catch(() => undefined);
+  enterpriseLoadError = "";
 
   return { profile, sites: siteRows, users: listUsers() };
 }

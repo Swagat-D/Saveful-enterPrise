@@ -29,6 +29,7 @@ import {
   ORG_PLANS,
   ORG_TYPES,
   PARTICIPATION_ROLES,
+  adminLoadError,
   buildOrgDirectory,
   createOrganisation,
   formatEnterpriseId,
@@ -36,6 +37,7 @@ import {
   orgCounts,
   orgTypeLabel,
   planLabel,
+  useAdminReady,
   useAdminVersion,
   roleShortLabel,
   updateOrganisation,
@@ -45,6 +47,7 @@ import type { ApiRegion, MeasurementUnit } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { useAdminAuditVersion } from "@/lib/adminAudit";
 import { useSession } from "@/lib/auth";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { formatDisplayDate } from "@/lib/dates";
 import { formatCount } from "@/lib/impact";
 import { cn } from "@/lib/utils";
@@ -52,6 +55,8 @@ import { cn } from "@/lib/utils";
 export function AdminOrganisations() {
   const user = useSession();
   useAdminVersion();
+  const ready = useAdminReady();
+  const loadError = adminLoadError();
   useAdminAuditVersion();
   const { filters, update, reset, query } = useAdminFilters();
   const directory = buildOrgDirectory(filters);
@@ -154,6 +159,22 @@ export function AdminOrganisations() {
       />
     </>
   );
+
+  if (!ready || loadError) {
+    return (
+      <AdminPage
+        crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
+        title="Organisations"
+        hint="Master directory of every organisation in the Saveful for Business ecosystem."
+      >
+        {loadError ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">{loadError}</p>
+        ) : (
+          <SavefulPageLoader message="Loading organisations…" fullScreen={false} />
+        )}
+      </AdminPage>
+    );
+  }
 
   return (
     <AdminPage

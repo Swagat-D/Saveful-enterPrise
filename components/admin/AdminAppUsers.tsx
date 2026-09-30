@@ -153,7 +153,7 @@ export function AdminAppUsers() {
             >
               {item.label}
               <span className={cn("tabular-nums", kind === item.id ? "text-white/80" : "text-gray-400")}>
-                {count}
+                {loading ? "…" : count}
               </span>
             </button>
           );

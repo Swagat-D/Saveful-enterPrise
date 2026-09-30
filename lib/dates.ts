@@ -10,11 +10,18 @@ export function liveToday() {
   return now > DEMO_TODAY ? now : DEMO_TODAY;
 }
 
-export function toApiDate(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+/** Admin periods use Sydney dates, matching the dashboard, not the viewer's city. */
+const REPORT_TIME_ZONE = "Australia/Sydney";
+
+export function toApiDate(date: Date, timeZone = REPORT_TIME_ZONE) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
 }
 
 export function addDays(date: Date, days: number) {
@@ -110,10 +117,18 @@ export function previousPeriodRange(period: PeriodKey, today: Date = DEMO_TODAY,
 
 export function inDateRange(iso: string | null, startDate?: string, endDate?: string) {
   if (!iso) return false;
-  const day = iso.slice(0, 10);
+  const day = calendarDay(iso);
+  if (!day) return false;
   if (startDate && day < startDate) return false;
   if (endDate && day > endDate) return false;
   return true;
+}
+
+function calendarDay(iso: string) {
+  if (iso.length <= 10) return iso.slice(0, 10);
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return toApiDate(parsed);
 }
 
 export function daysAgoIso(days: number, today: Date = DEMO_TODAY) {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 import { getAdminSidebarLinks } from "@/config/sidebar";
-import { adminFiltersToQuery, lastAdminFilters, refreshOrganisations, useAdminVersion } from "@/lib/admin";
+import { adminFiltersToQuery, adminLoadError, lastAdminFilters, refreshOrganisations, useAdminReady } from "@/lib/admin";
 import { refreshAdminAudit } from "@/lib/adminAudit";
 import { ensureLiveSession, homePath, isAdminSession, logout, useSession } from "@/lib/auth";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -22,7 +22,8 @@ export function AdminPortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isClient = useIsClient();
   const user = useSession();
-  useAdminVersion();
+  const ready = useAdminReady();
+  const loadError = adminLoadError();
   const query = adminFiltersToQuery(lastAdminFilters());
 
   useEffect(() => {
@@ -79,7 +80,14 @@ export function AdminPortalShell({ children }: { children: React.ReactNode }) {
         },
       }}
     >
-      {children}
+      {loadError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">{loadError}</p>
+      ) : null}
+      {!ready ? (
+        <SavefulPageLoader message="Loading Saveful…" fullScreen={false} className="min-h-[70vh]" />
+      ) : (
+        children
+      )}
     </DashboardLayout>
   );
 }
