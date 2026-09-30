@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import Link from "next/link";
 import {
   Area,
@@ -38,7 +38,9 @@ import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { CHART_COLORS, CHART_TOOLTIP } from "@/lib/demo";
 import { periodLabel } from "@/lib/dates";
 import { formatCount, formatKg, formatMoney } from "@/lib/impact";
+import { useRecoveryVersion } from "@/lib/network";
 import { buildDashboardModel, filtersToQuery } from "@/lib/networkQuery";
+import { useLiveSitesVersion } from "@/lib/sitesDirectory";
 import { cn } from "@/lib/utils";
 
 const PATHWAY_TONE = ["#2D5F4F", "#5B8A78", "#A3C4B5", "#D9DDD4"] as const;
@@ -55,8 +57,13 @@ export default function DashboardPage() {
 
 function EnterpriseDashboard() {
   const user = useSession();
+  const recoveryVersion = useRecoveryVersion();
+  const sitesVersion = useLiveSitesVersion();
   const { filters, scope, setFilters } = useNetworkFilters();
-  const model = buildDashboardModel(filters, scope);
+  const model = useMemo(
+    () => buildDashboardModel(filters, scope),
+    [filters, scope, recoveryVersion, sitesVersion],
+  );
   const query = filtersToQuery(filters);
   const reportHref = `/insights/reports/new${query}`;
 
