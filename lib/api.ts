@@ -601,6 +601,7 @@ export function deleteEnterpriseTerritory(id: number) {
 
 type ApiFetchOptions = RequestInit & {
   auth?: boolean;
+  timeoutMs?: number;
 };
 
 function messageFromBody(body: unknown, fallback: string) {
@@ -625,7 +626,7 @@ export function onUnauthorized(handler: () => void) {
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { auth = false, headers, ...rest } = options;
+  const { auth = false, headers, timeoutMs, signal, ...rest } = options;
   const nextHeaders = new Headers(headers);
   if (rest.body && !(rest.body instanceof FormData) && !nextHeaders.has("Content-Type")) {
     nextHeaders.set("Content-Type", "application/json");
@@ -635,13 +636,20 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     if (token) nextHeaders.set("Authorization", `Bearer ${token}`);
   }
 
+  const timeout = timeoutMs && timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : null;
+  const requestSignal = signal && timeout ? AbortSignal.any([signal, timeout]) : signal ?? timeout ?? undefined;
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`, {
       ...rest,
       headers: nextHeaders,
+      signal: requestSignal,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new ApiError("Saveful took too long to respond. Wait a moment and try again.", 0);
+    }
     throw new ApiError("Unable to reach Saveful. Check your connection and try again.", 0);
   }
 
@@ -659,6 +667,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 export function loginWithPassword(email: string, password: string) {
   return apiFetch<AuthLoginResponse>("/auth/login", {
     method: "POST",
+    timeoutMs: 20000,
     body: JSON.stringify({
       email: email.trim().toLowerCase(),
       password,
