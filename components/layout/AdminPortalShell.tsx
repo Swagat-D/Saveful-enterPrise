@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 import { getAdminSidebarLinks } from "@/config/sidebar";
-import { adminFiltersToQuery, adminLoadError, enqueueAdminBackground, lastAdminFilters, refreshOrganisations, useAdminReady } from "@/lib/admin";
+import { adminFiltersToQuery, adminLoadError, enqueueAdminBackground, isAdminDashboardPath, lastAdminFilters, refreshOrganisations, useAdminReady } from "@/lib/admin";
 import { refreshAdminAudit } from "@/lib/adminAudit";
 import { ensureLiveSession, homePath, isAdminSession, logout, useSession } from "@/lib/auth";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -20,6 +20,8 @@ function useIsClient() {
 
 export function AdminPortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const dashboardOnly = isAdminDashboardPath(pathname);
   const isClient = useIsClient();
   const user = useSession();
   const ready = useAdminReady();
@@ -31,13 +33,13 @@ export function AdminPortalShell({ children }: { children: React.ReactNode }) {
   }, [router, user]);
 
   useEffect(() => {
-    if (!user || !isAdminSession(user)) return;
+    if (!user || !isAdminSession(user) || dashboardOnly) return;
     void ensureLiveSession().then(async (live) => {
       if (!live) return;
       await refreshOrganisations().catch(() => undefined);
       enqueueAdminBackground(() => refreshAdminAudit());
     });
-  }, [user]);
+  }, [dashboardOnly, user]);
 
   if (!isClient) {
     return <SavefulPageLoader message="Checking your admin session…" />;
@@ -82,7 +84,7 @@ export function AdminPortalShell({ children }: { children: React.ReactNode }) {
       {loadError ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-saveful text-sm text-red-700">{loadError}</p>
       ) : null}
-      {!ready ? (
+      {!ready && !dashboardOnly ? (
         <SavefulPageLoader message="Loading Saveful…" fullScreen={false} className="min-h-[70vh]" />
       ) : (
         children

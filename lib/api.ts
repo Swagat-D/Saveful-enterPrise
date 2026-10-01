@@ -800,6 +800,58 @@ export function listEnterprises() {
   return apiFetch<EnterpriseListItem[]>("/admin/enterprise", { auth: true });
 }
 
+export type AdminDashboardSummary = {
+  from: string | null;
+  to: string;
+  previousFrom: string | null;
+  previousTo: string | null;
+  organisations: number;
+  sites: number;
+  activeSites: number;
+  sitesWithRecovery: number;
+  previousSitesWithRecovery: number;
+  recoveredKg: number;
+  previousRecoveredKg: number;
+  collections: number;
+  previousCollections: number;
+  pathways: { pathway: "people" | "livestock" | "circular" | "bioenergy"; kg: number }[];
+  types: {
+    id: "food_business" | "charity" | "farmer" | "circular";
+    organisations: number;
+    activeOrganisations: number;
+    activeSites: number;
+    listings: number;
+    claims: number;
+    collections: number;
+    recoveredKg: number;
+  }[];
+  operations: {
+    listingsPublished: number;
+    previousListingsPublished: number;
+    claimRate: number;
+    previousClaimRate: number;
+    recoveryRate: number;
+    previousRecoveryRate: number;
+    collectionsCompleted: number;
+    previousCollectionsCompleted: number;
+  };
+  attention: {
+    unclaimed: number;
+    unresolved: number;
+    awaitingActivation: number;
+    quietSites: number;
+  };
+  daily: { date: string; kg: number; collections: number }[];
+};
+
+export function getAdminDashboardSummary(params: URLSearchParams) {
+  const query = params.toString();
+  return apiFetch<AdminDashboardSummary>(`/admin/enterprise/dashboard${query ? `?${query}` : ""}`, {
+    auth: true,
+    timeoutMs: 20000,
+  });
+}
+
 export type EnterpriseMember = {
   id: number;
   firstName: string;

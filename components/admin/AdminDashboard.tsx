@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   CartesianGrid,
@@ -29,10 +29,13 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, useAdminFilters } from "@/components/admin/AdminChrome";
-import { adminImpactLoading, adminLoadError, buildAdminOverview, useAdminReady, type OrgTypeId } from "@/lib/admin";
+import { ORG_TYPES, type AdminFilters, type OrgTypeId } from "@/lib/admin";
+import { getAdminDashboardSummary, type AdminDashboardSummary } from "@/lib/api";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { CHART_TOOLTIP } from "@/lib/demo";
-import { formatCount, formatKg } from "@/lib/impact";
+import { rangeForFilters } from "@/lib/dates";
+import { calculateImpact, formatCount, formatKg } from "@/lib/impact";
+import { PATHWAY_LABEL } from "@/lib/networkQuery";
 import type { RecoveryPathway } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
@@ -43,25 +46,174 @@ const TYPE_DOT: Record<string, string> = {
   circular: "bg-violet-500",
 };
 
+const PATHWAY_COLORS: Record<RecoveryPathway, string> = {
+  people: "#2D5F4F",
+  livestock: "#4C7C9B",
+  circular: "#7C6BB0",
+  bioenergy: "#E3B23C",
+};
+
+function dashboardQuery(filters: AdminFilters) {
+  const range = rangeForFilters(filters);
+  const params = new URLSearchParams();
+  if (range.startDate) params.set("from", range.startDate);
+  if (range.endDate) params.set("to", range.endDate);
+  if (filters.organisationId !== "all") params.set("organisationId", filters.organisationId);
+  if (filters.orgType !== "all") params.set("orgType", filters.orgType);
+  if (filters.pathway !== "all") params.set("pathway", filters.pathway);
+  if (filters.country !== "all") params.set("country", filters.country);
+  if (filters.role !== "all") params.set("role", filters.role);
+  if (filters.accountStatus !== "all") params.set("accountStatus", filters.accountStatus);
+  return params;
+}
+
+function chartLabel(date: string) {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+function bucketActivitySeries(
+  daily: AdminDashboardSummary["daily"],
+  period: AdminFilters["period"],
+) {
+  if (!daily.length) return [];
+  if (period === "all") {
+    const months = new Map<string, { kg: number; collections: number }>();
+    for (const point of daily) {
+      const key = point.date.slice(0, 7);
+      const current = months.get(key) ?? { kg: 0, collections: 0 };
+      months.set(key, { kg: current.kg + point.kg, collections: current.collections + point.collections });
+    }
+    return [...months.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(-8)
+      .map(([key, stats]) => ({
+        label: new Date(`${key}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }),
+        kg: stats.kg,
+        collections: stats.collections,
+      }));
+  }
+  const bucket = daily.length <= 7 ? 1 : daily.length <= 30 ? 3 : 7;
+  const points: { label: string; kg: number; collections: number }[] = [];
+  const firstOffset = (daily.length - 1) % bucket;
+  for (let offset = firstOffset; offset < daily.length; offset += bucket) {
+    const start = Math.max(0, offset - (bucket - 1));
+    const slice = daily.slice(start, offset + 1);
+    const end = slice[slice.length - 1];
+    points.push({
+      label: chartLabel(end.date),
+      kg: slice.reduce((sum, point) => sum + point.kg, 0),
+      collections: slice.reduce((sum, point) => sum + point.collections, 0),
+    });
+  }
+  return points;
+}
+
+function summaryModel(summary: AdminDashboardSummary, filters: AdminFilters, query: string) {
+  const impact = calculateImpact(summary.recoveredKg);
+  const previousImpact = calculateImpact(summary.previousRecoveredKg);
+  const typeById = new Map(summary.types.map((row) => [row.id, row]));
+  const types = ORG_TYPES.map((type) => {
+    const row = typeById.get(type.id);
+    return {
+      id: type.id,
+      label: type.label,
+      organisations: row?.organisations ?? 0,
+      activeSites: row?.activeSites ?? 0,
+      active: row?.activeOrganisations ?? 0,
+      listings: row?.listings ?? 0,
+      claims: row?.claims ?? 0,
+      collections: row?.collections ?? 0,
+      recoveredKg: row?.recoveredKg ?? 0,
+    };
+  });
+  const kgByPathway = new Map(summary.pathways.map((row) => [row.pathway, row.kg]));
+  const pathways = (Object.keys(PATHWAY_COLORS) as RecoveryPathway[]).map((pathway) => {
+    const kg = kgByPathway.get(pathway) ?? 0;
+    return {
+      pathway,
+      label: PATHWAY_LABEL[pathway],
+      kg,
+      percent: summary.recoveredKg > 0 ? Math.round((kg / summary.recoveredKg) * 100) : 0,
+      color: PATHWAY_COLORS[pathway],
+    };
+  });
+  const priorLabel = filters.period === "all" || filters.period === "custom" ? "prior period" : `prior ${filters.period} days`;
+  return {
+    priorLabel,
+    recoveredKg: summary.recoveredKg,
+    types,
+    pathways,
+    series: bucketActivitySeries(summary.daily, filters.period),
+    headlines: {
+      organisations: { value: summary.organisations, delta: 0 },
+      sites: { value: summary.sites, delta: summary.sitesWithRecovery - summary.previousSitesWithRecovery },
+      recovered: { value: summary.recoveredKg, delta: summary.recoveredKg - summary.previousRecoveredKg },
+      meals: { value: impact.mealsCreated, delta: impact.mealsCreated - previousImpact.mealsCreated },
+      collections: { value: summary.collections, delta: summary.collections - summary.previousCollections },
+      co2: { value: impact.co2AvoidedKg, delta: impact.co2AvoidedKg - previousImpact.co2AvoidedKg },
+    },
+    operations: {
+      listingsPublished: summary.operations.listingsPublished,
+      claimRate: summary.operations.claimRate,
+      claimRateDelta: summary.operations.claimRate - summary.operations.previousClaimRate,
+      recoveryRate: summary.operations.recoveryRate,
+      recoveryRateDelta: summary.operations.recoveryRate - summary.operations.previousRecoveryRate,
+      collectionsCompleted: summary.operations.collectionsCompleted,
+      collectionsDelta: summary.operations.collectionsCompleted - summary.operations.previousCollectionsCompleted,
+    },
+    attention: [
+      { id: "unclaimed", label: "Unclaimed / expired listings", count: summary.attention.unclaimed, href: `/admin/listings${query}` },
+      { id: "overdue", label: "Overdue / unresolved collections", count: summary.attention.unresolved, href: `/admin/collections${query}` },
+      { id: "activation", label: "Organisations awaiting activation", count: summary.attention.awaitingActivation, href: `/admin/organisations${query}` },
+      { id: "quiet", label: "Sites with no recent activity", count: summary.attention.quietSites, href: `/admin/sites${query}` },
+      { id: "config", label: "Data / configuration issues", count: 0, href: `/admin/sites${query}` },
+    ],
+  };
+}
+
 export function AdminDashboard() {
   const { filters, update, reset, query } = useAdminFilters();
-  const ready = useAdminReady();
-  const loadError = adminLoadError();
-  const impactLoading = adminImpactLoading();
-  const model = buildAdminOverview(filters);
+  const [summary, setSummary] = useState<AdminDashboardSummary | null>(null);
+  const [loadError, setLoadError] = useState("");
   const insightsHref = `/admin/insights${query}`;
   const [chartMetric, setChartMetric] = useState<"kg" | "collections">("kg");
+  const model = summary ? summaryModel(summary, filters, query) : null;
+  const requestKey = dashboardQuery(filters).toString();
+
+  useEffect(() => {
+    const params = new URLSearchParams(requestKey);
+    let cancelled = false;
+    setSummary(null);
+    setLoadError("");
+    getAdminDashboardSummary(params)
+      .then((next) => {
+        if (!cancelled) {
+          setSummary(next);
+          setLoadError("");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "The dashboard could not be loaded.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestKey]);
 
   const headlines = [
-    { key: "organisations", label: "Organisations", value: formatCount(model.headlines.organisations.value), delta: model.headlines.organisations.delta, unit: "", href: `/admin/organisations${query}`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
-    { key: "sites", label: "Sites", value: formatCount(model.headlines.sites.value), delta: model.headlines.sites.delta, unit: "", href: `/admin/sites${query}`, icon: MapPin, tone: "bg-sky-50 text-sky-700", pending: false },
-    { key: "recovered", label: "Food recovered", value: formatKg(model.headlines.recovered.value), delta: Math.round(model.headlines.recovered.delta), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green", pending: impactLoading },
-    { key: "meals", label: "Meals created", value: formatCount(model.headlines.meals.value), delta: Math.round(model.headlines.meals.delta), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700", pending: impactLoading },
-    { key: "collections", label: "Collections", value: formatCount(model.headlines.collections.value), delta: model.headlines.collections.delta, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700", pending: impactLoading },
-    { key: "co2", label: "CO₂ avoided", value: formatKg(model.headlines.co2.value), delta: Math.round(model.headlines.co2.delta), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700", pending: impactLoading },
+    { key: "organisations", label: "Organisations", value: formatCount(model?.headlines.organisations.value ?? 0), delta: model?.headlines.organisations.delta ?? 0, unit: "", href: `/admin/organisations${query}`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
+    { key: "sites", label: "Sites", value: formatCount(model?.headlines.sites.value ?? 0), delta: model?.headlines.sites.delta ?? 0, unit: "", href: `/admin/sites${query}`, icon: MapPin, tone: "bg-sky-50 text-sky-700", pending: false },
+    { key: "recovered", label: "Food recovered", value: formatKg(model?.headlines.recovered.value ?? 0), delta: Math.round(model?.headlines.recovered.delta ?? 0), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
+    { key: "meals", label: "Meals created", value: formatCount(model?.headlines.meals.value ?? 0), delta: Math.round(model?.headlines.meals.delta ?? 0), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700", pending: false },
+    { key: "collections", label: "Collections", value: formatCount(model?.headlines.collections.value ?? 0), delta: model?.headlines.collections.delta ?? 0, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700", pending: false },
+    { key: "co2", label: "CO₂ avoided", value: formatKg(model?.headlines.co2.value ?? 0), delta: Math.round(model?.headlines.co2.delta ?? 0), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700", pending: false },
   ];
 
-  if (!ready || loadError) {
+  if (!model) {
     return (
       <AdminPage
         workspace
@@ -159,16 +311,12 @@ export function AdminDashboard() {
         </AdminSection>
 
         <AdminSection title="Recovery pathways" action={<TextLink href={insightsHref}>View</TextLink>}>
-          {impactLoading ? (
-            <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-400">Loading activity…</p>
-          ) : (
-            <PathwayDonut
-              rows={model.pathways}
-              totalKg={model.recoveredKg}
-              selected={filters.pathway}
-              onSelect={(pathway) => update({ pathway: filters.pathway === pathway ? "all" : pathway })}
-            />
-          )}
+          <PathwayDonut
+            rows={model.pathways}
+            totalKg={model.recoveredKg}
+            selected={filters.pathway}
+            onSelect={(pathway) => update({ pathway: filters.pathway === pathway ? "all" : pathway })}
+          />
         </AdminSection>
 
         <AdminSection title="Needs attention" action={<TextLink href={`/admin/sites${query}`}>View</TextLink>}>
@@ -178,8 +326,8 @@ export function AdminDashboard() {
                 <Link href={item.href} className="flex items-center justify-between gap-3 px-3.5 py-2 hover:bg-[#FAF7F0]">
                   <span className="min-w-0 truncate font-saveful text-sm text-gray-700">{item.label}</span>
                   <span className="flex shrink-0 items-center gap-1.5">
-                    <span className={cn("font-saveful-semibold text-sm tabular-nums", !impactLoading && item.count > 0 ? "text-red-600" : "text-gray-400")}>
-                      {impactLoading && item.id !== "activation" && item.id !== "quiet" && item.id !== "config" ? "…" : formatCount(item.count)}
+                    <span className={cn("font-saveful-semibold text-sm tabular-nums", item.count > 0 ? "text-red-600" : "text-gray-400")}>
+                      {formatCount(item.count)}
                     </span>
                     <ChevronRight className="h-4 w-4 text-gray-300" />
                   </span>
@@ -193,29 +341,29 @@ export function AdminDashboard() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <AdminSection title="Platform activity" className="xl:col-span-3">
           <div className="grid grid-cols-2 gap-2 p-3 xl:grid-cols-1">
-            <ActivityCell href={`/admin/listings${query}`} icon={List} label="Listings published" value={impactLoading ? "…" : formatCount(model.operations.listingsPublished)} />
+            <ActivityCell href={`/admin/listings${query}`} icon={List} label="Listings published" value={formatCount(model.operations.listingsPublished)} />
             <ActivityCell
               href={`/admin/listings${query}`}
               icon={CheckCircle2}
               label="Claim rate"
-              value={impactLoading ? "…" : `${model.operations.claimRate}%`}
-              delta={impactLoading ? undefined : `${signed(model.operations.claimRateDelta)} pp`}
+              value={`${model.operations.claimRate}%`}
+              delta={`${signed(model.operations.claimRateDelta)} pp`}
               down={model.operations.claimRateDelta < 0}
             />
             <ActivityCell
               href={insightsHref}
               icon={RefreshCw}
               label="Recovery rate"
-              value={impactLoading ? "…" : `${model.operations.recoveryRate}%`}
-              delta={impactLoading ? undefined : `${signed(model.operations.recoveryRateDelta)} pp`}
+              value={`${model.operations.recoveryRate}%`}
+              delta={`${signed(model.operations.recoveryRateDelta)} pp`}
               down={model.operations.recoveryRateDelta < 0}
             />
             <ActivityCell
               href={`/admin/collections${query}`}
               icon={Truck}
               label="Collections completed"
-              value={impactLoading ? "…" : formatCount(model.operations.collectionsCompleted)}
-              delta={impactLoading ? undefined : signed(model.operations.collectionsDelta)}
+              value={formatCount(model.operations.collectionsCompleted)}
+              delta={signed(model.operations.collectionsDelta)}
               down={model.operations.collectionsDelta < 0}
             />
           </div>
@@ -234,9 +382,6 @@ export function AdminDashboard() {
             <TextLink href={insightsHref}>Insights</TextLink>
           </div>
           <div className="h-52 px-2 pb-3 pt-1">
-            {impactLoading ? (
-              <p className="flex h-full items-center justify-center font-saveful text-sm text-gray-400">Loading activity…</p>
-            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={model.series} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid stroke="#EFEDE6" vertical={false} />
@@ -258,7 +403,6 @@ export function AdminDashboard() {
                 <Line type="monotone" dataKey={chartMetric} stroke="#2D5F4F" strokeWidth={2.25} dot={{ r: 3, fill: "#2D5F4F" }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
-            )}
           </div>
         </AdminSection>
 
@@ -290,10 +434,10 @@ export function AdminDashboard() {
                     <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatCount(row.organisations)}</td>
                     <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatCount(row.active)}</td>
                     <td className="whitespace-nowrap px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">
-                      {impactLoading ? "…" : `${formatCount(row.listings)} / ${formatCount(row.claims)}`}
+                      {formatCount(row.listings)} / {formatCount(row.claims)}
                     </td>
-                    <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{impactLoading ? "…" : formatCount(row.collections)}</td>
-                    <td className="whitespace-nowrap px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{impactLoading ? "…" : formatKg(row.recoveredKg)}</td>
+                    <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatCount(row.collections)}</td>
+                    <td className="whitespace-nowrap px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatKg(row.recoveredKg)}</td>
                   </tr>
                 ))}
               </tbody>
