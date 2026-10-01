@@ -314,6 +314,7 @@ let remoteListingsByOrg: Record<string, AdminListing[]> = {};
 let remoteCollectionsByOrg: Record<string, AdminCollection[]> = {};
 let loaded = false;
 let bootstrapped = false;
+let impactLoading = false;
 let loadError = "";
 let refreshInFlight: Promise<AdminOrganisation[]> | null = null;
 
@@ -350,6 +351,10 @@ export function isAdminReady() {
 
 export function adminLoadError() {
   return loadError;
+}
+
+export function adminImpactLoading() {
+  return impactLoading;
 }
 
 export function useAdminReady() {
@@ -788,52 +793,12 @@ export async function refreshOrganisations() {
       throw error;
     }
 
-    const [, , appNetwork, appActivity] = await Promise.all([
-      refreshSites().catch(() => undefined),
-      refreshEnterpriseUsers().catch(() => undefined),
-      listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] })),
-      listAdminAppActivity().catch(() => ({
-        activity: [] as AdminAppActivityItem[],
-        listings: [] as AdminAppListingRow[],
-        collections: [] as AdminAppCollectionRow[],
-      })),
-    ]);
-    storeAppNetwork(appNetwork);
-    storeAppActivity(appActivity.activity, appNetwork.users ?? []);
-    storeAppOperations(appActivity.listings, appActivity.collections);
-    if (!appNetwork.sites?.length && remoteAppOrgs.some((org) => org.type !== "food_business")) {
-      const details = await Promise.all(
-        remoteAppOrgs
-          .filter((org) => org.type !== "food_business")
-          .slice(0, 40)
-          .map((org) => getAdminAppOrganisation(org.id).catch(() => null)),
-      );
-      const nextSites = details.flatMap((detail) => {
-        if (!detail) return [];
-        return (detail.sites ?? []).map((site) =>
-          mapAppSite({
-            id: site.id,
-            organisationId: detail.organisation.id,
-            name: site.name,
-            address: site.address,
-            postcode: site.postcode ?? null,
-            isActive: site.isActive,
-            createdAt: site.createdAt ?? null,
-            lastActivityAt: null,
-          }),
-        );
-      });
-      if (nextSites.length) remoteAppSites = nextSites;
-    }
-    const needsDetail = remoteOrgs
-      .filter((org) => org.status === "Prospect" || !org.lastLoginAt)
-      .slice(0, 8);
-    await Promise.all([
-      ...(needsDetail.length ? needsDetail.map((org) => refreshOrganisationDetail(org.id).catch(() => undefined)) : []),
-      ...listLiveEnterprises().slice(0, 30).map((org) => refreshOrganisationListings(org.id).catch(() => undefined)),
-    ]);
+    await refreshSites().catch(() => undefined);
+    impactLoading = listLiveEnterprises().length > 0;
     bootstrapped = true;
     emit();
+    enqueueAdminBackground(loadEnterpriseListings);
+    enqueueAdminBackground(loadRemainingAdminNetwork);
     return listOrganisations();
   })().finally(() => {
     refreshInFlight = null;
@@ -2150,10 +2115,80 @@ export async function refreshOrganisationListings(orgId: string) {
   return remoteListingsByOrg[orgId];
 }
 
-export async function refreshOrganisationDetail(orgId: string) {
+let adminBackground: Promise<void> = Promise.resolve();
+
+export function enqueueAdminBackground(task: () => Promise<unknown>) {
+  adminBackground = adminBackground.then(() => task()).then(
+    () => undefined,
+    () => undefined,
+  );
+  return adminBackground;
+}
+
+async function loadEnterpriseListings() {
+  const orgs = listLiveEnterprises();
+  for (let index = 0; index < orgs.length; index += 2) {
+    await Promise.all(
+      orgs.slice(index, index + 2).map((org) => refreshOrganisationListings(org.id).catch(() => undefined)),
+    );
+  }
+  if (impactLoading) {
+    impactLoading = false;
+    emit();
+  }
+}
+
+async function loadRemainingAdminNetwork() {
+  await refreshEnterpriseUsers().catch(() => undefined);
+  const appNetwork = await listAdminAppUsers().catch(() => ({ users: [] as AdminAppUser[], sites: [] as AdminAppSite[] }));
+  const appActivity = await listAdminAppActivity().catch(() => ({
+    activity: [] as AdminAppActivityItem[],
+    listings: [] as AdminAppListingRow[],
+    collections: [] as AdminAppCollectionRow[],
+  }));
+  storeAppNetwork(appNetwork);
+  storeAppActivity(appActivity.activity, appNetwork.users ?? []);
+  storeAppOperations(appActivity.listings, appActivity.collections);
+  emit();
+  await loadDeferredAdminNetwork(appNetwork);
+}
+
+async function loadDeferredAdminNetwork(appNetwork: { sites?: AdminAppSite[] }) {
+  if (!appNetwork.sites?.length && remoteAppOrgs.some((org) => org.type !== "food_business")) {
+    const details: Array<Awaited<ReturnType<typeof getAdminAppOrganisation>> | null> = [];
+    for (const org of remoteAppOrgs.filter((org) => org.type !== "food_business").slice(0, 40)) {
+      details.push(await getAdminAppOrganisation(org.id).catch(() => null));
+    }
+    const nextSites = details.flatMap((detail) => {
+      if (!detail) return [];
+      return (detail.sites ?? []).map((site) =>
+        mapAppSite({
+          id: site.id,
+          organisationId: detail.organisation.id,
+          name: site.name,
+          address: site.address,
+          postcode: site.postcode ?? null,
+          isActive: site.isActive,
+          createdAt: site.createdAt ?? null,
+          lastActivityAt: null,
+        }),
+      );
+    });
+    if (nextSites.length) {
+      remoteAppSites = nextSites;
+      emit();
+    }
+  }
+  const needsDetail = remoteOrgs.filter((org) => org.status === "Prospect" || !org.lastLoginAt).slice(0, 8);
+  for (const org of needsDetail) {
+    await refreshOrganisationDetail(org.id, { listings: false }).catch(() => undefined);
+  }
+}
+
+export async function refreshOrganisationDetail(orgId: string, options?: { listings?: boolean }) {
   const [detail] = await Promise.all([
     getEnterprise(orgId),
-    refreshOrganisationListings(orgId).catch(() => undefined),
+    options?.listings === false ? Promise.resolve() : refreshOrganisationListings(orgId).catch(() => undefined),
   ]);
   remoteOrgProfiles[orgId] = profileFromDetail(detail);
   const latestLogin = (detail.users ?? [])

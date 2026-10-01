@@ -29,7 +29,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, useAdminFilters } from "@/components/admin/AdminChrome";
-import { adminLoadError, buildAdminOverview, useAdminReady, type OrgTypeId } from "@/lib/admin";
+import { adminImpactLoading, adminLoadError, buildAdminOverview, useAdminReady, type OrgTypeId } from "@/lib/admin";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { CHART_TOOLTIP } from "@/lib/demo";
 import { formatCount, formatKg } from "@/lib/impact";
@@ -47,17 +47,18 @@ export function AdminDashboard() {
   const { filters, update, reset, query } = useAdminFilters();
   const ready = useAdminReady();
   const loadError = adminLoadError();
+  const impactLoading = adminImpactLoading();
   const model = buildAdminOverview(filters);
   const insightsHref = `/admin/insights${query}`;
   const [chartMetric, setChartMetric] = useState<"kg" | "collections">("kg");
 
   const headlines = [
-    { key: "organisations", label: "Organisations", value: formatCount(model.headlines.organisations.value), delta: model.headlines.organisations.delta, unit: "", href: `/admin/organisations${query}`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green" },
-    { key: "sites", label: "Sites", value: formatCount(model.headlines.sites.value), delta: model.headlines.sites.delta, unit: "", href: `/admin/sites${query}`, icon: MapPin, tone: "bg-sky-50 text-sky-700" },
-    { key: "recovered", label: "Food recovered", value: formatKg(model.headlines.recovered.value), delta: Math.round(model.headlines.recovered.delta), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green" },
-    { key: "meals", label: "Meals created", value: formatCount(model.headlines.meals.value), delta: Math.round(model.headlines.meals.delta), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700" },
-    { key: "collections", label: "Collections", value: formatCount(model.headlines.collections.value), delta: model.headlines.collections.delta, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700" },
-    { key: "co2", label: "CO₂ avoided", value: formatKg(model.headlines.co2.value), delta: Math.round(model.headlines.co2.delta), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700" },
+    { key: "organisations", label: "Organisations", value: formatCount(model.headlines.organisations.value), delta: model.headlines.organisations.delta, unit: "", href: `/admin/organisations${query}`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
+    { key: "sites", label: "Sites", value: formatCount(model.headlines.sites.value), delta: model.headlines.sites.delta, unit: "", href: `/admin/sites${query}`, icon: MapPin, tone: "bg-sky-50 text-sky-700", pending: false },
+    { key: "recovered", label: "Food recovered", value: formatKg(model.headlines.recovered.value), delta: Math.round(model.headlines.recovered.delta), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green", pending: impactLoading },
+    { key: "meals", label: "Meals created", value: formatCount(model.headlines.meals.value), delta: Math.round(model.headlines.meals.delta), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700", pending: impactLoading },
+    { key: "collections", label: "Collections", value: formatCount(model.headlines.collections.value), delta: model.headlines.collections.delta, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700", pending: impactLoading },
+    { key: "co2", label: "CO₂ avoided", value: formatKg(model.headlines.co2.value), delta: Math.round(model.headlines.co2.delta), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700", pending: impactLoading },
   ];
 
   if (!ready || loadError) {
@@ -109,15 +110,15 @@ export function AdminDashboard() {
                   <Icon className="h-3.5 w-3.5" />
                 </span>
               </div>
-              <p className="mt-2.5 truncate font-saveful-bold text-xl leading-none tabular-nums text-gray-900">{card.value}</p>
+              <p className="mt-2.5 truncate font-saveful-bold text-xl leading-none tabular-nums text-gray-900">{card.pending ? "…" : card.value}</p>
               <p
                 className={cn(
                   "mt-2 truncate font-saveful text-[11px]",
-                  card.delta < 0 ? "text-red-600" : card.delta > 0 ? "text-emerald-700" : "text-gray-400",
+                  !card.pending && card.delta < 0 ? "text-red-600" : !card.pending && card.delta > 0 ? "text-emerald-700" : "text-gray-400",
                 )}
               >
-                {card.delta === 0 ? "No change" : `${signed(card.delta)}${card.unit} vs ${model.priorLabel}`}
-                {card.delta !== 0 ? <ArrowUpRight className={cn("ml-0.5 inline h-3 w-3", card.delta < 0 && "rotate-90")} /> : null}
+                {card.pending ? "Loading activity…" : card.delta === 0 ? "No change" : `${signed(card.delta)}${card.unit} vs ${model.priorLabel}`}
+                {!card.pending && card.delta !== 0 ? <ArrowUpRight className={cn("ml-0.5 inline h-3 w-3", card.delta < 0 && "rotate-90")} /> : null}
               </p>
             </Link>
           );
@@ -158,12 +159,16 @@ export function AdminDashboard() {
         </AdminSection>
 
         <AdminSection title="Recovery pathways" action={<TextLink href={insightsHref}>View</TextLink>}>
-          <PathwayDonut
-            rows={model.pathways}
-            totalKg={model.recoveredKg}
-            selected={filters.pathway}
-            onSelect={(pathway) => update({ pathway: filters.pathway === pathway ? "all" : pathway })}
-          />
+          {impactLoading ? (
+            <p className="px-3.5 py-8 text-center font-saveful text-sm text-gray-400">Loading activity…</p>
+          ) : (
+            <PathwayDonut
+              rows={model.pathways}
+              totalKg={model.recoveredKg}
+              selected={filters.pathway}
+              onSelect={(pathway) => update({ pathway: filters.pathway === pathway ? "all" : pathway })}
+            />
+          )}
         </AdminSection>
 
         <AdminSection title="Needs attention" action={<TextLink href={`/admin/sites${query}`}>View</TextLink>}>
@@ -173,8 +178,8 @@ export function AdminDashboard() {
                 <Link href={item.href} className="flex items-center justify-between gap-3 px-3.5 py-2 hover:bg-[#FAF7F0]">
                   <span className="min-w-0 truncate font-saveful text-sm text-gray-700">{item.label}</span>
                   <span className="flex shrink-0 items-center gap-1.5">
-                    <span className={cn("font-saveful-semibold text-sm tabular-nums", item.count > 0 ? "text-red-600" : "text-gray-400")}>
-                      {formatCount(item.count)}
+                    <span className={cn("font-saveful-semibold text-sm tabular-nums", !impactLoading && item.count > 0 ? "text-red-600" : "text-gray-400")}>
+                      {impactLoading && item.id !== "activation" && item.id !== "quiet" && item.id !== "config" ? "…" : formatCount(item.count)}
                     </span>
                     <ChevronRight className="h-4 w-4 text-gray-300" />
                   </span>
@@ -188,29 +193,29 @@ export function AdminDashboard() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <AdminSection title="Platform activity" className="xl:col-span-3">
           <div className="grid grid-cols-2 gap-2 p-3 xl:grid-cols-1">
-            <ActivityCell href={`/admin/listings${query}`} icon={List} label="Listings published" value={formatCount(model.operations.listingsPublished)} />
+            <ActivityCell href={`/admin/listings${query}`} icon={List} label="Listings published" value={impactLoading ? "…" : formatCount(model.operations.listingsPublished)} />
             <ActivityCell
               href={`/admin/listings${query}`}
               icon={CheckCircle2}
               label="Claim rate"
-              value={`${model.operations.claimRate}%`}
-              delta={`${signed(model.operations.claimRateDelta)} pp`}
+              value={impactLoading ? "…" : `${model.operations.claimRate}%`}
+              delta={impactLoading ? undefined : `${signed(model.operations.claimRateDelta)} pp`}
               down={model.operations.claimRateDelta < 0}
             />
             <ActivityCell
               href={insightsHref}
               icon={RefreshCw}
               label="Recovery rate"
-              value={`${model.operations.recoveryRate}%`}
-              delta={`${signed(model.operations.recoveryRateDelta)} pp`}
+              value={impactLoading ? "…" : `${model.operations.recoveryRate}%`}
+              delta={impactLoading ? undefined : `${signed(model.operations.recoveryRateDelta)} pp`}
               down={model.operations.recoveryRateDelta < 0}
             />
             <ActivityCell
               href={`/admin/collections${query}`}
               icon={Truck}
               label="Collections completed"
-              value={formatCount(model.operations.collectionsCompleted)}
-              delta={signed(model.operations.collectionsDelta)}
+              value={impactLoading ? "…" : formatCount(model.operations.collectionsCompleted)}
+              delta={impactLoading ? undefined : signed(model.operations.collectionsDelta)}
               down={model.operations.collectionsDelta < 0}
             />
           </div>
@@ -229,6 +234,9 @@ export function AdminDashboard() {
             <TextLink href={insightsHref}>Insights</TextLink>
           </div>
           <div className="h-52 px-2 pb-3 pt-1">
+            {impactLoading ? (
+              <p className="flex h-full items-center justify-center font-saveful text-sm text-gray-400">Loading activity…</p>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={model.series} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid stroke="#EFEDE6" vertical={false} />
@@ -250,6 +258,7 @@ export function AdminDashboard() {
                 <Line type="monotone" dataKey={chartMetric} stroke="#2D5F4F" strokeWidth={2.25} dot={{ r: 3, fill: "#2D5F4F" }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
+            )}
           </div>
         </AdminSection>
 
@@ -281,10 +290,10 @@ export function AdminDashboard() {
                     <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatCount(row.organisations)}</td>
                     <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatCount(row.active)}</td>
                     <td className="whitespace-nowrap px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">
-                      {formatCount(row.listings)} / {formatCount(row.claims)}
+                      {impactLoading ? "…" : `${formatCount(row.listings)} / ${formatCount(row.claims)}`}
                     </td>
-                    <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatCount(row.collections)}</td>
-                    <td className="whitespace-nowrap px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{formatKg(row.recoveredKg)}</td>
+                    <td className="px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{impactLoading ? "…" : formatCount(row.collections)}</td>
+                    <td className="whitespace-nowrap px-3.5 py-2 font-saveful text-sm tabular-nums text-gray-800">{impactLoading ? "…" : formatKg(row.recoveredKg)}</td>
                   </tr>
                 ))}
               </tbody>
