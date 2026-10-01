@@ -4,13 +4,14 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AdminLoginForm } from "@/components/auth/AdminLoginForm";
 import { AuthLoginForm } from "@/components/auth/AuthLoginForm";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { homePath, login, loginAdmin, useSession } from "@/lib/auth";
 import { loginBusiness, useBusinessSession } from "@/lib/businessAuth";
 import type { PortalKind } from "@/types/auth";
 
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<SavefulPageLoader message="Opening sign in…" />}>
       <LoginScreen />
     </Suspense>
   );
@@ -48,7 +49,14 @@ function LoginScreen() {
     }
   }, [business, portal, router, session]);
 
-  if (!portal) return null;
+  const openingWorkspace =
+    (portal === "business" && Boolean(business)) ||
+    (portal === "enterprise" && session?.portal === "enterprise") ||
+    (portal === "admin" && session?.portal === "admin");
+
+  if (!portal || openingWorkspace) {
+    return <SavefulPageLoader message={portal ? "Opening your workspace…" : "Opening sign in…"} />;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#FAF7F0] px-4 py-10">

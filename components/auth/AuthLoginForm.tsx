@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { ApiError, requestPasswordReset, resetPasswordWithOtp } from "@/lib/api";
 import type { LoginFormConfig, LoginCredentials } from "@/types/auth";
 import {
@@ -77,12 +78,15 @@ export function AuthLoginForm({ config }: { config: LoginFormConfig }) {
       await config.onSubmit(credentials);
     } catch (err) {
       setError(toUserFacingAuthError(err));
-    } finally {
       setIsLoading(false);
     }
   };
 
   const resetReady = passwordRules(newPassword).every((rule) => rule.ok);
+
+  if (view === "login" && isLoading && !error) {
+    return <SavefulPageLoader message="Opening your workspace…" />;
+  }
 
   return (
     <LoginCard>

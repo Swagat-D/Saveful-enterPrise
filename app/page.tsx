@@ -1,7 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { homePath, useSession } from "@/lib/auth";
 import { useBusinessSession } from "@/lib/businessAuth";
 
@@ -12,6 +14,22 @@ export default function HomePage() {
   const enterpriseOpen = Boolean(session && session.portal !== "admin");
   const adminOpen = session?.portal === "admin";
   const businessOpen = Boolean(business);
+  const [opening, setOpening] = useState("");
+
+  useEffect(() => {
+    router.prefetch("/login?portal=admin");
+    router.prefetch("/login?portal=enterprise");
+    router.prefetch("/login?portal=business");
+  }, [router]);
+
+  function openPath(href: string, message: string) {
+    setOpening(message);
+    router.push(href);
+  }
+
+  if (opening) {
+    return <SavefulPageLoader message={opening} />;
+  }
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-white px-5 py-8 sm:px-8 sm:py-10 lg:px-12">
@@ -40,20 +58,35 @@ export default function HomePage() {
             audience="For team members of an Enterprise organisation already set up with Saveful."
             detail="Manage sites, users, recovery and organisation-wide impact."
             action={enterpriseOpen ? "Continue →" : "Enterprise sign in →"}
-            onClick={() => router.push(enterpriseOpen ? homePath(session) : "/login?portal=enterprise")}
+            onClick={() =>
+              openPath(
+                enterpriseOpen && session ? homePath(session) : "/login?portal=enterprise",
+                enterpriseOpen ? "Opening your workspace…" : "Opening sign in…",
+              )
+            }
           />
           <WorkspaceCard
             title="Have surplus food?"
             audience="For businesses and organisations with surplus food to put to good use."
             detail="List surplus, manage collections and track your impact."
             action={businessOpen ? "Continue →" : "Sign in or get started →"}
-            onClick={() => router.push(businessOpen ? "/business/home" : "/login?portal=business")}
+            onClick={() =>
+              openPath(
+                businessOpen ? "/business/home" : "/login?portal=business",
+                businessOpen ? "Opening your workspace…" : "Opening sign in…",
+              )
+            }
           />
         </div>
 
         <button
           type="button"
-          onClick={() => router.push(adminOpen ? "/admin/dashboard" : "/login?portal=admin")}
+          onClick={() =>
+            openPath(
+              adminOpen ? "/admin/dashboard" : "/login?portal=admin",
+              adminOpen ? "Opening your workspace…" : "Opening sign in…",
+            )
+          }
           className="mt-8 font-saveful-semibold text-sm text-saveful-green underline-offset-4 transition hover:text-[#1f4438] hover:underline sm:text-base"
         >
           {adminOpen ? "Continue to admin →" : "Saveful team member? Admin Sign in →"}

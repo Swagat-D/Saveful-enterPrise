@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import type { AdminLoginCredentials } from "@/types/auth";
 import { LoginBanner, LoginBrand, LoginCard, LoginField, LoginFooter, LoginSubmit, LoginTextLink } from "./loginChrome";
 
@@ -17,6 +18,10 @@ export function AdminLoginForm({
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  if (isLoading && !error) {
+    return <SavefulPageLoader message="Opening your workspace…" />;
+  }
 
   return (
     <LoginCard>
@@ -39,7 +44,6 @@ export function AdminLoginForm({
             await onSubmit({ email, password });
           } catch (err) {
             setError(err instanceof Error ? err.message : "Login failed");
-          } finally {
             setIsLoading(false);
           }
         }}
