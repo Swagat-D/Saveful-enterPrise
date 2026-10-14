@@ -6,6 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, FilterSelect, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { AdminCollectionPanel, AdminListingPanel, collectionChipStatus, listingChipStatus } from "@/components/admin/AdminRecordPanels";
 import {
+  adminImpactLoading,
   collectionKg,
   EMPTY_ADMIN_FILTERS,
   filteredCollections,
@@ -72,23 +73,57 @@ function listingDisplayStatus(row: AdminListing, collectedKg: number) {
   return listingChipStatus(row);
 }
 
+const LISTED_AT = new Intl.DateTimeFormat("en-AU", {
+  timeZone: "Australia/Sydney",
+  day: "2-digit",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function formatListedAt(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : LISTED_AT.format(date);
+}
+
 export function AdminListings() {
   useAdminVersion();
   const { filters, update, reset, query } = useAdminFilters();
   const [status, setStatus] = useState<ListingStatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const loading = adminImpactLoading();
   const periodRows = filteredListings(filters);
   const collectedKg = collectedKgByListing(filters);
+  const statusOf = (row: AdminListing) => listingDisplayStatus(row, collectedKg.get(row.id) ?? 0);
   const rows = status === "COLLECTED" ? listingsCollectedInPeriod(periodRows, collectedKg) : periodRows;
-  const visible = rows.filter((row) => status === "all" || listingDisplayStatus(row, collectedKg.get(row.id) ?? 0) === status);
+  const term = search.trim().toLowerCase();
+  const visible = rows
+    .filter((row) => status === "all" || statusOf(row) === status)
+    .filter((row) => {
+      if (!term) return true;
+      const orgName = getOrganisation(row.orgId)?.name ?? row.orgName ?? "";
+      const siteName = getSite(row.siteId)?.name ?? row.siteName ?? "";
+      return [row.code, row.food, orgName, siteName].some((value) => value.toLowerCase().includes(term));
+    })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const counts = { all: periodRows.length, ACTIVE: 0, CLAIMED: 0, COLLECTED: 0, EXPIRED: 0, CANCELLED: 0 };
+  let listedKg = 0;
+  for (const row of periodRows) {
+    counts[statusOf(row) as keyof typeof counts] += 1;
+    listedKg += row.quantityKg;
+  }
+  const totalCollectedKg = [...collectedKg.values()].reduce((sum, kg) => sum + kg, 0);
   const visibleCollectedKg = visible.reduce((sum, row) => sum + (collectedKg.get(row.id) ?? 0), 0);
   return (
     <AdminPage
       crumb={[{ href: `/admin/dashboard${query}`, label: "Dashboard" }]}
       title="Listings"
       hint={
-        status === "COLLECTED"
-          ? `${visible.length} listings collected ${formatKg(visibleCollectedKg)} in the selected period.`
-          : `${periodRows.length} listings in the selected period. ${formatKg([...collectedKg.values()].reduce((sum, kg) => sum + kg, 0))} collected.`
+        loading && periodRows.length === 0
+          ? "Loading listings…"
+          : status === "COLLECTED"
+            ? `${visible.length} listings collected ${formatKg(visibleCollectedKg)} in the selected period.`
+            : `${periodRows.length} listings · ${formatKg(listedKg)} listed · ${formatKg(totalCollectedKg)} collected in the selected period.`
       }
     >
       <AdminFiltersBar
@@ -96,9 +131,10 @@ export function AdminListings() {
         onChange={update}
         onReset={() => {
           setStatus("all");
+          setSearch("");
           reset();
         }}
-        extraActive={status !== "all"}
+        extraActive={status !== "all" || Boolean(term)}
         extra={
           <FilterSelect
             compact
@@ -109,7 +145,32 @@ export function AdminListings() {
           />
         }
       />
-      <PagedTable noun="listings" rows={visible} columns={["Listing", "Organisation", "Site", "Pathway", "Kg", "Status"]}>
+      <AdminSection title="Listing snapshot" action={<span className="font-saveful text-[11px] text-gray-400">Click a tile to filter</span>}>
+        <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-3 xl:grid-cols-6">
+          {LISTING_STATUSES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setStatus(option.id)}
+              className={cn("bg-white px-3 py-3 text-left transition hover:bg-[#FAF7F0]", status === option.id && "bg-saveful-green/[0.04]")}
+            >
+              <p className="font-saveful-bold text-[1.05rem] tabular-nums leading-none text-gray-900">{counts[option.id]}</p>
+              <p className="mt-1.5 font-saveful text-[11px] text-gray-500">{option.id === "all" ? "All listings" : option.name}</p>
+            </button>
+          ))}
+        </div>
+      </AdminSection>
+      <input
+        type="search"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search by listing code, food, organisation or site"
+        className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 font-saveful text-sm text-gray-800 placeholder:text-gray-400 focus:border-saveful-green focus:outline-none"
+      />
+      {loading && visible.length === 0 ? (
+        <p className="py-10 text-center font-saveful text-sm text-gray-500">Loading listings…</p>
+      ) : null}
+      <PagedTable noun="listings" rows={visible} columns={["Listing", "Listed", "Organisation", "Site", "Pathway", "Kg", "Status"]}>
         {(row) => {
           const orgName = getOrganisation(row.orgId)?.name ?? row.orgName;
           const siteName = getSite(row.siteId)?.name ?? row.siteName;
@@ -122,6 +183,7 @@ export function AdminListings() {
                 </Link>
                 <p className="font-saveful text-[11px] text-gray-400">{row.food}</p>
               </td>
+              <td className="whitespace-nowrap px-3 py-3 font-saveful text-sm tabular-nums text-gray-700">{formatListedAt(row.createdAt)}</td>
               <td className="px-3 py-3">
                 {orgName ? (
                   <Link href={`/admin/organisations/${row.orgId}${query}`} className="font-saveful text-sm text-saveful-green hover:underline">

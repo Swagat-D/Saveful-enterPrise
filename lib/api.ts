@@ -852,6 +852,49 @@ export function getAdminDashboardSummary(params: URLSearchParams) {
   });
 }
 
+type AdminConnectionParty = { orgId: number; orgName: string; siteId: number; siteName: string };
+type AdminConnectionPerson = { name: string; email: string } | null;
+
+export type AdminConnectionRow = {
+  id: number;
+  status: "PENDING" | "ACTIVE" | "PAUSED" | "DECLINED" | "EXPIRED" | "ENDED" | string;
+  createdAt: string;
+  respondedAt: string | null;
+  invitationExpiresAt: string | null;
+  endedAt: string | null;
+  donor: AdminConnectionParty;
+  receiver: AdminConnectionParty;
+  invitedBy: AdminConnectionPerson;
+  respondedBy: AdminConnectionPerson;
+  endedBy: AdminConnectionPerson;
+  daysOfWeek: number[];
+  windowStartMinutes: number;
+  windowEndMinutes: number;
+  typicalSurplus: string | null;
+  typicalQuantity: string | null;
+  listings: number;
+  pickups: number;
+  collectedKg: number;
+  days: { scheduled: number; collected: number; released: number; noFood: number; missed: number; open: number };
+};
+
+export type AdminConnectionImpact = { listings: number; listedKg: number; pickups: number; collectedKg: number };
+
+export type AdminConnectionsSummary = {
+  from: string | null;
+  to: string;
+  impact: { connection: AdminConnectionImpact; oneOff: AdminConnectionImpact };
+  connections: AdminConnectionRow[];
+};
+
+export function getAdminConnectionsSummary(params: URLSearchParams) {
+  const query = params.toString();
+  return apiFetch<AdminConnectionsSummary>(`/admin/enterprise/connections${query ? `?${query}` : ""}`, {
+    auth: true,
+    timeoutMs: 20000,
+  });
+}
+
 export type EnterpriseMember = {
   id: number;
   firstName: string;

@@ -2777,6 +2777,7 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30", bounds
             harbour.collectionInstructions ||
             "Ask for the kitchen manager on arrival. Historical recovery records stay unchanged if this site is reassigned.",
           phone: harbour.mobile && harbour.mobile !== "-" ? harbour.mobile : "",
+          email: harbour.email || "",
         }
       : {
           primaryContact:
@@ -2795,6 +2796,10 @@ export function buildSiteDetail(siteId: string, period: PeriodKey = "30", bounds
               : "—",
           collectionInstructions: site.collectionInstructions?.trim() || "—",
           phone: site.managerPhone || "",
+          email:
+            site.contactEmail ||
+            listOrgUsers(org.id).find((row) => isAssignedSiteAdmin(row, site.id))?.email ||
+            "",
         },
   };
 }

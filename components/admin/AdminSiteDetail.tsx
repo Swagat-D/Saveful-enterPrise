@@ -309,6 +309,18 @@ function OverviewTab({
     { label: "Availability", value: ops.collectionHours },
     { label: "Instructions", value: ops.collectionInstructions },
     ...(ops.phone ? [{ label: "Phone", value: ops.phone }] : []),
+    ...(ops.email
+      ? [
+          {
+            label: "Email",
+            value: (
+              <a href={`mailto:${ops.email}`} className="break-all text-saveful-green hover:underline">
+                {ops.email}
+              </a>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
