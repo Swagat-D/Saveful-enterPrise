@@ -10,10 +10,10 @@ import { roleHas, type RolePermissionId } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 export const SETTINGS_TABS: { href: string; label: string; permission: RolePermissionId }[] = [
-  { href: "/settings/profile", label: "Organisation Profile", permission: "manageSettings" },
+  { href: "/settings/profile", label: "Organisation Profile", permission: "viewSettings" },
   { href: "/settings/structure", label: "Organisation Structure", permission: "viewStructure" },
-  { href: "/settings/roles", label: "Roles & Permissions", permission: "manageSettings" },
-  { href: "/settings/notifications", label: "Notifications", permission: "manageSettings" },
+  { href: "/settings/roles", label: "Roles & Permissions", permission: "viewSettings" },
+  { href: "/settings/notifications", label: "Notifications", permission: "viewSettings" },
 ];
 
 export function SettingsWorkspace({
