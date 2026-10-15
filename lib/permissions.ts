@@ -13,6 +13,7 @@ export const ROLE_PERMISSIONS = [
   { id: "manageUsers", label: "Manage Users & Access" },
   { id: "viewStructure", label: "View Organisation Structure" },
   { id: "manageStructure", label: "Manage Organisation Structure" },
+  { id: "viewSettings", label: "View Enterprise Settings" },
   { id: "manageSettings", label: "Manage Enterprise Settings" },
   { id: "viewAudit", label: "View Audit Log" },
 ] as const;
@@ -35,6 +36,7 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
     manageUsers: false,
     viewStructure: true,
     manageStructure: false,
+    viewSettings: true,
     manageSettings: false,
     viewAudit: true,
   },
@@ -50,6 +52,7 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
     manageUsers: true,
     viewStructure: false,
     manageStructure: false,
+    viewSettings: false,
     manageSettings: false,
     viewAudit: false,
   },
@@ -65,6 +68,7 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
     manageUsers: false,
     viewStructure: false,
     manageStructure: false,
+    viewSettings: false,
     manageSettings: false,
     viewAudit: false,
   },
@@ -80,6 +84,7 @@ const ROLE_CAPS: Record<EnterpriseRole, Record<RolePermissionId, boolean>> = {
     manageUsers: false,
     viewStructure: false,
     manageStructure: false,
+    viewSettings: false,
     manageSettings: false,
     viewAudit: false,
   },
@@ -146,7 +151,7 @@ export function userPermissions(user: SessionUser | null) {
 
 export function organisationPermissions(user: SessionUser | null) {
   return {
-    view: roleHas(user, "manageSettings"),
+    view: roleHas(user, "viewSettings"),
     edit: roleHas(user, "manageSettings"),
   };
 }

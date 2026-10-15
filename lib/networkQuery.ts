@@ -345,7 +345,7 @@ export function buildDashboardModel(filters: NetworkFilters, scope: AccessScope)
     pathways: recoveryPathways(currentRows),
     network: networkHealth(sites, filters),
     attention: needsAttention(sites, filters),
-    series: impactOverTime(currentRows, filters.period),
+    series: impactOverTime(currentRows, filters.period, undefined, { from: filters.from, to: filters.to }),
     groups: performanceByGroup(currentRows, sites, previousRows, filters.period),
   };
 }

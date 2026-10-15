@@ -5,7 +5,7 @@ import { NotificationsSettings } from "@/components/settings/NotificationsSettin
 
 export default function NotificationsSettingsPage() {
   return (
-    <RequireCapability permission="manageSettings">
+    <RequireCapability permission="viewSettings">
       <NotificationsSettings />
     </RequireCapability>
   );

@@ -7,7 +7,7 @@ import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
 export default function RolesPermissionsPage() {
   return (
-    <RequireCapability permission="manageSettings">
+    <RequireCapability permission="viewSettings">
       <Suspense fallback={<SavefulPageLoader message="Loading roles…" />}>
         <RolesPermissions />
       </Suspense>

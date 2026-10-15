@@ -30,14 +30,14 @@ export function addDays(date: Date, days: number) {
   return next;
 }
 
-export function rollingRange(days: number, today: Date = DEMO_TODAY) {
+export function rollingRange(days: number, today: Date = liveToday()) {
   return {
     startDate: toApiDate(addDays(today, -(Math.max(1, days) - 1))),
     endDate: toApiDate(today),
   };
 }
 
-export function daysBetween(iso: string, today: Date = DEMO_TODAY) {
+export function daysBetween(iso: string, today: Date = liveToday()) {
   const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
   const start = Date.UTC(year, (month || 1) - 1, day || 1);
   const end = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
@@ -78,7 +78,7 @@ function normalizeRange(from?: string, to?: string) {
   return { startDate: from, endDate: to };
 }
 
-export function periodRange(period: PeriodKey, today: Date = DEMO_TODAY, bounds?: PeriodBounds) {
+export function periodRange(period: PeriodKey, today: Date = liveToday(), bounds?: PeriodBounds) {
   if (period === "custom") {
     return normalizeRange(bounds?.from, bounds?.to || toApiDate(today));
   }
@@ -95,7 +95,7 @@ export function rangeForFilters(
   return periodRange(filters.period, today, { from: filters.from, to: filters.to });
 }
 
-export function previousPeriodRange(period: PeriodKey, today: Date = DEMO_TODAY, bounds?: PeriodBounds) {
+export function previousPeriodRange(period: PeriodKey, today: Date = liveToday(), bounds?: PeriodBounds) {
   if (period === "custom") {
     const current = periodRange("custom", today, bounds);
     if (!current.startDate || !current.endDate) {

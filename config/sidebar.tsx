@@ -73,7 +73,7 @@ export const getEnterpriseSidebarLinks = (user: SessionUser | null = null): Side
   }
 
   const settingsChildren: SidebarLink[] = [
-    roleHas(user, "manageSettings") && {
+    roleHas(user, "viewSettings") && {
       label: "Organisation Profile",
       href: "/settings/profile",
       icon: <Building2 className={childIconClass} />,
@@ -83,13 +83,13 @@ export const getEnterpriseSidebarLinks = (user: SessionUser | null = null): Side
       href: "/settings/structure",
       icon: <Network className={childIconClass} />,
     },
-    roleHas(user, "manageSettings") && {
+    roleHas(user, "viewSettings") && {
       label: "Roles & Permissions",
       href: "/settings/roles",
       icon: <Shield className={childIconClass} />,
     },
-    roleHas(user, "manageSettings") && {
-    label: "Notifications",
+    roleHas(user, "viewSettings") && {
+      label: "Notifications",
       href: "/settings/notifications",
       icon: <Bell className={childIconClass} />,
     },

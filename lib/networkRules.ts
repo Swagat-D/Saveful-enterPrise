@@ -1,4 +1,4 @@
-import { daysBetween, DEMO_TODAY, inDateRange, liveToday, periodRange, rollingRange, type PeriodBounds } from "@/lib/dates";
+import { daysBetween, inDateRange, liveToday, periodRange, rollingRange, type PeriodBounds } from "@/lib/dates";
 import { getNotificationSettings } from "@/lib/notificationSettings";
 import type {
   ActivityStatus,
@@ -77,7 +77,7 @@ export function neverActivatedPastGrace(site: OrganizationSite, days: number) {
 export function activityStatus(
   site: OrganizationSite,
   period: PeriodKey,
-  today: Date = DEMO_TODAY,
+  today: Date = liveToday(),
   bounds?: PeriodBounds,
 ): ActivityStatus {
   if (!isActivated(site)) return "never_activated";

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Activity, FileText, Info, Users } from "lucide-react";
 import { SettingsWorkspace } from "@/components/settings/SettingsWorkspace";
 import { useSession } from "@/lib/auth";
+import { roleHas } from "@/lib/permissions";
 import {
   RENOTIFY_AFTER_DAYS,
   THRESHOLD_DAYS,
@@ -47,6 +48,7 @@ export function NotificationsSettings() {
 function NotificationsSettingsForm() {
   useNotificationSettingsVersion();
   const user = useSession();
+  const readOnly = !roleHas(user, "manageSettings");
   const saved = getNotificationSettings();
   const [draft, setDraft] = useState<NotificationSettings>(saved);
   const [notice, setNotice] = useState("");
@@ -69,6 +71,11 @@ function NotificationsSettingsForm() {
 
   return (
     <>
+      {readOnly ? (
+        <p className="rounded-lg border border-gray-200 bg-[#F7F6F2] px-3 py-2 font-saveful text-xs text-gray-600">
+          You have view-only access. An Enterprise Super Admin can change these settings.
+        </p>
+      ) : null}
       <div className="space-y-4">
         <Card
           icon={<Activity className="h-4 w-4" />}
@@ -79,6 +86,7 @@ function NotificationsSettingsForm() {
             label="No recent activity"
             description="Alert when a site has had no Saveful activity for:"
             setting={draft.noRecentActivity}
+            readOnly={readOnly}
             required={platformRuleRequired("noRecentActivity")}
             onChange={(noRecentActivity) => update({ ...draft, noRecentActivity })}
           />
@@ -86,6 +94,7 @@ function NotificationsSettingsForm() {
             label="Never activated"
             description="Alert when a new site has not activated within:"
             setting={draft.neverActivated}
+            readOnly={readOnly}
             required={platformRuleRequired("neverActivated")}
             onChange={(neverActivated) => update({ ...draft, neverActivated })}
           />
@@ -93,6 +102,7 @@ function NotificationsSettingsForm() {
             label="No listings"
             description="Alert when a site has created no listings for:"
             setting={draft.noListings}
+            readOnly={readOnly}
             required={platformRuleRequired("noListings")}
             onChange={(noListings) => update({ ...draft, noListings })}
           />
@@ -107,6 +117,7 @@ function NotificationsSettingsForm() {
             label="Report ready"
             description="Notify the user when a report they generated is ready."
             checked={draft.reportReady}
+            readOnly={readOnly}
             required={platformRuleRequired("reportReady")}
             onChange={(reportReady) => update({ ...draft, reportReady })}
           />
@@ -121,6 +132,7 @@ function NotificationsSettingsForm() {
             label="New user activated"
             description="Notify when an invited Enterprise user activates their account."
             checked={draft.userActivated}
+            readOnly={readOnly}
             required={platformRuleRequired("userActivated")}
             onChange={(userActivated) => update({ ...draft, userActivated })}
           />
@@ -128,6 +140,7 @@ function NotificationsSettingsForm() {
             label="User access changed"
             description="Notify when a user's role or scope is changed."
             checked={draft.accessChanged}
+            readOnly={readOnly}
             required={platformRuleRequired("accessChanged")}
             onChange={(accessChanged) => update({ ...draft, accessChanged })}
           />
@@ -139,23 +152,25 @@ function NotificationsSettingsForm() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        {notice ? <p className="mr-auto font-saveful text-xs text-saveful-green">{notice}</p> : null}
-        <button
-          type="button"
-          onClick={cancel}
-          className="inline-flex h-9 items-center rounded-lg border border-black/[0.06] px-3.5 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={save}
-          className="inline-flex h-9 items-center rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
-        >
-          Save changes
-        </button>
-      </div>
+      {readOnly ? null : (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {notice ? <p className="mr-auto font-saveful text-xs text-saveful-green">{notice}</p> : null}
+          <button
+            type="button"
+            onClick={cancel}
+            className="inline-flex h-9 items-center rounded-lg border border-black/[0.06] px-3.5 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            className="inline-flex h-9 items-center rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
+          >
+            Save changes
+          </button>
+        </div>
+      )}
     </>
   );
 }
@@ -192,12 +207,14 @@ function AlertRow({
   description,
   setting,
   required,
+  readOnly,
   onChange,
 }: {
   label: string;
   description: string;
   setting: SiteAlertSetting;
   required?: boolean;
+  readOnly?: boolean;
   onChange: (next: SiteAlertSetting) => void;
 }) {
   return (
@@ -211,7 +228,7 @@ function AlertRow({
           <p className="font-saveful text-xs text-gray-500">{description}</p>
           <select
             value={setting.days}
-            disabled={!setting.enabled}
+            disabled={!setting.enabled || readOnly}
             onChange={(event) => onChange({ ...setting, days: Number(event.target.value) as ThresholdDays })}
             className={selectClass}
           >
@@ -223,7 +240,7 @@ function AlertRow({
           </select>
         </div>
       </div>
-      <Toggle checked={setting.enabled} disabled={required} onChange={(enabled) => onChange({ ...setting, enabled })} />
+      <Toggle checked={setting.enabled} disabled={required || readOnly} onChange={(enabled) => onChange({ ...setting, enabled })} />
     </div>
   );
 }
@@ -233,12 +250,14 @@ function ToggleRow({
   description,
   checked,
   required,
+  readOnly,
   onChange,
 }: {
   label: string;
   description: string;
   checked: boolean;
   required?: boolean;
+  readOnly?: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
@@ -250,7 +269,7 @@ function ToggleRow({
         </p>
         <p className="mt-0.5 font-saveful text-xs text-gray-500">{description}</p>
       </div>
-      <Toggle checked={checked} disabled={required} onChange={onChange} />
+      <Toggle checked={checked} disabled={required || readOnly} onChange={onChange} />
     </div>
   );
 }
