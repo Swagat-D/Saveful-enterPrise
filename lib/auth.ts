@@ -23,7 +23,7 @@ import {
 import type { AdminLoginCredentials, LoginCredentials, PortalKind, UserRole } from "@/types/auth";
 import type { AccessScope, EnterpriseRole } from "@/types/enterprise";
 import { accessScopeFromUserScope, mapEnterpriseRole, scopeFromApi } from "@/lib/enterpriseRole";
-import { roleAllowsEnterprise } from "@/lib/users";
+import { isEnterpriseWideRole } from "@/lib/users";
 
 function isEnterpriseAccount(input: {
   enterpriseRole?: string | null;
@@ -176,7 +176,7 @@ export async function login(credentials: LoginCredentials) {
       role: ROLE,
       portal: "enterprise",
       enterpriseRole,
-      isHeadAdmin: roleAllowsEnterprise(enterpriseRole),
+      isHeadAdmin: isEnterpriseWideRole(enterpriseRole),
       scope: await resolveEnterpriseScope(
         String(data.user.id),
         data.user.email,

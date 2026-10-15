@@ -11,7 +11,7 @@ export default function UserDetailPage({
 }) {
   const { id } = use(params);
   return (
-    <RequireCapability permission="manageUsers">
+    <RequireCapability permission="viewUsers">
       <UserWorkspace userId={id} />
     </RequireCapability>
   );

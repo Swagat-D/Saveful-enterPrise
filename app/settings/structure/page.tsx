@@ -7,7 +7,7 @@ import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
 export default function OrganisationStructurePage() {
   return (
-    <RequireCapability permission="manageStructure">
+    <RequireCapability permission="viewStructure">
       <Suspense fallback={<SavefulPageLoader message="Loading structure…" />}>
         <OrganisationStructure />
       </Suspense>

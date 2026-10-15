@@ -50,7 +50,7 @@ export const getEnterpriseSidebarLinks = (user: SessionUser | null = null): Side
       icon: <Building2 className={iconClass} />,
     });
   }
-  if (roleHas(user, "manageUsers")) {
+  if (roleHas(user, "viewUsers")) {
     links.push({
       label: "Users & Access",
       href: "/users",
@@ -78,7 +78,7 @@ export const getEnterpriseSidebarLinks = (user: SessionUser | null = null): Side
       href: "/settings/profile",
       icon: <Building2 className={childIconClass} />,
     },
-    roleHas(user, "manageStructure") && {
+    roleHas(user, "viewStructure") && {
       label: "Organisation Structure",
       href: "/settings/structure",
       icon: <Network className={childIconClass} />,

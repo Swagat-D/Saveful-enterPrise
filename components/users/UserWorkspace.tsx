@@ -14,13 +14,12 @@ import {
   accessSummaryText,
   assignableRoles,
   assignableUnits,
-  canAssignEnterprise,
   describeAccessChange,
   emptyScope,
   formatInviteSent,
   getUser,
   resendInvitation,
-  roleAllowsEnterprise,
+  isEnterpriseWideRole,
   roleDescription,
   roleLabel,
   saveUser,
@@ -51,8 +50,6 @@ export function UserWorkspace({
   const units = assignableUnits();
   const actorRole: EnterpriseRole = sessionRole(session) ?? "group_admin";
   const roles = assignableRoles(actorRole);
-  const adminCanEnterprise = canAssignEnterprise(actorRole);
-
   const initialScope = useMemo<UserAccessScope>(() => {
     if (existing) return { ...emptyScope(), ...existing.scope, enterprise: Boolean(existing.scope.enterprise) };
     if (presetSiteId) return { ...emptyScope(), siteIds: [presetSiteId] };
@@ -92,19 +89,13 @@ export function UserWorkspace({
 
   const canEdit = creating ? permissions.add : permissions.edit;
   const selectedRole = role ? ENTERPRISE_ROLES.find((item) => item.id === role) : null;
-  const enterpriseAllowed = Boolean(role && roleAllowsEnterprise(role) && adminCanEnterprise);
-  const entireEnterprise = Boolean(role === "enterprise_super_admin" || (enterpriseAllowed && scope.enterprise));
+  const entireEnterprise = Boolean(role && isEnterpriseWideRole(role));
   const chips = scopeChips(scope);
 
   const applyRole = (next: EnterpriseRole | "") => {
     setRole(next);
-    if (next === "enterprise_super_admin") {
-      setScope({ enterprise: true });
-      return;
-    }
-    if (next && !roleAllowsEnterprise(next)) {
-      setScope((prev) => ({ ...prev, enterprise: false }));
-    }
+    setOpenScope(null);
+    setScope((prev) => (next && isEnterpriseWideRole(next) ? { enterprise: true } : { ...prev, enterprise: false }));
   };
 
   const toggle = (kind: ScopeChipKind, id: string) => {
@@ -121,7 +112,6 @@ export function UserWorkspace({
 
   const resolvedScope = (): UserAccessScope => {
     if (!role) return scope;
-    if (role === "enterprise_super_admin") return { enterprise: true };
     if (entireEnterprise) return { enterprise: true };
     return { ...scope, enterprise: false };
   };
@@ -182,14 +172,16 @@ export function UserWorkspace({
           <header className="border-b border-gray-100 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-saveful-bold text-xl leading-none text-gray-900 sm:text-2xl">
-                {creating ? "Add user" : "Edit user"}
+                {creating ? "Add user" : canEdit ? "Edit user" : "User details"}
               </h1>
               {existing ? <StatusPill status={existing.status} /> : null}
             </div>
             <p className="mt-1.5 font-saveful text-xs text-gray-500">
               {creating
                 ? "Invite a user and define their access to your Enterprise. They create their own password."
-                : "Update this person’s details, role, and access scope."}
+                : canEdit
+                  ? "Update this person’s details, role, and access scope."
+                  : "This person’s details, role, and access scope. Your role is view only."}
             </p>
             {existing?.status === "invited" ? (
               <p className="mt-2 font-saveful text-xs text-amber-700">{formatInviteSent(existing.invitedAt)}</p>
@@ -278,23 +270,20 @@ export function UserWorkspace({
                   title="Entire Enterprise"
                   hint="All groups, territories, clusters and sites"
                   selected={entireEnterprise}
-                  disabled={!canEdit || !enterpriseAllowed}
-                  onSelect={() => {
-                    setOpenScope(null);
-                    setScope({ enterprise: true });
-                  }}
+                  disabled={!entireEnterprise}
                 />
                 <ScopeModeCard
                   title="Selected areas"
                   hint="Choose one or more specific areas"
                   selected={!entireEnterprise}
-                  disabled={!canEdit || role === "enterprise_super_admin"}
-                  onSelect={() => setScope((prev) => ({ ...prev, enterprise: false }))}
+                  disabled={entireEnterprise}
                 />
               </div>
-              {!enterpriseAllowed && role ? (
+              {role ? (
                 <p className="mt-2 font-saveful text-xs text-gray-500">
-                  Entire Enterprise is not available for {roleLabel(role)}.
+                  {entireEnterprise
+                    ? `${roleLabel(role)} always covers the entire Enterprise.`
+                    : `Entire Enterprise is not available for ${roleLabel(role)}.`}
                 </p>
               ) : null}
 
@@ -414,7 +403,7 @@ export function UserWorkspace({
                 href="/users"
                 className="inline-flex h-10 items-center rounded-xl border border-black/[0.06] px-4 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]"
               >
-                Cancel
+                {canEdit ? "Cancel" : "Back"}
               </Link>
               {canEdit ? (
                 <button
@@ -522,7 +511,7 @@ function ScopeModeCard({
   hint: string;
   selected: boolean;
   disabled?: boolean;
-  onSelect: () => void;
+  onSelect?: () => void;
 }) {
   return (
     <button

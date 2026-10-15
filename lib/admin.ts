@@ -918,7 +918,7 @@ function mapOrgUser(
   const clusterIds = scopeIdsOf(scopes, "CLUSTER");
   const enterpriseWide =
     scopes.some((scope) => (scope.scopeType ?? "").toUpperCase() === "ENTERPRISE") ||
-    /super admin|enterprise admin|reporting user/i.test(row.roleLabel || row.role);
+    /super admin|enterprise admin/i.test(row.roleLabel || row.role);
   return {
     id: String(row.id),
     orgId,
@@ -2262,7 +2262,7 @@ export function isEnterpriseWideUser(user: AdminOrgUser) {
   if (user.siteIds?.length || user.groupIds?.length || user.territoryIds?.length || user.clusterIds?.length) {
     return false;
   }
-  return Boolean(user.enterpriseWide) || /super admin|enterprise admin|reporting user/i.test(user.role);
+  return Boolean(user.enterpriseWide) || /super admin|enterprise admin/i.test(user.role);
 }
 
 export function assignedSitesForUser(user: AdminOrgUser): AdminSite[] {

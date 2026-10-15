@@ -35,18 +35,13 @@ export const ENTERPRISE_ROLES: { id: EnterpriseRole; label: string; description:
   },
   {
     id: "enterprise_admin",
-    label: "Enterprise Admin",
-    description: "Administration across the entire Enterprise, subject to the permissions defined for this role.",
+    label: "Enterprise Admin (View only)",
+    description: "View everything across the Enterprise — dashboard, all sites, activity, insights and reports. Cannot add, edit or change anything.",
   },
   {
     id: "group_admin",
     label: "Group Admin",
     description: "Administration within assigned Scope, which may include one or more Groups, Territories and/or Clusters.",
-  },
-  {
-    id: "reporting",
-    label: "Reporting User",
-    description: "Reporting and visibility within assigned Scope.",
   },
   {
     id: "site_admin",
@@ -61,7 +56,6 @@ const ROLE_RANK: Record<EnterpriseRole, number> = {
   group_admin: 3,
   site_admin: 2,
   site_user: 1,
-  reporting: 1,
 };
 
 export const SCOPE_FILTERS = [
@@ -163,12 +157,9 @@ export function assignableRoles(actorRole: EnterpriseRole = "enterprise_super_ad
   return ENTERPRISE_ROLES.filter((role) => ROLE_RANK[role.id] <= rank).map((role) => role.id);
 }
 
-export function roleAllowsEnterprise(role: EnterpriseRole) {
+/** These roles always cover the entire Enterprise; they never take a scope. */
+export function isEnterpriseWideRole(role: EnterpriseRole) {
   return role === "enterprise_super_admin" || role === "enterprise_admin";
-}
-
-export function canAssignEnterprise(actorRole: EnterpriseRole = "enterprise_super_admin") {
-  return roleAllowsEnterprise(actorRole);
 }
 
 export type ScopeChip = {
@@ -514,11 +505,8 @@ export async function saveUser(
   if (!lastName) return { ok: false as const, error: "Please enter a last name." };
   if (!email) return { ok: false as const, error: "Please enter an email." };
   if (!uniqueEmail(email, existingId)) return { ok: false as const, error: "A user with this email already exists." };
-  const scope = draft.role === "enterprise_super_admin" ? { enterprise: true } : draft.scope;
-  if (draft.role === "enterprise_super_admin" && !scope.enterprise) {
-    return { ok: false as const, error: "Enterprise Super Admin must have Entire Enterprise scope." };
-  }
-  if (!roleAllowsEnterprise(draft.role) && scope.enterprise) {
+  const scope = isEnterpriseWideRole(draft.role) ? { enterprise: true } : draft.scope;
+  if (!isEnterpriseWideRole(draft.role) && scope.enterprise) {
     return { ok: false as const, error: "This role cannot have Entire Enterprise scope." };
   }
   if (!hasScope(scope)) return { ok: false as const, error: "Assign at least one Group, Territory, Cluster or Site." };
@@ -533,7 +521,7 @@ export async function saveUser(
         mobile,
         role: toApiRole(draft.role),
       });
-      if (!roleAllowsEnterprise(draft.role)) {
+      if (!isEnterpriseWideRole(draft.role)) {
         await setEnterpriseUserScopes(memberId, scopesToApi(scope));
       }
       applyLocalUserUpdate(existingId, { firstName, lastName, name, email, mobile, role: draft.role, scope }, actor);

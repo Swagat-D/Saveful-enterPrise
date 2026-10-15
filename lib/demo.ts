@@ -32,44 +32,6 @@ export const demoUsers: {
   status: "Active" | "Invited";
 }[] = [];
 
-export const demoRoles = [
-  {
-    id: "super",
-    name: "Enterprise Super Admin",
-    description: "What they can do: full administration and reporting across the Enterprise.",
-    users: 1,
-    permissions: ["Entire Enterprise", "Users", "Settings", "Reports", "Listings"],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise Admin",
-    description: "What they can do: manage sites, users, and settings across the Enterprise or selected areas.",
-    users: 1,
-    permissions: ["Enterprise or selected scope", "Users", "Settings", "Reports"],
-  },
-  {
-    id: "group",
-    name: "Group Admin",
-    description: "What they can do: administer users and sites inside assigned groups.",
-    users: 2,
-    permissions: ["Assigned groups", "Local users", "Site setup", "Reports"],
-  },
-  {
-    id: "reporting",
-    name: "Reporting User",
-    description: "What they can do: view reports for an assigned Group, Territory, Cluster or Site.",
-    users: 2,
-    permissions: ["Assigned scope", "Reports"],
-  },
-  {
-    id: "site",
-    name: "Site Admin",
-    description: "What they can do: run assigned sites, listings, and local access.",
-    users: 5,
-    permissions: ["Assigned sites", "Local users", "Listings", "Site reports"],
-  },
-];
-
 export const demoActivity: {
   id: string;
   time: string;

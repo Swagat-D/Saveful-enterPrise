@@ -525,7 +525,7 @@ function RowMenu({
                   router.push(`/users/${user.id}`);
                 }}
               >
-                View / Edit
+                {permissions.edit ? "View / Edit" : "View"}
               </button>
               {permissions.resend && user.status === "invited" ? (
                 <button

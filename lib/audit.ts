@@ -141,7 +141,7 @@ function buildDemoAuditLog(): AuditEntry[] {
     row(9, "10:02", "Alex Morgan", "Site updated", "sites", "Surry Hills Kitchen", "Collection window was changed for Surry Hills Kitchen.", [
       { field: "Collection hours", previous: "14:00–17:00", next: "13:00–16:30" },
     ]),
-    row(10, "15:44", "Taylor Quincy", "Changed role or scope", "users", "Elena Voss", "Reporting scope for Elena Voss was expanded.", [
+    row(10, "15:44", "Taylor Quincy", "Changed role or scope", "users", "Elena Voss", "Scope for Elena Voss was expanded.", [
       { field: "Scope", previous: "Eastern Suburbs", next: "Eastern Suburbs, Sydney CBD" },
     ]),
     row(12, "09:10", "Alex Morgan", "Deactivated cluster", "structure", "Liverpool", "Liverpool cluster was deactivated and sites were moved.", [
@@ -198,8 +198,8 @@ function buildDemoAuditLog(): AuditEntry[] {
     row(88, "15:33", "Alex Morgan", "Site updated", "sites", "Harbour Kitchen HQ", "Primary contact for Harbour Kitchen HQ was changed.", [
       { field: "Primary contact", previous: "Harbour HQ", next: "Jamie Chen" },
     ]),
-    row(110, "09:12", "Alex Morgan", "User added", "users", "Elena Voss", "Invited Elena Voss as a Reporting User.", [
-      { field: "Role", previous: "—", next: "Reporting User" },
+    row(110, "09:12", "Alex Morgan", "User added", "users", "Elena Voss", "Invited Elena Voss as a Site Admin.", [
+      { field: "Role", previous: "—", next: "Site Admin" },
       { field: "Scope", previous: "—", next: "Eastern Suburbs" },
     ]),
   ];

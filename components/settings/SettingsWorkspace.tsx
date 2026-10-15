@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 export const SETTINGS_TABS: { href: string; label: string; permission: RolePermissionId }[] = [
   { href: "/settings/profile", label: "Organisation Profile", permission: "manageSettings" },
-  { href: "/settings/structure", label: "Organisation Structure", permission: "manageStructure" },
+  { href: "/settings/structure", label: "Organisation Structure", permission: "viewStructure" },
   { href: "/settings/roles", label: "Roles & Permissions", permission: "manageSettings" },
   { href: "/settings/notifications", label: "Notifications", permission: "manageSettings" },
 ];

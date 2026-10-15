@@ -180,7 +180,6 @@ export type EnterpriseRole =
   | "enterprise_super_admin"
   | "enterprise_admin"
   | "group_admin"
-  | "reporting"
   | "site_admin"
   | "site_user";
 

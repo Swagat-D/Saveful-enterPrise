@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Building2, ChartColumn, Check, Layers3, Shield, UserRound, X } from "lucide-react";
+import { Building2, Check, Layers3, Shield, UserRound, X } from "lucide-react";
 import { SettingsWorkspace } from "@/components/settings/SettingsWorkspace";
 import { ROLE_PERMISSIONS, roleHasId } from "@/lib/permissions";
 import { ENTERPRISE_ROLES, countUsersByRole, useUsersVersion } from "@/lib/users";
@@ -13,7 +13,6 @@ const ROLE_ICONS: Record<EnterpriseRole, typeof Shield> = {
   enterprise_super_admin: Shield,
   enterprise_admin: UserRound,
   group_admin: Layers3,
-  reporting: ChartColumn,
   site_admin: Building2,
   site_user: UserRound,
 };

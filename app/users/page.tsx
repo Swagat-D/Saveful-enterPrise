@@ -7,7 +7,7 @@ import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 
 export default function UsersPage() {
   return (
-    <RequireCapability permission="manageUsers">
+    <RequireCapability permission="viewUsers">
       <Suspense fallback={<SavefulPageLoader message="Loading users…" />}>
         <UsersAccess />
       </Suspense>
