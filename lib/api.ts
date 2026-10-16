@@ -875,7 +875,15 @@ export type AdminConnectionRow = {
   listings: number;
   pickups: number;
   collectedKg: number;
-  days: { scheduled: number; collected: number; released: number; noFood: number; missed: number; open: number };
+  days: {
+    scheduled: number;
+    collected: number;
+    released: number;
+    noFood: number;
+    notListed: number;
+    missed: number;
+    open: number;
+  };
 };
 
 export type AdminConnectionImpact = { listings: number; listedKg: number; pickups: number; collectedKg: number };

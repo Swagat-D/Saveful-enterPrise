@@ -461,7 +461,8 @@ function ConnectionDetail({ row, periodLower }: { row: AdminConnectionRow; perio
             <DayLine label="Charity collected" value={days.collected} />
             <DayLine label="Passed on to the network" value={days.released} />
             <DayLine label="Business had no food" value={days.noFood} />
-            <DayLine label="Missed (no one responded)" value={days.missed} />
+            <DayLine label="Business didn't list food in time" value={days.notListed} />
+            <DayLine label="Listed but nobody collected" value={days.missed} />
             {days.open > 0 ? <DayLine label="Still in progress" value={days.open} /> : null}
           </ul>
         )}
