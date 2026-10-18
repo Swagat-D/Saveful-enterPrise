@@ -335,6 +335,17 @@ export function inviteAdminEnterpriseUser(
   );
 }
 
+export function setAdminEnterpriseUserRole(organisationId: string | number, userId: number, role: string) {
+  return apiFetch<{ message: string; role: string; roleLabel: string }>(
+    `/admin/enterprise/${organisationId}/users/${userId}/role`,
+    {
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify({ role }),
+    },
+  );
+}
+
 export function assignAdminSiteAdmin(organisationId: string | number, siteId: number, userId: number) {
   return apiFetch<{ message: string }>(`/admin/enterprise/${organisationId}/sites/${siteId}/assign-admin`, {
     method: "POST",

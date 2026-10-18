@@ -31,6 +31,7 @@ import { AdminPortalShell } from "@/components/layout/AdminPortalShell";
 import { AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
 import { AdminOrgSitesTable } from "@/components/admin/AdminSites";
 import { AdminOrganisationStructure } from "@/components/admin/AdminOrganisationStructure";
+import { AdminOrgUsers } from "@/components/admin/AdminOrgUsers";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import {
@@ -234,14 +235,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
             ) : null}
             {tab === "sites" ? <AdminOrgSitesTable orgId={org.id} query={orgQuery} period={period} /> : null}
             {tab === "structure" ? <AdminOrganisationStructure organisationId={org.id} query={orgQuery} /> : null}
-            {tab === "users" ? (
-              <RecordTable
-                columns={["Name", "Email", "Role", "Status"]}
-                rows={model.users.map((row) => [row.name, row.email, row.role, <StatusPill key={row.id} status={row.status} />])}
-                empty="No users."
-                noun="users"
-              />
-            ) : null}
+            {tab === "users" ? <AdminOrgUsers orgId={org.id} orgName={org.name} users={model.users} /> : null}
             {tab === "listings" ? (
               <RecordTable
                 columns={["Listing", "Food", "Site", "Status"]}
