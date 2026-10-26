@@ -32,6 +32,7 @@ import { AdminSection, StatusPill, TablePager, useAdminFilters, type PageSize } 
 import { AdminOrgSitesTable } from "@/components/admin/AdminSites";
 import { AdminOrganisationStructure } from "@/components/admin/AdminOrganisationStructure";
 import { AdminOrgUsers } from "@/components/admin/AdminOrgUsers";
+import { listingPillStatus } from "@/components/admin/AdminRecordPanels";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import {
@@ -243,7 +244,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
                   <Link key={row.id} href={`/admin/listings/${row.id}${orgQuery}`} className="font-saveful-semibold text-sm text-saveful-green hover:underline">{row.code}</Link>,
                   row.food,
                   model.sites.find((site) => site.id === row.siteId)?.name ?? row.siteId,
-                  <StatusPill key={`${row.id}-s`} status={row.status} />,
+                  <StatusPill key={`${row.id}-s`} status={listingPillStatus(row)} />,
                 ])}
                 empty="No listings."
                 noun="listings"

@@ -467,7 +467,8 @@ export function StatusPill({ status }: { status: string }) {
     status === "Active" ||
     status === "completed" ||
     status === "Collected" ||
-    status === "COLLECTED"
+    status === "COLLECTED" ||
+    status === "PARTIALLY_COLLECTED"
       ? "bg-emerald-50 text-emerald-700"
       : status === "Prospect" ||
           status === "Onboarding" ||
@@ -479,6 +480,7 @@ export function StatusPill({ status }: { status: string }) {
           status === "CONFIRMED" ||
           status === "Partial" ||
           status === "PARTIAL" ||
+          status === "PART_CLAIMED" ||
           status === "Pending" ||
           status === "PENDING"
         ? "bg-amber-50 text-amber-700"

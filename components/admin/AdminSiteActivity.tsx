@@ -8,6 +8,7 @@ import {
   AdminListingPanel,
   collectionChipStatus,
   listingChipStatus,
+  listingPillStatus,
   pickupWindow,
 } from "@/components/admin/AdminRecordPanels";
 import type { AdminCollection, AdminListing } from "@/lib/admin";
@@ -190,7 +191,7 @@ function Listings({
                     </p>
                     <p className="font-saveful-semibold text-sm tabular-nums text-gray-800">{formatKg(listing.quantityKg)}</p>
                     <span className="flex items-center justify-end gap-2">
-                      <StatusPill status={listingChipStatus(listing)} />
+                      <StatusPill status={listingPillStatus(listing)} />
                       <ChevronDown className={cn("h-4 w-4 text-gray-400 transition", open && "rotate-180")} />
                     </span>
                   </button>

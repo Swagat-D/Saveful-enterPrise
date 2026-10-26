@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, FilterSelect, StatusPill, TablePager, useAdminFilters, type PageSize } from "@/components/admin/AdminChrome";
-import { AdminCollectionPanel, AdminListingPanel, collectionChipStatus, listingChipStatus } from "@/components/admin/AdminRecordPanels";
+import { AdminCollectionPanel, AdminListingPanel, collectionChipStatus, listingPillStatus } from "@/components/admin/AdminRecordPanels";
 import {
   adminImpactLoading,
   collectionKg,
@@ -40,6 +40,7 @@ function contextOrgId(recordOrgId: string, filterOrgId: string) {
 const LISTING_STATUSES = [
   { id: "all", name: "All" },
   { id: "ACTIVE", name: "Active" },
+  { id: "PART_CLAIMED", name: "Part claimed" },
   { id: "CLAIMED", name: "Claimed" },
   { id: "COLLECTED", name: "Collected" },
   { id: "EXPIRED", name: "Expired" },
@@ -69,8 +70,8 @@ function listingsCollectedInPeriod(periodRows: AdminListing[], collectedKg: Map<
 }
 
 function listingDisplayStatus(row: AdminListing, collectedKg: number) {
-  if (collectedKg > 0) return "COLLECTED";
-  return listingChipStatus(row);
+  const pill = listingPillStatus(row, collectedKg);
+  return pill === "PARTIALLY_COLLECTED" ? "COLLECTED" : pill;
 }
 
 const LISTED_AT = new Intl.DateTimeFormat("en-AU", {
@@ -106,7 +107,7 @@ export function AdminListings() {
       return [row.code, row.food, orgName, siteName].some((value) => value.toLowerCase().includes(term));
     })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const counts = { all: periodRows.length, ACTIVE: 0, CLAIMED: 0, COLLECTED: 0, EXPIRED: 0, CANCELLED: 0 };
+  const counts = { all: periodRows.length, ACTIVE: 0, PART_CLAIMED: 0, CLAIMED: 0, COLLECTED: 0, EXPIRED: 0, CANCELLED: 0 };
   let listedKg = 0;
   for (const row of periodRows) {
     counts[statusOf(row) as keyof typeof counts] += 1;
@@ -146,7 +147,7 @@ export function AdminListings() {
         }
       />
       <AdminSection title="Listing snapshot" action={<span className="font-saveful text-[11px] text-gray-400">Click a tile to filter</span>}>
-        <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-4 xl:grid-cols-7">
           {LISTING_STATUSES.map((option) => (
             <button
               key={option.id}
@@ -175,6 +176,8 @@ export function AdminListings() {
           const orgName = getOrganisation(row.orgId)?.name ?? row.orgName;
           const siteName = getSite(row.siteId)?.name ?? row.siteName;
           const recovered = collectedKg.get(row.id) ?? 0;
+          const pill = listingPillStatus(row, recovered);
+          const remaining = row.remainingQtyKg ?? 0;
           return (
             <tr key={row.id} className="border-b border-gray-50 last:border-0">
               <td className="px-3 py-3">
@@ -205,12 +208,16 @@ export function AdminListings() {
               <td className="px-3 py-3 font-saveful text-sm text-gray-700">{pathwayLabel(row.pathway)}</td>
               <td className="px-3 py-3 font-saveful text-sm tabular-nums text-gray-800">
                 {formatKg(row.quantityKg)}
-                {recovered > 0 && recovered !== row.quantityKg ? (
+                {pill === "PART_CLAIMED" ? (
+                  <p className="font-saveful text-[11px] text-amber-700">
+                    {formatKg(row.quantityKg - remaining)} claimed · {formatKg(remaining)} still available
+                  </p>
+                ) : recovered > 0 && recovered !== row.quantityKg ? (
                   <p className="font-saveful text-[11px] text-gray-400">{formatKg(recovered)} collected</p>
                 ) : null}
               </td>
               <td className="px-3 py-3">
-                <StatusPill status={listingDisplayStatus(row, recovered)} />
+                <StatusPill status={pill} />
               </td>
             </tr>
           );
@@ -305,7 +312,7 @@ export function AdminListingDetail({ id }: { id: string }) {
       ]}
       title={row.code}
       hint={`${row.food} · ${pathwayLabel(row.pathway)}`}
-      actions={<StatusPill status={listingChipStatus(row)} />}
+      actions={<StatusPill status={listingPillStatus(row)} />}
     >
       <AdminSection title="Listing details">
         <div className="px-3.5 py-3.5">

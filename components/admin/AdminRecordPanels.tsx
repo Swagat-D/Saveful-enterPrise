@@ -24,6 +24,20 @@ export function listingChipStatus(listing: AdminListing) {
   return "ACTIVE";
 }
 
+/** Pill label that flags listings where only some of the food was claimed or collected. */
+export function listingPillStatus(listing: AdminListing, collectedKg?: number) {
+  const total = listing.quantityKg;
+  const remaining = listing.remainingQtyKg ?? 0;
+  const partlyTaken = remaining > 0.05 && remaining < total;
+  if (collectedKg !== undefined && collectedKg > 0) {
+    return collectedKg < total - 0.05 ? "PARTIALLY_COLLECTED" : "COLLECTED";
+  }
+  const base = listingChipStatus(listing);
+  if (base === "COLLECTED" && partlyTaken) return "PARTIALLY_COLLECTED";
+  if (base === "CLAIMED" && partlyTaken) return "PART_CLAIMED";
+  return base;
+}
+
 export function collectionChipStatus(row: AdminCollection) {
   const raw = (row.claimStatus || row.status || "").toUpperCase();
   if (raw === "COMPLETED") return "COLLECTED";
