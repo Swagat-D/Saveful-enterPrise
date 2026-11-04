@@ -313,7 +313,7 @@ async function resolveEnterpriseScope(
       ...(fromGrants.siteIds ?? []),
       ...managedIds,
       ...profileSiteIds,
-      ...(role === "site_admin" ? listedIds : []),
+      ...(role === "site_admin" || role === "site_user" ? listedIds : []),
     ]),
   ];
 
