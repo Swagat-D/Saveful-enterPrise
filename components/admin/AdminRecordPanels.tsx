@@ -15,8 +15,8 @@ export function pickupWindow(from?: string | null, to?: string | null) {
 
 export function listingChipStatus(listing: AdminListing) {
   const collected = (listing.claims ?? []).some((claim) => claim.status === "COLLECTED");
-  if (collected && (listing.remainingQtyKg ?? 0) <= 0) return "COLLECTED";
   const status = listing.status.toLowerCase();
+  if (collected && ((listing.remainingQtyKg ?? 0) <= 0 || status === "expired")) return "COLLECTED";
   if (status === "collected" || status === "completed") return "COLLECTED";
   if (status === "claimed" || status === "driver_assigned" || status === "partial") return "CLAIMED";
   if (status === "expired") return "EXPIRED";
@@ -33,6 +33,11 @@ export function listingPillStatus(listing: AdminListing, collectedKg?: number) {
     return collectedKg < total - 0.05 ? "PARTIALLY_COLLECTED" : "COLLECTED";
   }
   const base = listingChipStatus(listing);
+  const collectedClaims = (listing.claims ?? []).filter((claim) => claim.status === "COLLECTED");
+  if (base === "COLLECTED" && collectedClaims.length > 0) {
+    const kg = collectedClaims.reduce((sum, claim) => sum + (claim.collectedKg || 0), 0);
+    if (kg > 0) return kg < total - 0.05 ? "PARTIALLY_COLLECTED" : "COLLECTED";
+  }
   if (base === "COLLECTED" && partlyTaken) return "PARTIALLY_COLLECTED";
   if (base === "CLAIMED" && partlyTaken) return "PART_CLAIMED";
   return base;

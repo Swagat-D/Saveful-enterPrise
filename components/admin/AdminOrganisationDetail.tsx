@@ -14,14 +14,12 @@ import {
   Truck,
   Users,
   UtensilsCrossed,
+  Wheat,
 } from "lucide-react";
 import {
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -33,6 +31,7 @@ import { AdminOrgSitesTable } from "@/components/admin/AdminSites";
 import { AdminOrganisationStructure } from "@/components/admin/AdminOrganisationStructure";
 import { AdminOrgUsers } from "@/components/admin/AdminOrgUsers";
 import { listingPillStatus } from "@/components/admin/AdminRecordPanels";
+import { AdminOrgExportDialog } from "@/components/admin/AdminOrgExport";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import {
@@ -58,8 +57,9 @@ import { useSession } from "@/lib/auth";
 import { CHART_TOOLTIP } from "@/lib/demo";
 import { PeriodFilter } from "@/components/filters/PeriodFilter";
 import { formatDisplayDate, periodLabel } from "@/lib/dates";
-import { formatCount, formatKg, formatMoney } from "@/lib/impact";
-import type { PeriodKey } from "@/types/enterprise";
+import { calculateImpact, formatCount, formatKg, formatMoney } from "@/lib/impact";
+import { PathwayDonut } from "@/components/admin/PathwayDonut";
+import type { PeriodKey, RecoveryPathway } from "@/types/enterprise";
 import { cn } from "@/lib/utils";
 
 export function AdminOrganisationDetail({ id }: { id: string }) {
@@ -75,6 +75,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const model = buildOrgDetail(id, period, { from, to });
   const appRecipient = isAppOrganisation(id);
 
@@ -183,7 +184,7 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => exportOrg(model)}
+                  onClick={() => setExportOpen(true)}
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white px-3 font-saveful-semibold text-sm text-gray-800 hover:bg-[#F7F6F2]"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -270,7 +271,19 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
                 noun="collections"
               />
             ) : null}
-            {tab === "insights" ? <InsightsTab model={model} /> : null}
+            {tab === "insights" ? (
+              <InsightsTab
+                model={model}
+                period={period}
+                from={from}
+                to={to}
+                onPeriod={(next) => {
+                  setPeriod(next.period);
+                  setFrom(next.from);
+                  setTo(next.to);
+                }}
+              />
+            ) : null}
             {tab === "account" ? (
               <AccountTab
                 orgName={org.name}
@@ -287,6 +300,16 @@ export function AdminOrganisationDetail({ id }: { id: string }) {
             ) : null}
           </div>
         </section>
+        {exportOpen ? (
+          <AdminOrgExportDialog
+            orgId={org.id}
+            orgName={org.name}
+            period={period}
+            from={from}
+            to={to}
+            onClose={() => setExportOpen(false)}
+          />
+        ) : null}
       </PortalPageShell>
     </AdminPortalShell>
   );
@@ -311,42 +334,52 @@ function OverviewTab({
 }) {
   const { headlines, allTime, relationships, priorLabel } = model;
   const [chartMetric, setChartMetric] = useState<"collections" | "kg">("collections");
+  const [pathway, setPathway] = useState<"all" | RecoveryPathway>("all");
   const periodHint = periodLabel(period, { from, to }).toLowerCase();
   const cards = [
     { label: "Sites", value: formatCount(headlines.sites), hint: `${formatCount(headlines.activeSites)} active`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green" },
     { label: "Users", value: formatCount(headlines.users), hint: `${formatCount(headlines.activeUsers)} active`, icon: Users, tone: "bg-sky-50 text-sky-700" },
     { label: `Collections (${periodHint})`, value: formatCount(headlines.collections), hint: `${signed(headlines.collectionsDelta)} vs ${priorLabel}`, icon: Truck, tone: "bg-saveful-green/10 text-saveful-green" },
-    { label: "Food recovered", value: formatKg(headlines.recoveredKg), hint: `${signed(Math.round(headlines.recoveredDelta))} kg vs ${priorLabel}`, icon: Leaf, tone: "bg-violet-50 text-violet-700" },
-    { label: "CO₂ avoided", value: formatKg(headlines.co2), hint: `${signed(Math.round(headlines.co2Delta))} kg vs ${priorLabel}`, icon: Cloud, tone: "bg-sky-50 text-sky-700" },
-    { label: "Meals provided", value: formatCount(headlines.meals), hint: `${signed(Math.round(headlines.mealsDelta))} vs ${priorLabel}`, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700" },
+    { label: "Food diverted", note: "Edible & non-edible", value: formatKg(headlines.recoveredKg), hint: `${signed(Math.round(headlines.recoveredDelta))} kg vs ${priorLabel}`, icon: Recycle, tone: "bg-violet-50 text-violet-700" },
+    { label: "CO₂ avoided", note: "Edible & non-edible", value: formatKg(headlines.co2), hint: `${signed(Math.round(headlines.co2Delta))} kg vs ${priorLabel}`, icon: Cloud, tone: "bg-sky-50 text-sky-700" },
+    { label: "Livestock feed", note: "Non-edible only", value: formatKg(headlines.livestockKg), hint: `${signed(Math.round(headlines.livestockDelta))} kg vs ${priorLabel}`, icon: Wheat, tone: "bg-orange-50 text-orange-700" },
+    { label: "Edible food recovered", note: "Edible only", value: formatKg(headlines.edibleKg), hint: `${signed(Math.round(headlines.edibleDelta))} kg vs ${priorLabel}`, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green" },
+    { label: "Meals created", note: "From edible food only", value: formatCount(headlines.meals), hint: `${signed(Math.round(headlines.mealsDelta))} vs ${priorLabel}`, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700" },
   ];
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <article key={card.label} className="rounded-xl border border-gray-200 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <p className="truncate font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">{card.label}</p>
-                <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg", card.tone)}>
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
-              </div>
-              <p className="mt-2 font-saveful-bold text-lg tabular-nums leading-none text-gray-900">{card.value}</p>
-              <p className="mt-1.5 truncate font-saveful text-[11px] text-gray-500">{card.hint}</p>
-            </article>
-          );
-        })}
+      <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+        <div className="flex gap-3">
+          {cards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <article key={card.label} className="flex min-w-[168px] flex-1 flex-col rounded-xl border border-gray-200 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">{card.label}</p>
+                    <p className="truncate font-saveful text-[11px] text-gray-400">{card.note ?? "\u00a0"}</p>
+                  </div>
+                  <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg", card.tone)}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <p className="mt-2 font-saveful-bold text-lg tabular-nums leading-none text-gray-900">{card.value}</p>
+                <p className="mt-1.5 truncate font-saveful text-[11px] text-gray-500">{card.hint}</p>
+              </article>
+            );
+          })}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <AdminSection title="Impact overview (all time)">
           <dl className="space-y-2 px-3.5 py-3">
-            <ImpactRow label="Food recovered" value={formatKg(allTime.recoveredKg)} />
-            <ImpactRow label="Meals provided" value={formatCount(allTime.meals)} />
+            <ImpactRow label="Food diverted" value={formatKg(allTime.recoveredKg)} />
             <ImpactRow label="CO₂ avoided" value={formatKg(allTime.co2)} />
+            <ImpactRow label="Livestock feed" value={formatKg(allTime.livestockKg)} />
+            <ImpactRow label="Edible food recovered" value={formatKg(allTime.edibleKg)} />
+            <ImpactRow label="Meals created" value={formatCount(allTime.meals)} />
             <ImpactRow label="Estimated food value" value={formatMoney(allTime.value)} />
             <ImpactRow label="Total collections" value={formatCount(allTime.collections)} />
             <ImpactRow label="Since joined Saveful" value={formatDisplayDate(model.profile.joinedAt)} />
@@ -379,22 +412,14 @@ function OverviewTab({
             </ResponsiveContainer>
           </div>
         </AdminSection>
-        <AdminSection title="Recovery by pathway" action={<button type="button" onClick={() => onTab("insights")} className="font-saveful-semibold text-xs text-saveful-green hover:underline">View insights →</button>}>
-          <div className="px-3.5 pt-3">
-            <div className="relative mx-auto h-28 w-28">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={model.pathways.filter((item) => item.kg > 0)} dataKey="kg" nameKey="label" innerRadius={32} outerRadius={46} paddingAngle={2}>
-                    {model.pathways.filter((item) => item.kg > 0).map((item) => (
-                      <Cell key={item.pathway} fill={item.color} stroke="#fff" />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={CHART_TOOLTIP} formatter={(value) => formatKg(Number(value))} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <PathwayLegend rows={model.pathways} />
+        <AdminSection title="Recovery by pathway (all time)" action={<button type="button" onClick={() => onTab("insights")} className="font-saveful-semibold text-xs text-saveful-green hover:underline">View insights →</button>}>
+          <PathwayDonut
+            rows={model.pathways}
+            totalKg={allTime.recoveredKg}
+            selected={pathway}
+            onSelect={setPathway}
+            emptyText="No recovered food yet."
+          />
         </AdminSection>
       </div>
 
@@ -473,32 +498,54 @@ function OverviewTab({
   );
 }
 
-function InsightsTab({ model }: { model: NonNullable<ReturnType<typeof buildOrgDetail>> }) {
+function InsightsTab({
+  model,
+  period,
+  from,
+  to,
+  onPeriod,
+}: {
+  model: NonNullable<ReturnType<typeof buildOrgDetail>>;
+  period: PeriodKey;
+  from?: string;
+  to?: string;
+  onPeriod: (next: { period: PeriodKey; from?: string; to?: string }) => void;
+}) {
+  const [pathway, setPathway] = useState<"all" | RecoveryPathway>("all");
+  const rows = pathway === "all" ? model.periodPathways : model.periodPathways.filter((item) => item.pathway === pathway);
+  const kgFor = (id: RecoveryPathway) => rows.find((item) => item.pathway === id)?.kg ?? 0;
+  const recoveredKg = rows.reduce((sum, item) => sum + item.kg, 0);
+  const edibleKg = kgFor("people");
+  const impact = calculateImpact(recoveredKg);
+  const totalKg = model.periodPathways.reduce((sum, item) => sum + item.kg, 0);
+  const label = periodLabel(period, { from, to });
+
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
       <AdminSection title="Recovery pathways">
-        <div className="px-3.5 py-3">
-          <div className="relative mx-auto h-40 w-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={model.pathways.filter((item) => item.kg > 0)} dataKey="kg" nameKey="label" innerRadius={46} outerRadius={64} paddingAngle={2}>
-                  {model.pathways.filter((item) => item.kg > 0).map((item) => (
-                    <Cell key={item.pathway} fill={item.color} stroke="#fff" />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={CHART_TOOLTIP} formatter={(value) => formatKg(Number(value))} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <PathwayLegend rows={model.pathways} />
+        <div className="flex items-end justify-between gap-2 px-3.5 pt-3">
+          <p className="min-w-0 truncate pb-1.5 font-saveful text-xs text-gray-500">
+            Showing <span className="font-saveful-semibold text-gray-900">{label.toLowerCase()}</span>
+          </p>
+          <PeriodFilter compact period={period} from={from} to={to} onChange={onPeriod} />
         </div>
+        <PathwayDonut
+          rows={model.periodPathways}
+          totalKg={totalKg}
+          selected={pathway}
+          onSelect={setPathway}
+          emptyText="No recovered food in this period."
+        />
       </AdminSection>
-      <AdminSection title="Impact">
+      <AdminSection title={`Impact (${label.toLowerCase()})`}>
         <dl className="space-y-2 px-3.5 py-3">
-          <ImpactRow label="Food recovered" value={formatKg(model.allTime.recoveredKg)} />
-          <ImpactRow label="CO₂ avoided" value={formatKg(model.allTime.co2)} />
-          <ImpactRow label="Meals provided" value={formatCount(model.allTime.meals)} />
-          <ImpactRow label="Estimated food value" value={formatMoney(model.allTime.value)} />
+          <ImpactRow label="Food diverted" value={formatKg(recoveredKg)} />
+          <ImpactRow label="CO₂ avoided" value={formatKg(impact.co2AvoidedKg)} />
+          <ImpactRow label="Livestock feed" value={formatKg(kgFor("livestock"))} />
+          <ImpactRow label="Edible food recovered" value={formatKg(edibleKg)} />
+          <ImpactRow label="Meals created" value={formatCount(calculateImpact(edibleKg).mealsCreated)} />
+          <ImpactRow label="Estimated food value" value={formatMoney(impact.foodValue)} />
+          <ImpactRow label="Collections" value={formatCount(rows.reduce((sum, item) => sum + item.collections, 0))} />
         </dl>
       </AdminSection>
     </div>
@@ -630,22 +677,6 @@ function PartnerList({
   );
 }
 
-function PathwayLegend({ rows }: { rows: { pathway: string; label: string; kg: number; percent: number; color: string }[] }) {
-  return (
-    <ul className="space-y-1.5 px-3.5 pb-3">
-      {rows.map((item) => (
-        <li key={item.pathway} className="flex items-center justify-between gap-3">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.color }} />
-            <span className="truncate font-saveful text-sm text-gray-700">{item.label}</span>
-          </span>
-          <span className="shrink-0 font-saveful text-sm tabular-nums text-gray-800">{item.percent}%</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function RecordTable({ columns, rows, empty, noun = "rows" }: { columns: string[]; rows: ReactNode[][]; empty: string; noun?: string }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
@@ -757,26 +788,3 @@ function signed(value: number) {
   return "0";
 }
 
-function exportOrg(model: NonNullable<ReturnType<typeof buildOrgDetail>>) {
-  const lines = [
-    ["Field", "Value"],
-    ["Organisation", model.org.name],
-    ["Type", orgTypeLabel(model.org.type)],
-    ["Participation", participationLabel(model.org.roles)],
-    ["Account status", model.org.status],
-    ["Activity status", model.activityStatus],
-    ["Plan", planLabel(model.org.plan)],
-    ["Sites", String(model.headlines.sites)],
-    ["Users", String(model.headlines.users)],
-    ["Food recovered", formatKg(model.allTime.recoveredKg)],
-    ["CO2 avoided", formatKg(model.allTime.co2)],
-  ];
-  const csv = lines.map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${model.org.id}-overview.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}

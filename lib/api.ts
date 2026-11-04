@@ -823,6 +823,11 @@ export type AdminDashboardSummary = {
   previousSitesWithRecovery: number;
   recoveredKg: number;
   previousRecoveredKg: number;
+  previousEdibleKg: number;
+  previousLivestockKg: number;
+  users: number;
+  newUsers: number;
+  previousNewUsers: number;
   collections: number;
   previousCollections: number;
   pathways: { pathway: "people" | "livestock" | "circular" | "bioenergy"; kg: number }[];

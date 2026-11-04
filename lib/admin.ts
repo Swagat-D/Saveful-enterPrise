@@ -1265,6 +1265,8 @@ export function buildAdminOverview(filters: AdminFilters) {
   const previousKg = previousRows.reduce((sum, row) => sum + row.kg, 0);
   const impact = calculateImpact(foodKg);
   const previousImpact = calculateImpact(previousKg);
+  const meals = calculateImpact(pathwayKg(currentRows, "people")).mealsCreated;
+  const previousMeals = calculateImpact(pathwayKg(previousRows, "people")).mealsCreated;
   const completed = collections.filter(isCompletedCollection).length;
   const previousCompleted = previousCollections.filter(isCompletedCollection).length;
   const currentRates = listingRates(listings);
@@ -1331,7 +1333,7 @@ export function buildAdminOverview(filters: AdminFilters) {
       organisations: { value: organisations.length, delta: 0 },
       sites: { value: sites.length, delta: currentActiveSites - previousSites },
       recovered: { value: foodKg, delta: foodKg - previousKg },
-      meals: { value: impact.mealsCreated, delta: impact.mealsCreated - previousImpact.mealsCreated },
+      meals: { value: meals, delta: meals - previousMeals },
       collections: { value: completed || currentRows.length, delta: (completed || currentRows.length) - (previousCompleted || previousRows.length) },
       co2: { value: impact.co2AvoidedKg, delta: impact.co2AvoidedKg - previousImpact.co2AvoidedKg },
     },
@@ -1358,6 +1360,7 @@ export function buildAdminOverview(filters: AdminFilters) {
       collections: completed || currentRows.length,
       recoveredKg: foodKg,
       ...impact,
+      mealsCreated: meals,
     },
   };
 }
@@ -2432,6 +2435,10 @@ export function listOrganisationInternalActivity(orgId: string, period: PeriodKe
     .slice(0, limit);
 }
 
+function pathwayKg(rows: RecoveryTransaction[], pathway: RecoveryPathway) {
+  return rows.filter((row) => row.pathway === pathway).reduce((sum, row) => sum + row.kg, 0);
+}
+
 function collectionImpactRows(rows: AdminCollection[]): RecoveryTransaction[] {
   return rows
     .filter((row) => row.status === "completed")
@@ -2473,6 +2480,13 @@ export function buildOrgDetail(orgId: string, period: PeriodKey = "30", bounds?:
   const impact = calculateImpact(foodKg);
   const previousImpact = calculateImpact(previousKg);
   const allImpact = calculateImpact(allKg);
+  const edibleKg = pathwayKg(currentRows, "people");
+  const previousEdibleKg = pathwayKg(previousRows, "people");
+  const allEdibleKg = pathwayKg(allRows, "people");
+  const livestockKg = pathwayKg(currentRows, "livestock");
+  const previousLivestockKg = pathwayKg(previousRows, "livestock");
+  const meals = calculateImpact(edibleKg).mealsCreated;
+  const previousMeals = calculateImpact(previousEdibleKg).mealsCreated;
   const users = listOrgUsers(orgId);
   const totalPathwayKg = allKg || foodKg;
   const pathwaySource = allRows.length ? allRows : currentRows;
@@ -2483,6 +2497,18 @@ export function buildOrgDetail(orgId: string, period: PeriodKey = "30", bounds?:
       label: PATHWAY_LABEL[pathway],
       kg,
       percent: totalPathwayKg > 0 ? Math.round((kg / totalPathwayKg) * 100) : 0,
+      color: ADMIN_PATHWAY_COLORS[pathway],
+    };
+  });
+  const periodPathways = PATHWAYS.map((pathway) => {
+    const rows = currentRows.filter((row) => row.pathway === pathway);
+    const kg = rows.reduce((sum, row) => sum + row.kg, 0);
+    return {
+      pathway,
+      label: PATHWAY_LABEL[pathway],
+      kg,
+      collections: rows.length,
+      percent: foodKg > 0 ? Math.round((kg / foodKg) * 100) : 0,
       color: ADMIN_PATHWAY_COLORS[pathway],
     };
   });
@@ -2554,18 +2580,25 @@ export function buildOrgDetail(orgId: string, period: PeriodKey = "30", bounds?:
       recoveredDelta: foodKg - previousKg,
       co2: impact.co2AvoidedKg,
       co2Delta: impact.co2AvoidedKg - previousImpact.co2AvoidedKg,
-      meals: impact.mealsCreated,
-      mealsDelta: impact.mealsCreated - previousImpact.mealsCreated,
+      livestockKg,
+      livestockDelta: livestockKg - previousLivestockKg,
+      edibleKg,
+      edibleDelta: edibleKg - previousEdibleKg,
+      meals,
+      mealsDelta: meals - previousMeals,
     },
     allTime: {
       recoveredKg: allKg || foodKg,
-      meals: allImpact.mealsCreated || impact.mealsCreated,
+      edibleKg: allRows.length ? allEdibleKg : edibleKg,
+      livestockKg: allRows.length ? pathwayKg(allRows, "livestock") : livestockKg,
+      meals: calculateImpact(allRows.length ? allEdibleKg : edibleKg).mealsCreated,
       co2: allImpact.co2AvoidedKg || impact.co2AvoidedKg,
       value: allImpact.foodValue || impact.foodValue,
       collections: allRows.length || collections.filter((row) => row.status === "completed").length,
     },
     series: impactOverTime(currentRows.length ? currentRows : allRows, period, liveToday(), bounds),
     pathways,
+    periodPathways,
     relationships: {
       isProvider: org.roles.includes("surplus_provider"),
       isReceiver: org.roles.includes("surplus_receiver"),

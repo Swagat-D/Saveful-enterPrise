@@ -64,6 +64,8 @@ export function buildAdminInsightStory(filters: AdminFilters): AdminInsightStory
   const yearKg = annualised ? (foodKg / days) * 365 : foodKg;
   const yearImpact = calculateImpact(yearKg);
   const edibleKg = overview.pathways.find((item) => item.pathway === "people")?.kg ?? 0;
+  const meals = calculateImpact(edibleKg).mealsCreated;
+  const yearMeals = calculateImpact(annualised ? (edibleKg / days) * 365 : edibleKg).mealsCreated;
   const nonEdibleKg = overview.pathways
     .filter((item) => item.pathway !== "people")
     .reduce((sum, item) => sum + item.kg, 0);
@@ -79,13 +81,18 @@ export function buildAdminInsightStory(filters: AdminFilters): AdminInsightStory
     annualised,
     overview,
     foods: rankRows(foodRows(collections)),
-    recipients: rankRows(groupRows(collections, (row) => [row.orgId, row.recipientName || "Unknown recipient"])),
+    recipients: rankRows(
+      groupRows(collections, (row) => [
+        row.recipientOrgId || row.recipientName || "unknown",
+        row.recipientName || "Unknown recipient",
+      ]),
+    ),
     providers: rankRows(
       groupRows(collections, (row) => [row.providerName || row.siteId, row.providerName || row.siteName || "Unknown source"]),
     ),
     sites: rankRows(groupRows(collections, (row) => [row.siteId, row.siteName || row.providerName || `Site ${row.siteId}`])),
     equivalents: {
-      meals: impact.mealsCreated,
+      meals,
       value: impact.foodValue,
       co2: impact.co2AvoidedKg,
       organisationsSupported: organisationsSupported || overview.metrics.organisations,
@@ -94,7 +101,7 @@ export function buildAdminInsightStory(filters: AdminFilters): AdminInsightStory
     },
     projection: {
       yearKg,
-      yearMeals: yearImpact.mealsCreated,
+      yearMeals,
       yearCo2: yearImpact.co2AvoidedKg,
       yearValue: yearImpact.foodValue,
     },

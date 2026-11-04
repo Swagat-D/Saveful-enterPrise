@@ -503,17 +503,43 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
   const [menuId, setMenuId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
-  const directory = buildSitesDirectory({ ...EMPTY_ADMIN_FILTERS, organisationId: orgId, period }, EMPTY_ADMIN_SITES_FILTERS);
+  const [search, setSearch] = useState("");
+  const directory = buildSitesDirectory({ ...EMPTY_ADMIN_FILTERS, organisationId: orgId, period }, { ...EMPTY_ADMIN_SITES_FILTERS, q: search });
   const pageCount = Math.max(1, Math.ceil(directory.rows.length / pageSize));
   const current = Math.min(page, pageCount);
   const paged = directory.rows.slice((current - 1) * pageSize, current * pageSize);
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="relative block w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search by site name, site ID, address, group or cluster"
+            className="h-9 w-full rounded-lg border border-black/[0.06] bg-[#F7F6F2] pl-8 pr-8 font-saveful text-sm outline-none focus:border-saveful-green/40 focus:bg-white"
+          />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setPage(1);
+              }}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </label>
         <Link
           href={addAdminSiteHref(query, orgId)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white"
         >
           <Plus className="h-3.5 w-3.5" />
           Add site
@@ -569,7 +595,7 @@ export function AdminOrgSitesTable({ orgId, query, period }: { orgId: string; qu
           {directory.rows.length === 0 ? (
             <tr>
               <td colSpan={10} className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">
-                No sites yet.
+                {search.trim() ? `No sites match "${search.trim()}".` : "No sites yet."}
               </td>
             </tr>
           ) : null}

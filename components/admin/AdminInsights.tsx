@@ -150,7 +150,7 @@ export function AdminInsights() {
           icon={UtensilsCrossed}
           label="Meals on plates"
           value={formatCount(story.equivalents.meals)}
-          hint="Official Saveful factor · 0.42 kg per meal"
+          hint="Edible food only · 0.42 kg per meal"
         />
         <EquivalentCard
           icon={Building2}
@@ -422,11 +422,10 @@ function FunnelRow({
 
 function RankedList({ rows, empty }: { rows: InsightRankedRow[]; empty: string }) {
   if (!rows.length) return <Empty>{empty}</Empty>;
-  const top = rows.slice(0, 6);
-  const widest = top[0]?.kg || 1;
+  const widest = rows[0]?.kg || 1;
   return (
-    <ul className="divide-y divide-gray-50">
-      {top.map((row) => (
+    <ul className="max-h-[318px] divide-y divide-gray-50 overflow-y-auto overscroll-contain [scrollbar-width:thin]">
+      {rows.map((row) => (
         <li key={row.id} className="px-3.5 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <span className="min-w-0 truncate font-saveful text-sm text-gray-800">{row.name}</span>

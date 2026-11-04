@@ -4,11 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -24,11 +21,15 @@ import {
   Leaf,
   List,
   MapPin,
+  Recycle,
   RefreshCw,
   Truck,
+  Users,
   UtensilsCrossed,
+  Wheat,
 } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, useAdminFilters } from "@/components/admin/AdminChrome";
+import { PathwayDonut } from "@/components/admin/PathwayDonut";
 import { ORG_TYPES, type AdminFilters, type OrgTypeId } from "@/lib/admin";
 import { getAdminDashboardSummary, type AdminDashboardSummary } from "@/lib/api";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
@@ -115,6 +116,10 @@ function bucketActivitySeries(
 function summaryModel(summary: AdminDashboardSummary, filters: AdminFilters, query: string) {
   const impact = calculateImpact(summary.recoveredKg);
   const previousImpact = calculateImpact(summary.previousRecoveredKg);
+  const edibleKg = summary.pathways.find((row) => row.pathway === "people")?.kg ?? 0;
+  const livestockKg = summary.pathways.find((row) => row.pathway === "livestock")?.kg ?? 0;
+  const meals = calculateImpact(edibleKg).mealsCreated;
+  const previousMeals = calculateImpact(summary.previousEdibleKg ?? 0).mealsCreated;
   const typeById = new Map(summary.types.map((row) => [row.id, row]));
   const types = ORG_TYPES.map((type) => {
     const row = typeById.get(type.id);
@@ -151,8 +156,11 @@ function summaryModel(summary: AdminDashboardSummary, filters: AdminFilters, que
     headlines: {
       organisations: { value: summary.organisations, delta: 0 },
       sites: { value: summary.sites, delta: summary.sitesWithRecovery - summary.previousSitesWithRecovery },
+      users: { value: summary.users ?? 0, newUsers: summary.newUsers ?? 0, delta: (summary.newUsers ?? 0) - (summary.previousNewUsers ?? 0) },
       recovered: { value: summary.recoveredKg, delta: summary.recoveredKg - summary.previousRecoveredKg },
-      meals: { value: impact.mealsCreated, delta: impact.mealsCreated - previousImpact.mealsCreated },
+      livestock: { value: livestockKg, delta: livestockKg - (summary.previousLivestockKg ?? 0) },
+      edible: { value: edibleKg, delta: edibleKg - (summary.previousEdibleKg ?? 0) },
+      meals: { value: meals, delta: meals - previousMeals },
       collections: { value: summary.collections, delta: summary.collections - summary.previousCollections },
       co2: { value: impact.co2AvoidedKg, delta: impact.co2AvoidedKg - previousImpact.co2AvoidedKg },
     },
@@ -204,13 +212,28 @@ export function AdminDashboard() {
     };
   }, [requestKey]);
 
-  const headlines = [
+  const headlines: Array<{
+    key: string;
+    label: string;
+    note?: string;
+    value: string;
+    delta: number;
+    unit: string;
+    hint?: string;
+    href: string;
+    icon: typeof Building2;
+    tone: string;
+    pending: boolean;
+  }> = [
     { key: "organisations", label: "Organisations", value: formatCount(model?.headlines.organisations.value ?? 0), delta: model?.headlines.organisations.delta ?? 0, unit: "", href: `/admin/organisations${query}`, icon: Building2, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
     { key: "sites", label: "Sites", value: formatCount(model?.headlines.sites.value ?? 0), delta: model?.headlines.sites.delta ?? 0, unit: "", href: `/admin/sites${query}`, icon: MapPin, tone: "bg-sky-50 text-sky-700", pending: false },
-    { key: "recovered", label: "Food recovered", value: formatKg(model?.headlines.recovered.value ?? 0), delta: Math.round(model?.headlines.recovered.delta ?? 0), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
-    { key: "meals", label: "Meals created", value: formatCount(model?.headlines.meals.value ?? 0), delta: Math.round(model?.headlines.meals.delta ?? 0), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700", pending: false },
+    { key: "users", label: "Users", value: formatCount(model?.headlines.users.value ?? 0), delta: 0, unit: "", hint: `${formatCount(model?.headlines.users.newUsers ?? 0)} joined in this period`, href: `/admin/users${query}`, icon: Users, tone: "bg-sky-50 text-sky-700", pending: false },
     { key: "collections", label: "Collections", value: formatCount(model?.headlines.collections.value ?? 0), delta: model?.headlines.collections.delta ?? 0, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700", pending: false },
-    { key: "co2", label: "CO₂ avoided", value: formatKg(model?.headlines.co2.value ?? 0), delta: Math.round(model?.headlines.co2.delta ?? 0), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700", pending: false },
+    { key: "recovered", label: "Food diverted", note: "Edible & non-edible", value: formatKg(model?.headlines.recovered.value ?? 0), delta: Math.round(model?.headlines.recovered.delta ?? 0), unit: " kg", href: insightsHref, icon: Recycle, tone: "bg-violet-50 text-violet-700", pending: false },
+    { key: "co2", label: "CO₂ avoided", note: "Edible & non-edible", value: formatKg(model?.headlines.co2.value ?? 0), delta: Math.round(model?.headlines.co2.delta ?? 0), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700", pending: false },
+    { key: "livestock", label: "Livestock feed", note: "Non-edible only", value: formatKg(model?.headlines.livestock.value ?? 0), delta: Math.round(model?.headlines.livestock.delta ?? 0), unit: " kg", href: insightsHref, icon: Wheat, tone: "bg-orange-50 text-orange-700", pending: false },
+    { key: "edible", label: "Edible food recovered", note: "Edible only", value: formatKg(model?.headlines.edible.value ?? 0), delta: Math.round(model?.headlines.edible.delta ?? 0), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
+    { key: "meals", label: "Meals created", note: "From edible food only", value: formatCount(model?.headlines.meals.value ?? 0), delta: Math.round(model?.headlines.meals.delta ?? 0), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700", pending: false },
   ];
 
   if (!model) {
@@ -247,34 +270,43 @@ export function AdminDashboard() {
     >
       <AdminFiltersBar filters={filters} onChange={update} onReset={reset} />
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
-        {headlines.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link
-              key={card.key}
-              href={card.href}
-              className="rounded-xl border border-gray-200 bg-white p-3.5 transition hover:border-saveful-green/30"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="min-w-0 truncate font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">{card.label}</p>
-                <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", card.tone)}>
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
-              </div>
-              <p className="mt-2.5 truncate font-saveful-bold text-xl leading-none tabular-nums text-gray-900">{card.pending ? "…" : card.value}</p>
-              <p
-                className={cn(
-                  "mt-2 truncate font-saveful text-[11px]",
-                  !card.pending && card.delta < 0 ? "text-red-600" : !card.pending && card.delta > 0 ? "text-emerald-700" : "text-gray-400",
-                )}
+      <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+        <div className="flex gap-3">
+          {headlines.map((card) => {
+            const Icon = card.icon;
+            return (
+              <Link
+                key={card.key}
+                href={card.href}
+                className="min-w-[168px] flex-1 rounded-xl border border-gray-200 bg-white p-3.5 transition hover:border-saveful-green/30"
               >
-                {card.pending ? "Loading activity…" : card.delta === 0 ? "No change" : `${signed(card.delta)}${card.unit} vs ${model.priorLabel}`}
-                {!card.pending && card.delta !== 0 ? <ArrowUpRight className={cn("ml-0.5 inline h-3 w-3", card.delta < 0 && "rotate-90")} /> : null}
-              </p>
-            </Link>
-          );
-        })}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-saveful text-[11px] uppercase tracking-[0.12em] text-gray-500">{card.label}</p>
+                    <p className="truncate font-saveful text-[11px] text-gray-400">{card.note ?? "\u00a0"}</p>
+                  </div>
+                  <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", card.tone)}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <p className="mt-2 truncate font-saveful-bold text-xl leading-none tabular-nums text-gray-900">{card.pending ? "…" : card.value}</p>
+                {card.hint ? (
+                  <p className="mt-2 truncate font-saveful text-[11px] text-gray-500">{card.hint}</p>
+                ) : (
+                  <p
+                    className={cn(
+                      "mt-2 truncate font-saveful text-[11px]",
+                      !card.pending && card.delta < 0 ? "text-red-600" : !card.pending && card.delta > 0 ? "text-emerald-700" : "text-gray-400",
+                    )}
+                  >
+                    {card.pending ? "Loading activity…" : card.delta === 0 ? "No change" : `${signed(card.delta)}${card.unit} vs ${model.priorLabel}`}
+                    {!card.pending && card.delta !== 0 ? <ArrowUpRight className={cn("ml-0.5 inline h-3 w-3", card.delta < 0 && "rotate-90")} /> : null}
+                  </p>
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
@@ -315,7 +347,7 @@ export function AdminDashboard() {
             rows={model.pathways}
             totalKg={model.recoveredKg}
             selected={filters.pathway}
-            onSelect={(pathway) => update({ pathway: filters.pathway === pathway ? "all" : pathway })}
+            onSelect={(pathway) => update({ pathway })}
           />
         </AdminSection>
 
@@ -454,80 +486,6 @@ export function AdminDashboard() {
         </p>
       </footer>
     </AdminPage>
-  );
-}
-
-function PathwayDonut({
-  rows,
-  totalKg,
-  selected,
-  onSelect,
-}: {
-  rows: { pathway: RecoveryPathway; label: string; kg: number; percent: number; color: string }[];
-  totalKg: number;
-  selected: "all" | RecoveryPathway;
-  onSelect: (pathway: RecoveryPathway) => void;
-}) {
-  const data = rows.filter((item) => item.kg > 0);
-  return (
-    <div className="px-3.5 pb-3 pt-2">
-      {data.length ? (
-        <>
-          <div className="relative mx-auto h-40 w-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data}
-                  dataKey="kg"
-                  nameKey="label"
-                  innerRadius={46}
-                  outerRadius={64}
-                  paddingAngle={2}
-                  onClick={(_, index) => data[index] && onSelect(data[index].pathway)}
-                  style={{ cursor: "pointer" }}
-                >
-                  {data.map((item) => (
-                    <Cell
-                      key={item.pathway}
-                      fill={item.color}
-                      opacity={selected === "all" || selected === item.pathway ? 1 : 0.35}
-                      stroke="#fff"
-                      strokeWidth={2}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={CHART_TOOLTIP} formatter={(value, _name, item) => [formatKg(Number(value)), item.payload.label]} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-              <p className="font-saveful-bold text-sm tabular-nums text-gray-900">{formatKg(totalKg)}</p>
-              <p className="font-saveful text-[10px] text-gray-400">recovered</p>
-            </div>
-          </div>
-          <ul className="mt-1 space-y-1">
-            {rows.map((item) => (
-              <li key={item.pathway}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(item.pathway)}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-[#FAF7F0]",
-                    selected === item.pathway && "bg-saveful-green/[0.06]",
-                  )}
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.color }} />
-                  <span className="min-w-0 truncate font-saveful text-sm text-gray-700">
-                    {item.label} ({item.percent}%)
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p className="px-1 py-8 text-center font-saveful text-sm text-gray-500">No recovered volume for these filters.</p>
-      )}
-    </div>
   );
 }
 
