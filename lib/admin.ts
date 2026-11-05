@@ -259,6 +259,8 @@ export type AdminOrgUser = {
   territoryIds?: string[];
   clusterIds?: string[];
   enterpriseWide?: boolean;
+  /** Sites granted in the portal (scope grants only, not app site access). */
+  scopeSiteIds?: string[];
 };
 
 export type AdminOrgProfile = {
@@ -916,9 +918,11 @@ function mapOrgUser(
   const groupIds = scopeIdsOf(scopes, "GROUP");
   const territoryIds = scopeIdsOf(scopes, "TERRITORY");
   const clusterIds = scopeIdsOf(scopes, "CLUSTER");
+  const roleText = row.roleLabel || row.role;
+  const limitedViewer = /enterprise admin/i.test(roleText) && !/super/i.test(roleText) && scopes.length > 0;
   const enterpriseWide =
     scopes.some((scope) => (scope.scopeType ?? "").toUpperCase() === "ENTERPRISE") ||
-    /super admin|enterprise admin/i.test(row.roleLabel || row.role);
+    (/super admin|enterprise admin/i.test(roleText) && !limitedViewer);
   return {
     id: String(row.id),
     orgId,
@@ -934,6 +938,7 @@ function mapOrgUser(
     territoryIds,
     clusterIds,
     enterpriseWide,
+    scopeSiteIds: scopeIdsOf(scopes, "SITE"),
   };
 }
 

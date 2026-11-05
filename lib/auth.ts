@@ -286,9 +286,8 @@ async function resolveEnterpriseScope(
   role: NonNullable<SessionUser["enterpriseRole"]>,
   profileSiteIds: string[] = [],
 ): Promise<SessionUser["scope"]> {
-  if (role === "enterprise_super_admin" || role === "enterprise_admin") {
-    return { groupIds: null, territoryIds: null, clusterIds: null, siteIds: null };
-  }
+  const wholeEnterprise = { groupIds: null, territoryIds: null, clusterIds: null, siteIds: null };
+  if (role === "enterprise_super_admin") return wholeEnterprise;
 
   const [membersPayload, sitesPayload] = await Promise.all([
     listEnterpriseMembers().catch(() => null),
@@ -300,6 +299,17 @@ async function resolveEnterpriseScope(
   );
   const fromGrants = accessScopeFromUserScope(scopeFromApi(role, self?.scopes));
   const listedIds = siteRowsFromPayload(sitesPayload).map((row) => String(row.id));
+
+  if (role === "enterprise_admin") {
+    if (fromGrants.siteIds === null) return wholeEnterprise;
+    // The sites endpoint already returns only the sites a limited viewer may see.
+    return {
+      groupIds: fromGrants.groupIds ?? [],
+      territoryIds: fromGrants.territoryIds ?? [],
+      clusterIds: fromGrants.clusterIds ?? [],
+      siteIds: [...new Set([...(fromGrants.siteIds ?? []), ...listedIds])],
+    };
+  }
   const managedIds = siteRowsFromPayload(sitesPayload)
     .filter((row) =>
       (row.managers ?? []).some(

@@ -15,9 +15,9 @@ export function scopeFromApi(
   role: EnterpriseRole,
   scopes?: Array<{ scopeType: string; scopeId: number | null }>,
 ): UserAccessScope {
-  if (role === "enterprise_super_admin" || role === "enterprise_admin") {
-    return { enterprise: true };
-  }
+  if (role === "enterprise_super_admin") return { enterprise: true };
+  // A view-only admin covers everything unless they have been limited to chosen sites.
+  if (role === "enterprise_admin" && !(scopes ?? []).length) return { enterprise: true };
   const next: UserAccessScope = {};
   for (const scope of scopes ?? []) {
     const id = scope.scopeId == null ? null : String(scope.scopeId);

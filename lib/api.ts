@@ -335,13 +335,18 @@ export function inviteAdminEnterpriseUser(
   );
 }
 
-export function setAdminEnterpriseUserRole(organisationId: string | number, userId: number, role: string) {
-  return apiFetch<{ message: string; role: string; roleLabel: string }>(
+export function setAdminEnterpriseUserRole(
+  organisationId: string | number,
+  userId: number,
+  role: string,
+  siteIds: number[] = [],
+) {
+  return apiFetch<{ message: string; role: string; roleLabel: string; siteIds?: number[] }>(
     `/admin/enterprise/${organisationId}/users/${userId}/role`,
     {
       method: "PATCH",
       auth: true,
-      body: JSON.stringify({ role }),
+      body: JSON.stringify({ role, siteIds }),
     },
   );
 }
