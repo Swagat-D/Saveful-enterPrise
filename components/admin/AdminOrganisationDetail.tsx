@@ -342,9 +342,9 @@ function OverviewTab({
     { label: `Collections (${periodHint})`, value: formatCount(headlines.collections), hint: `${signed(headlines.collectionsDelta)} vs ${priorLabel}`, icon: Truck, tone: "bg-saveful-green/10 text-saveful-green" },
     { label: "Food diverted", note: "Edible & non-edible", value: formatKg(headlines.recoveredKg), hint: `${signed(Math.round(headlines.recoveredDelta))} kg vs ${priorLabel}`, icon: Recycle, tone: "bg-violet-50 text-violet-700" },
     { label: "CO₂ avoided", note: "Edible & non-edible", value: formatKg(headlines.co2), hint: `${signed(Math.round(headlines.co2Delta))} kg vs ${priorLabel}`, icon: Cloud, tone: "bg-sky-50 text-sky-700" },
-    { label: "Livestock feed", note: "Non-edible only", value: formatKg(headlines.livestockKg), hint: `${signed(Math.round(headlines.livestockDelta))} kg vs ${priorLabel}`, icon: Wheat, tone: "bg-orange-50 text-orange-700" },
     { label: "Edible food recovered", note: "Edible only", value: formatKg(headlines.edibleKg), hint: `${signed(Math.round(headlines.edibleDelta))} kg vs ${priorLabel}`, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green" },
     { label: "Meals created", note: "From edible food only", value: formatCount(headlines.meals), hint: `${signed(Math.round(headlines.mealsDelta))} vs ${priorLabel}`, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700" },
+    { label: "Livestock feed", note: "Non-edible only", value: formatKg(headlines.livestockKg), hint: `${signed(Math.round(headlines.livestockDelta))} kg vs ${priorLabel}`, icon: Wheat, tone: "bg-orange-50 text-orange-700" },
   ];
 
   return (
@@ -377,9 +377,9 @@ function OverviewTab({
           <dl className="space-y-2 px-3.5 py-3">
             <ImpactRow label="Food diverted" value={formatKg(allTime.recoveredKg)} />
             <ImpactRow label="CO₂ avoided" value={formatKg(allTime.co2)} />
-            <ImpactRow label="Livestock feed" value={formatKg(allTime.livestockKg)} />
             <ImpactRow label="Edible food recovered" value={formatKg(allTime.edibleKg)} />
             <ImpactRow label="Meals created" value={formatCount(allTime.meals)} />
+            <ImpactRow label="Livestock feed" value={formatKg(allTime.livestockKg)} />
             <ImpactRow label="Estimated food value" value={formatMoney(allTime.value)} />
             <ImpactRow label="Total collections" value={formatCount(allTime.collections)} />
             <ImpactRow label="Since joined Saveful" value={formatDisplayDate(model.profile.joinedAt)} />
@@ -541,9 +541,9 @@ function InsightsTab({
         <dl className="space-y-2 px-3.5 py-3">
           <ImpactRow label="Food diverted" value={formatKg(recoveredKg)} />
           <ImpactRow label="CO₂ avoided" value={formatKg(impact.co2AvoidedKg)} />
-          <ImpactRow label="Livestock feed" value={formatKg(kgFor("livestock"))} />
           <ImpactRow label="Edible food recovered" value={formatKg(edibleKg)} />
           <ImpactRow label="Meals created" value={formatCount(calculateImpact(edibleKg).mealsCreated)} />
+          <ImpactRow label="Livestock feed" value={formatKg(kgFor("livestock"))} />
           <ImpactRow label="Estimated food value" value={formatMoney(impact.foodValue)} />
           <ImpactRow label="Collections" value={formatCount(rows.reduce((sum, item) => sum + item.collections, 0))} />
         </dl>

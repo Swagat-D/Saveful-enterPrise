@@ -71,29 +71,71 @@ export function AdminOrgUsers({ orgId, orgName, users }: { orgId: string; orgNam
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState<AdminOrgUser | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [search, setSearch] = useState("");
   const sites = useOrgSites(orgId);
 
-  const pageCount = Math.max(1, Math.ceil(users.length / pageSize));
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? users.filter((row) =>
+        `${row.name} ${row.email} ${row.role} ${row.status} ${reachLabel(row, sites) ?? ""}`.toLowerCase().includes(query),
+      )
+    : users;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const current = Math.min(page, pageCount);
-  const paged = users.slice((current - 1) * pageSize, current * pageSize);
+  const paged = filtered.slice((current - 1) * pageSize, current * pageSize);
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-saveful text-sm text-gray-500">
+      <div className="space-y-1.5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="relative block w-full sm:max-w-md sm:flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search users by name, email, role or status"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-white pl-9 pr-9 font-saveful text-sm text-gray-900 shadow-[0_1px_2px_rgba(16,24,40,0.04)] outline-none transition placeholder:text-gray-400 hover:border-gray-300 focus:border-saveful-green/50 focus:ring-2 focus:ring-saveful-green/10 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setPage(1);
+                }}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </label>
+          <div className="flex items-center justify-between gap-3 sm:ml-auto sm:justify-end">
+            <span className="font-saveful text-xs text-gray-500">
+              {query
+                ? `${filtered.length} of ${users.length} ${users.length === 1 ? "user" : "users"}`
+                : `${users.length} ${users.length === 1 ? "user" : "users"}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setNotice(null);
+                setInviting(true);
+              }}
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-saveful-green px-3.5 font-saveful-semibold text-sm text-white shadow-[0_1px_2px_rgba(16,24,40,0.08)] hover:bg-saveful-green/90"
+            >
+              <UserPlus className="h-4 w-4" />
+              Invite user
+            </button>
+          </div>
+        </div>
+        <p className="font-saveful text-xs text-gray-400">
           Invite a head-office user, or change what someone can see — the whole Enterprise or chosen sites.
         </p>
-        <button
-          type="button"
-          onClick={() => {
-            setNotice(null);
-            setInviting(true);
-          }}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-lg bg-saveful-green px-3 font-saveful-semibold text-sm text-white hover:bg-saveful-green/90 sm:self-auto"
-        >
-          <UserPlus className="h-4 w-4" />
-          Invite user
-        </button>
       </div>
 
       {notice ? (
@@ -152,10 +194,10 @@ export function AdminOrgUsers({ orgId, orgName, users }: { orgId: string; orgNam
                 </tr>
               );
             })}
-            {users.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-3.5 py-8 text-center font-saveful text-sm text-gray-500">
-                  No users.
+                  {query ? `No users match "${search.trim()}".` : "No users."}
                 </td>
               </tr>
             ) : null}
@@ -164,7 +206,7 @@ export function AdminOrgUsers({ orgId, orgName, users }: { orgId: string; orgNam
         <TablePager
           page={current}
           pageSize={pageSize}
-          total={users.length}
+          total={filtered.length}
           noun="users"
           onPage={setPage}
           onPageSize={(size) => {

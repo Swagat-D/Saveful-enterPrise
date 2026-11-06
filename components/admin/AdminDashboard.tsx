@@ -231,9 +231,9 @@ export function AdminDashboard() {
     { key: "collections", label: "Collections", value: formatCount(model?.headlines.collections.value ?? 0), delta: model?.headlines.collections.delta ?? 0, unit: "", href: `/admin/collections${query}`, icon: Truck, tone: "bg-violet-50 text-violet-700", pending: false },
     { key: "recovered", label: "Food diverted", note: "Edible & non-edible", value: formatKg(model?.headlines.recovered.value ?? 0), delta: Math.round(model?.headlines.recovered.delta ?? 0), unit: " kg", href: insightsHref, icon: Recycle, tone: "bg-violet-50 text-violet-700", pending: false },
     { key: "co2", label: "CO₂ avoided", note: "Edible & non-edible", value: formatKg(model?.headlines.co2.value ?? 0), delta: Math.round(model?.headlines.co2.delta ?? 0), unit: " kg", href: insightsHref, icon: Cloud, tone: "bg-teal-50 text-teal-700", pending: false },
-    { key: "livestock", label: "Livestock feed", note: "Non-edible only", value: formatKg(model?.headlines.livestock.value ?? 0), delta: Math.round(model?.headlines.livestock.delta ?? 0), unit: " kg", href: insightsHref, icon: Wheat, tone: "bg-orange-50 text-orange-700", pending: false },
     { key: "edible", label: "Edible food recovered", note: "Edible only", value: formatKg(model?.headlines.edible.value ?? 0), delta: Math.round(model?.headlines.edible.delta ?? 0), unit: " kg", href: insightsHref, icon: Leaf, tone: "bg-saveful-green/10 text-saveful-green", pending: false },
     { key: "meals", label: "Meals created", note: "From edible food only", value: formatCount(model?.headlines.meals.value ?? 0), delta: Math.round(model?.headlines.meals.delta ?? 0), unit: "", href: insightsHref, icon: UtensilsCrossed, tone: "bg-orange-50 text-orange-700", pending: false },
+    { key: "livestock", label: "Livestock feed", note: "Non-edible only", value: formatKg(model?.headlines.livestock.value ?? 0), delta: Math.round(model?.headlines.livestock.delta ?? 0), unit: " kg", href: insightsHref, icon: Wheat, tone: "bg-orange-50 text-orange-700", pending: false },
   ];
 
   if (!model) {
