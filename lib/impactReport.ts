@@ -10,6 +10,7 @@ import {
 } from "@/lib/insights";
 import { demoNetworkSites } from "@/lib/network";
 import { buildNetworkPerformanceModel, type NetworkPerformanceModel } from "@/lib/networkPerformance";
+import { saveReportPdf, type PdfBlock } from "@/lib/reportPdf";
 import { lookupLabel } from "@/lib/sitesDirectory";
 import type { AccessScope } from "@/types/enterprise";
 
@@ -140,14 +141,6 @@ function downloadFile(filename: string, content: string, mime: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function escapeXml(value: string) {
@@ -290,120 +283,110 @@ function round(value: number, digits = 1) {
   return Math.round(value * factor) / factor;
 }
 
-export function printReportPdf(payload: ReportPayload) {
+export function downloadReportPdf(payload: ReportPayload) {
   const include = new Set(payload.sections);
-  const insights = payload.insights;
+  const { insights, network } = payload;
+  const blocks: PdfBlock[] = [];
 
-  const totalsHtml = include.has("totals")
-    ? `<h2>Impact summary</h2>
-       <div class="kpis">
-         <div><span>Food recovered</span><strong>${escapeHtml(formatKg(insights.impact.foodKg))}</strong></div>
-         <div><span>Meals created</span><strong>${escapeHtml(formatCount(insights.impact.mealsCreated))}</strong></div>
-         <div><span>CO₂ avoided</span><strong>${escapeHtml(formatKg(insights.impact.co2AvoidedKg))}</strong></div>
-         <div><span>Estimated food value</span><strong>${escapeHtml(formatMoney(insights.impact.foodValue))}</strong></div>
-         <div><span>Completed collections</span><strong>${escapeHtml(formatCount(insights.impact.collectionsCompleted))}</strong></div>
-         <div><span>Organisations supported</span><strong>${escapeHtml(formatCount(insights.impact.organisationsSupported))}</strong></div>
-       </div>`
-    : "";
+  if (include.has("totals")) {
+    blocks.push({
+      kind: "kpis",
+      title: "Impact summary",
+      items: [
+        ["Food recovered", formatKg(insights.impact.foodKg)],
+        ["Meals created", formatCount(insights.impact.mealsCreated)],
+        ["CO₂ avoided", formatKg(insights.impact.co2AvoidedKg)],
+        ["Estimated food value", formatMoney(insights.impact.foodValue)],
+        ["Completed collections", formatCount(insights.impact.collectionsCompleted)],
+        ["Organisations supported", formatCount(insights.impact.organisationsSupported)],
+      ],
+    });
+  }
+  if (include.has("pathways")) {
+    blocks.push({
+      kind: "table",
+      title: "Recovery pathways",
+      columns: [
+        { label: "Pathway", width: 3 },
+        { label: "Quantity", width: 1, align: "right" },
+        { label: "Share", width: 1, align: "right" },
+      ],
+      rows: insights.pathways.map((item) => [item.label, formatKg(item.kg), `${item.percent}%`]),
+    });
+  }
+  if (include.has("foods")) {
+    blocks.push({
+      kind: "table",
+      title: "Food insights",
+      columns: [
+        { label: "Food category", width: 4 },
+        { label: "Quantity", width: 1, align: "right" },
+        { label: "Share", width: 0.8, align: "right" },
+        { label: "Collections", width: 1, align: "right" },
+      ],
+      rows: insights.foods.map((item) => [item.name, formatKg(item.kg), `${item.percent}%`, formatCount(item.collections)]),
+    });
+  }
+  if (include.has("organisations")) {
+    blocks.push({
+      kind: "table",
+      title: "Organisations supported",
+      columns: [
+        { label: "Organisation", width: 3 },
+        { label: "Type", width: 1.4 },
+        { label: "Quantity", width: 1, align: "right" },
+        { label: "Collections", width: 1, align: "right" },
+      ],
+      rows: insights.organisations.map((item) => [item.name, item.type, formatKg(item.kg), formatCount(item.collections)]),
+    });
+  }
+  if (include.has("network")) {
+    blocks.push({
+      kind: "kpis",
+      title: "Network performance",
+      columns: 4,
+      items: [
+        ["Total sites", formatCount(network.network.totalSites)],
+        ["Active sites", formatCount(network.network.activeSites)],
+        ["Sites with activity", formatCount(network.network.sitesWithActivity)],
+        ["Participation", `${network.network.participationRate}%`],
+      ],
+    });
+  }
+  if (include.has("sites")) {
+    blocks.push({
+      kind: "table",
+      title: "Site-level detail",
+      columns: [
+        { label: "Site", width: 3 },
+        { label: "Group", width: 1.6 },
+        { label: "Quantity", width: 1, align: "right" },
+        { label: "Collections", width: 1, align: "right" },
+        { label: "Meals", width: 1, align: "right" },
+      ],
+      rows: payload.sites.map((item) => [
+        item.siteName,
+        item.group,
+        formatKg(item.kg),
+        formatCount(item.collections),
+        formatCount(item.mealsCreated),
+      ]),
+    });
+  }
 
-  const pathwaysHtml = include.has("pathways")
-    ? `<h2>Recovery pathways</h2>
-       <table><thead><tr><th>Pathway</th><th class="num">Quantity</th><th class="num">Share</th></tr></thead>
-       <tbody>${insights.pathways
-         .map(
-           (item) =>
-             `<tr><td>${escapeHtml(item.label)}</td><td class="num">${escapeHtml(formatKg(item.kg))}</td><td class="num">${item.percent}%</td></tr>`,
-         )
-         .join("")}</tbody></table>`
-    : "";
-
-  const foodsHtml = include.has("foods")
-    ? `<h2>Food insights</h2>
-       <table><thead><tr><th>Food category</th><th class="num">Quantity</th><th class="num">Share</th><th class="num">Collections</th></tr></thead>
-       <tbody>${insights.foods
-         .map(
-           (item) =>
-             `<tr><td>${escapeHtml(item.name)}</td><td class="num">${escapeHtml(formatKg(item.kg))}</td><td class="num">${item.percent}%</td><td class="num">${item.collections}</td></tr>`,
-         )
-         .join("")}</tbody></table>`
-    : "";
-
-  const orgsHtml = include.has("organisations")
-    ? `<h2>Organisations supported</h2>
-       <table><thead><tr><th>Organisation</th><th>Type</th><th class="num">Quantity</th><th class="num">Collections</th></tr></thead>
-       <tbody>${insights.organisations
-         .map(
-           (item) =>
-             `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.type)}</td><td class="num">${escapeHtml(formatKg(item.kg))}</td><td class="num">${item.collections}</td></tr>`,
-         )
-         .join("")}</tbody></table>`
-    : "";
-
-  const networkHtml = include.has("network")
-    ? `<h2>Network performance</h2>
-       <div class="kpis">
-         <div><span>Total sites</span><strong>${payload.network.network.totalSites}</strong></div>
-         <div><span>Active sites</span><strong>${payload.network.network.activeSites}</strong></div>
-         <div><span>Sites with activity</span><strong>${payload.network.network.sitesWithActivity}</strong></div>
-         <div><span>Participation</span><strong>${payload.network.network.participationRate}%</strong></div>
-       </div>`
-    : "";
-
-  const sitesHtml = include.has("sites")
-    ? `<h2>Site-level detail</h2>
-       <table><thead><tr><th>Site</th><th>Group</th><th class="num">Quantity</th><th class="num">Collections</th></tr></thead>
-       <tbody>${payload.sites
-         .map(
-           (item) =>
-             `<tr><td>${escapeHtml(item.siteName)}</td><td>${escapeHtml(item.group)}</td><td class="num">${escapeHtml(formatKg(item.kg))}</td><td class="num">${item.collections}</td></tr>`,
-         )
-         .join("")}</tbody></table>`
-    : "";
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(payload.title)}</title>
-  <style>
-    body { font-family: ui-sans-serif, system-ui, sans-serif; color: #1a1a1a; background: #fffaf3; margin: 0; }
-    .page { padding: 36px; }
-    .logo { height: 56px; margin-bottom: 16px; }
-    h1 { color: #2d5f4f; margin: 0 0 6px; font-size: 26px; }
-    .meta { color: #6b6b6b; font-size: 13px; margin-bottom: 24px; }
-    h2 { color: #2d5f4f; font-size: 16px; margin: 28px 0 10px; }
-    table { width: 100%; border-collapse: collapse; background: white; }
-    th, td { border-bottom: 1px solid #eee; padding: 8px 10px; text-align: left; font-size: 13px; }
-    th { color: #6b6b6b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-    .num { text-align: right; }
-    .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
-    .kpis div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; }
-    .method { margin-top: 32px; color: #6b6b6b; font-size: 12px; line-height: 1.5; }
-  </style>
-</head>
-<body>
-  <div class="page">
-    ${payload.logoDataUrl ? `<img class="logo" src="${payload.logoDataUrl}" alt="" />` : ""}
-    <h1>Impact and recovery report</h1>
-    <div class="meta">${escapeHtml(payload.organisation)} · ${escapeHtml(payload.scopeLabel)} · ${escapeHtml(payload.periodLabel)}</div>
-    ${totalsHtml}
-    ${pathwaysHtml}
-    ${foodsHtml}
-    ${orgsHtml}
-    ${networkHtml}
-    ${sitesHtml}
-    <p class="method">Impact uses centrally managed Saveful conversion factors: 1 meal = ${IMPACT.MEAL_WEIGHT_KG} kg; CO₂ avoided = ${IMPACT.CO2_PER_KG} kg per kg food; estimated value = ${formatMoney(IMPACT.FOOD_VALUE_PER_KG)} per kg. Figures reconcile with Insights for the same scope and period.</p>
-  </div>
-</body>
-</html>`;
-
-  const report = window.open("", "_blank", "noopener,noreferrer,width=920,height=720");
-  if (!report) return false;
-  report.document.write(html);
-  report.document.close();
-  report.focus();
-  report.print();
-  return true;
+  return saveReportPdf({
+    filename: `Saveful_Impact_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
+    eyebrow: "Impact & ESG report",
+    title: "Impact and recovery report",
+    meta: [
+      ["Organisation", payload.organisation],
+      ["Scope", payload.scopeLabel],
+      ["Period", payload.periodLabel],
+    ],
+    blocks,
+    footer: `Impact uses centrally managed Saveful conversion factors: 1 meal = ${IMPACT.MEAL_WEIGHT_KG} kg; CO₂ avoided = ${IMPACT.CO2_PER_KG} kg per kg food; estimated value = ${formatMoney(IMPACT.FOOD_VALUE_PER_KG)} per kg. Figures reconcile with Insights for the same scope and period.`,
+    logoDataUrl: payload.logoDataUrl,
+  });
 }
 
 export function insightsScopeSummary(filters: InsightsFilters, enterprise: boolean) {

@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import { IMPACT, formatCount, formatKg, formatMoney } from "@/lib/impact";
 import type { AdminInsightStory, InsightRankedRow } from "@/lib/adminInsights";
+import { loadSavefulLogo } from "@/lib/reportPdf";
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -23,10 +24,8 @@ const ORANGE: [number, number, number] = [247, 147, 30];
 const RED: [number, number, number] = [180, 35, 24];
 const LOGO_RATIO = 500 / 175;
 
-let cachedLogo: string | null = null;
-
 export async function downloadAdminInsightPdf(story: AdminInsightStory) {
-  const logo = await loadLogo();
+  const logo = await loadSavefulLogo();
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   paintPage(doc);
 
@@ -506,21 +505,4 @@ function formatStamp(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-async function loadLogo() {
-  if (cachedLogo) return cachedLogo;
-  try {
-    const response = await fetch(`${window.location.origin}/logo.png`);
-    const blob = await response.blob();
-    cachedLogo = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-    return cachedLogo;
-  } catch {
-    return null;
-  }
 }

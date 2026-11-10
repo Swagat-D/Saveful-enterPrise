@@ -15,8 +15,8 @@ import {
   REPORT_SECTIONS,
   buildReportPayload,
   downloadReportExcel,
+  downloadReportPdf,
   hasReportableData,
-  printReportPdf,
   reportFiltersFromScope,
   type ReportFormat,
   type ReportSection,
@@ -146,15 +146,16 @@ export function ReportBuilder() {
       organisation: organization.name,
     });
     await wait(220);
-    if (format === "excel") {
-      downloadReportExcel(next);
-    } else {
-      const opened = printReportPdf(next);
-      if (!opened) {
-        setStatus("idle");
-        setError("Allow pop-ups to open the PDF report.");
-        return;
+    try {
+      if (format === "excel") {
+        downloadReportExcel(next);
+      } else {
+        await downloadReportPdf(next);
       }
+    } catch {
+      setStatus("idle");
+      setError("We couldn't create the report file. Please try again.");
+      return;
     }
     recordNotificationEvent({
       kind: "report_ready",
