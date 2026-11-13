@@ -132,11 +132,13 @@ export function AdminSites() {
       siteStatus: choice === "active" || choice === "deactivated" ? choice : "all",
       activity: "all",
       recovery: choice === "recovered" || choice === "none" ? choice : "all",
+      quiet: false,
     });
   };
 
-  const snapshot =
-    table.recovery === "recovered"
+  const snapshot = table.quiet
+    ? ""
+    : table.recovery === "recovered"
       ? "recovered"
       : table.recovery === "none"
         ? "none"
@@ -156,6 +158,7 @@ export function AdminSites() {
     table.clusterId !== "all",
     table.siteStatus !== "all",
     table.recovery !== "all",
+    table.quiet,
   ].filter(Boolean).length;
 
   return (
@@ -395,6 +398,22 @@ export function AdminSites() {
                     />
                   </div>
                 </div>
+                {table.quiet ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-saveful-green/20 bg-saveful-green/[0.06] py-1 pl-3 pr-1.5 font-saveful-semibold text-xs text-saveful-green">
+                      No activity in the last 30 days
+                      <button
+                        type="button"
+                        onClick={() => updateTable({ quiet: false })}
+                        aria-label="Show all sites"
+                        className="rounded-full p-0.5 hover:bg-saveful-green/10"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                    <span className="font-saveful text-xs text-gray-400">Active sites only, matching the dashboard count</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="hidden overflow-x-auto px-3.5 pb-2 lg:block">

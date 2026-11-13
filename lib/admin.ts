@@ -1355,7 +1355,7 @@ export function buildAdminOverview(filters: AdminFilters) {
       { id: "unclaimed", label: "Unclaimed / expired listings", count: unclaimed, href: `/admin/listings${adminFiltersToQuery(filters)}` },
       { id: "overdue", label: "Overdue / unresolved collections", count: unresolved, href: `/admin/collections${adminFiltersToQuery(filters)}` },
       { id: "activation", label: "Organisations awaiting activation", count: awaiting, href: `/admin/organisations${adminFiltersToQuery(filters)}` },
-      { id: "quiet", label: "Sites with no recent activity", count: quiet, href: `/admin/sites${adminFiltersToQuery(filters)}` },
+      { id: "quiet", label: "Sites with no recent activity", count: quiet, href: quietSitesHref(adminFiltersToQuery(filters)) },
       { id: "config", label: "Data / configuration issues", count: config, href: `/admin/sites${adminFiltersToQuery({ ...filters, organisationId: organisations.some((org) => org.id === "harbour") ? "harbour" : filters.organisationId })}` },
     ],
     metrics: {
@@ -1608,6 +1608,8 @@ export type AdminSitesTableFilters = {
   siteStatus: "all" | SiteLifecycleStatus;
   activity: "all" | ActivityStatus;
   recovery: "all" | "recovered" | "none";
+  /** Active sites with no activity in the last 30 days, matching the dashboard count. */
+  quiet: boolean;
   page: number;
   pageSize: 10 | 25 | 50;
 };
@@ -1620,6 +1622,7 @@ export const EMPTY_ADMIN_SITES_FILTERS: AdminSitesTableFilters = {
   siteStatus: "all",
   activity: "all",
   recovery: "all",
+  quiet: false,
   page: 1,
   pageSize: 10,
 };
@@ -1663,6 +1666,7 @@ export function parseAdminSitesTable(params: URLSearchParams): AdminSitesTableFi
         ? activity
         : "all",
     recovery: recovery === "recovered" || recovery === "none" ? recovery : "all",
+    quiet: params.get("quiet") === "1",
     page: page > 0 ? page : 1,
     pageSize: SITE_PAGE_SIZES.includes(pageSize as 10) ? (pageSize as 10 | 25 | 50) : 10,
   };
@@ -1677,6 +1681,7 @@ export function adminSitesTableToQuery(filters: AdminSitesTableFilters) {
   if (filters.siteStatus !== "all") params.set("status", filters.siteStatus);
   if (filters.activity !== "all") params.set("activity", filters.activity);
   if (filters.recovery !== "all") params.set("recovery", filters.recovery);
+  if (filters.quiet) params.set("quiet", "1");
   if (filters.page > 1) params.set("page", String(filters.page));
   if (filters.pageSize !== 10) params.set("pageSize", String(filters.pageSize));
   return params;
@@ -1690,8 +1695,22 @@ export function hasActiveAdminSitesFilters(filters: AdminSitesTableFilters) {
     filters.clusterId !== "all" ||
     filters.siteStatus !== "all" ||
     filters.activity !== "all" ||
-    filters.recovery !== "all"
+    filters.recovery !== "all" ||
+    filters.quiet
   );
+}
+
+export function isQuietSite(site: { siteStatus: SiteLifecycleStatus; lastActivityAt: string | null }) {
+  if (site.siteStatus !== "active") return false;
+  if (!site.lastActivityAt) return true;
+  const range = periodRange("30");
+  return !inDateRange(site.lastActivityAt, range.startDate, range.endDate);
+}
+
+export function quietSitesHref(query: string) {
+  const params = new URLSearchParams(query.replace(/^\?/, ""));
+  params.set("quiet", "1");
+  return `/admin/sites?${params.toString()}`;
 }
 
 function siteLifecycle(row: AdminSite): SiteLifecycleStatus {
@@ -1798,6 +1817,7 @@ export function buildSitesDirectory(adminFilters: AdminFilters, table: AdminSite
     if (table.activity !== "all" && row.activity !== table.activity) return false;
     if (table.recovery === "recovered" && row.recoveredKg <= 0) return false;
     if (table.recovery === "none" && row.recoveredKg > 0) return false;
+    if (table.quiet && !isQuietSite(row)) return false;
     return true;
   });
   const counts = {

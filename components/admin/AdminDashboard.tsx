@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { AdminFiltersBar, AdminPage, AdminSection, useAdminFilters } from "@/components/admin/AdminChrome";
 import { PathwayDonut } from "@/components/admin/PathwayDonut";
-import { ORG_TYPES, type AdminFilters, type OrgTypeId } from "@/lib/admin";
+import { ORG_TYPES, quietSitesHref, type AdminFilters, type OrgTypeId } from "@/lib/admin";
 import { getAdminDashboardSummary, type AdminDashboardSummary } from "@/lib/api";
 import { SavefulPageLoader } from "@/components/ui/SavefulPageLoader";
 import { CHART_TOOLTIP } from "@/lib/demo";
@@ -177,7 +177,7 @@ function summaryModel(summary: AdminDashboardSummary, filters: AdminFilters, que
       { id: "unclaimed", label: "Unclaimed / expired listings", count: summary.attention.unclaimed, href: `/admin/listings${query}` },
       { id: "overdue", label: "Overdue / unresolved collections", count: summary.attention.unresolved, href: `/admin/collections${query}` },
       { id: "activation", label: "Organisations awaiting activation", count: summary.attention.awaitingActivation, href: `/admin/organisations${query}` },
-      { id: "quiet", label: "Sites with no recent activity", count: summary.attention.quietSites, href: `/admin/sites${query}` },
+      { id: "quiet", label: "Sites with no recent activity", count: summary.attention.quietSites, href: quietSitesHref(query) },
       { id: "config", label: "Data / configuration issues", count: 0, href: `/admin/sites${query}` },
     ],
   };
