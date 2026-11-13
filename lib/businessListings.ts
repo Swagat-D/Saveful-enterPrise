@@ -12,6 +12,8 @@ export const PEOPLE_FOOD_ITEMS = [
   "Fresh fruit & veg",
   "Meat",
   "Dairy",
+  "Snacks",
+  "Drinks",
 ] as const;
 
 export const FARM_FOOD_ITEMS = [

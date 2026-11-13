@@ -14,6 +14,8 @@ export const PEOPLE_ITEMS: FoodItem[] = [
   { name: "Fresh fruit & veg", qty: 0, icon: "/listing/fruit_veg_icon.png" },
   { name: "Meat", qty: 0, icon: "/listing/meat_icon.png" },
   { name: "Dairy", qty: 0, icon: "/listing/milk_icon.png" },
+  { name: "Snacks", qty: 0, icon: "/listing/veggie_basket.png" },
+  { name: "Drinks", qty: 0, icon: "/listing/veggie_basket.png" },
 ];
 
 export const FARM_ITEMS: FoodItem[] = [
