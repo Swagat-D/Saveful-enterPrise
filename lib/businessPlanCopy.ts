@@ -394,6 +394,9 @@ export function billingUserMessage(err: unknown, fallback = "We could not comple
   if (lower.includes("quote-based") || lower.includes("enterprise plan is quote")) {
     return "Enterprise is quote-based. Submit an enquiry and our team will contact you.";
   }
+  if (err.status === 404 && lower.includes("billing account")) {
+    return "Your plan is managed by Saveful, so there is no billing portal to open. Contact Saveful support to change it.";
+  }
   if (err.status === 403 && lower.includes("organisation admin")) {
     return "Only an organisation admin can manage billing.";
   }

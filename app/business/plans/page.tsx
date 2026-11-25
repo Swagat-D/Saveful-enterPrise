@@ -771,7 +771,13 @@ function CurrentPlanBar({
           </div>
         ) : null}
       </div>
-      {canManage ? (
+      {canManage && entitlements.hasBillingAccount === false ? (
+        // Set up by Saveful directly (no Stripe customer): no portal, and no
+        // self-serve cancel — that would end the plan immediately.
+        <p className="max-w-xs font-saveful text-[11px] text-gray-500 sm:text-right">
+          This plan is managed by Saveful. Contact Saveful support to change or cancel it.
+        </p>
+      ) : canManage ? (
         <div className="flex shrink-0 items-center gap-2">
           <Button type="button" size="sm" disabled={busy} onClick={onPortal}>
             <CreditCard className="h-3.5 w-3.5" />

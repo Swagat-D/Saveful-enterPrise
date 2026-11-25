@@ -176,6 +176,11 @@ export type Entitlements = {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   freeTrialAvailable: boolean;
+  /**
+   * The org has a Stripe billing account, so "Manage billing" can open the portal.
+   * false for plans Saveful set up directly; undefined on older backends.
+   */
+  hasBillingAccount?: boolean;
   pendingPlanId?: number | null;
   pendingPlanDisplayName?: string | null;
   pendingBillingCycle?: BillingCycle | null;
