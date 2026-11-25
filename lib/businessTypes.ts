@@ -117,11 +117,32 @@ export type BusinessProfile = {
   };
 };
 
+/** A module an organisation can hold. Complete Solution grants both. */
+export type ProductModule = "MFC" | "CONNECT";
+/** What a plan sells: one module, or COMPLETE for both. */
+export type PlanModule = "MFC" | "CONNECT" | "COMPLETE";
+export type PlanScope = "SINGLE" | "MULTI" | "ENTERPRISE";
+export type PlanChangeType = "UPGRADE" | "DOWNGRADE" | "SWITCH";
+
+export const PRODUCT_MODULES: readonly ProductModule[] = ["MFC", "CONNECT"];
+export const PLAN_MODULES: readonly PlanModule[] = ["MFC", "CONNECT", "COMPLETE"];
+export const PLAN_SCOPES: readonly PlanScope[] = ["SINGLE", "MULTI", "ENTERPRISE"];
+
 export type AvailablePlan = {
   id: number;
   name: string;
   displayName: string;
   description: string | null;
+  module: PlanModule;
+  scope: PlanScope;
+  /** 0 when the plan is sold without a free trial (Make Food Count). */
+  trialDays: number;
+  /** The org's one trial is unused and this plan offers it. Undefined on older backends. */
+  trialAvailable?: boolean;
+  tagline: string | null;
+  closingLine: string | null;
+  /** e.g. "Best value" */
+  badge: string | null;
   priceMonthly: number | null;
   priceAnnual: number | null;
   currency: string;
@@ -141,6 +162,11 @@ export type Entitlements = {
   planId: number | null;
   planName: string | null;
   planDisplayName: string | null;
+  /** What the current plan sells. null without a plan. */
+  planModule: PlanModule | null;
+  planScope: PlanScope | null;
+  /** Modules the org may use now: empty unless entitled, both when never billed. */
+  modules: ProductModule[];
   billingCycle: BillingCycle | null;
   quantity: number | null;
   maxSites: number | null;

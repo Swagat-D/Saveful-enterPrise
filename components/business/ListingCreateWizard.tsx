@@ -26,6 +26,8 @@ import { ApiError } from "@/lib/api";
 import { createBusinessListing } from "@/lib/businessApi";
 import { useBusinessSession } from "@/lib/businessAuth";
 import { useEntitlements } from "@/lib/businessBilling";
+import { isModuleLocked, isModuleRequiredError } from "@/lib/businessPlanCopy";
+import { ModuleUpsellNotice } from "@/components/business/ModuleUpsellNotice";
 import { isBusinessMultiHeadOffice } from "@/lib/businessHqSite";
 import {
   getSitePickupCoords,
@@ -92,6 +94,9 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
   const [formError, setFormError] = useState("");
 
   const needsPlan = Boolean(entitlements?.billingRequired && !entitlements.entitled);
+  // On a plan without Saveful Connect (Make Food Count only): listing is locked.
+  const [connectRefused, setConnectRefused] = useState(false);
+  const connectLocked = isModuleLocked(entitlements, "CONNECT") || connectRefused;
   const activeItems = items.filter((item) => item.qty > 0);
   const totalQty = useMemo(() => items.reduce((sum, item) => sum + item.qty, 0), [items]);
   const bestBeforeDate = fromDateInput(bestBefore);
@@ -162,6 +167,7 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
       router.push("/business/plans");
       return;
     }
+    if (connectLocked) return;
     if (!confirmedSafe) {
       setErrors({
         confirmedSafe: farm
@@ -234,6 +240,11 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
       });
       router.replace("/business/listings");
     } catch (err) {
+      // The server refused because the plan lacks Saveful Connect: show the upsell.
+      if (isModuleRequiredError(err)) {
+        setConnectRefused(true);
+        return;
+      }
       setFormError(err instanceof ApiError || err instanceof Error ? err.message : "Could not create listing.");
     } finally {
       savingRef.current = false;
@@ -296,6 +307,9 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
           </header>
 
           <div className="space-y-5 p-4 sm:p-6">
+            {connectLocked ? (
+              <ModuleUpsellNotice module="CONNECT" canManage={Boolean(user?.isSuperAdmin)} />
+            ) : null}
             {needsPlan ? (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 font-saveful text-sm text-amber-900">
                 This organisation needs a trial or plan before listings can be created.{" "}
@@ -734,7 +748,7 @@ export function ListingCreateWizard({ audience }: { audience: Audience }) {
             </button>
             <button
               type="button"
-              disabled={saving || (step === 3 && needsPlan)}
+              disabled={saving || (step === 3 && (needsPlan || connectLocked))}
               aria-busy={saving}
               onClick={() => (step < 3 ? continueFrom(step) : void onSubmit())}
               className={cn("inline-flex h-11 items-center justify-center rounded-xl px-6 font-saveful-bold text-sm text-white disabled:opacity-50", accentFill)}

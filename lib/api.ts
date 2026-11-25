@@ -9,12 +9,15 @@ export { ACCESS_TOKEN_KEY } from "@/lib/portalSession";
 export class ApiError extends Error {
   status: number;
   code?: string;
+  /** Extra fields from the error body, e.g. `module` on MODULE_REQUIRED. */
+  details?: Record<string, unknown>;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, details?: Record<string, unknown>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 

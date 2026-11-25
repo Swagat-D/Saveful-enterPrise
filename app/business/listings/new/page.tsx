@@ -8,6 +8,8 @@ import { LISTING_ICONS, ListingIcon } from "@/components/business/ListingIcon";
 import { PortalPageShell } from "@/components/ui/Portal";
 import { useBusinessSession } from "@/lib/businessAuth";
 import { useEntitlements } from "@/lib/businessBilling";
+import { isModuleLocked } from "@/lib/businessPlanCopy";
+import { ModuleUpsellNotice } from "@/components/business/ModuleUpsellNotice";
 
 export default function SurplusTypePage() {
   return (
@@ -25,8 +27,11 @@ function SurplusInner() {
     (user?.role === "restaurant_multi" || entitlements?.billingRequired) && entitlements && !entitlements.entitled,
   );
 
+  // On a plan without Saveful Connect (Make Food Count only): listing is locked.
+  const connectLocked = isModuleLocked(entitlements, "CONNECT");
+
   const go = (href: string) => {
-    if (needsPlan) {
+    if (needsPlan || connectLocked) {
       router.push("/business/plans");
       return;
     }
@@ -41,6 +46,10 @@ function SurplusInner() {
         <p className="mt-2 max-w-2xl font-saveful text-sm text-gray-500">
           Firstly tell us what type of surplus food you have, so we can notify the right recipients
         </p>
+
+        {connectLocked ? (
+          <ModuleUpsellNotice module="CONNECT" canManage={Boolean(user?.isSuperAdmin)} className="mt-4" />
+        ) : null}
 
         {needsPlan ? (
           <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 font-saveful text-sm text-amber-900">

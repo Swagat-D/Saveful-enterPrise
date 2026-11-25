@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ClipboardList, CreditCard, Heart, BarChart3, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, CreditCard, MapPin, Sparkles, User } from "lucide-react";
 import { BusinessGate } from "@/components/business/BusinessGate";
 import { EnterpriseConsultModal } from "@/components/business/EnterpriseConsultForm";
-import { PortalPageShell, StatusBadge } from "@/components/ui/Portal";
+import { PortalPageShell } from "@/components/ui/Portal";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import {
@@ -23,13 +23,15 @@ import { useBusinessSession } from "@/lib/businessAuth";
 import { parseLiveSiteId } from "@/lib/businessHqSite";
 import { useEntitlements } from "@/lib/businessBilling";
 import {
+  ANNUAL_PILL,
+  COMPLETE_LIST_HEADING,
+  ENTERPRISE_FALLBACK_FEATURES,
+  MODULE_LABEL,
+  MODULE_THEME,
   MULTI_SITE_INTRO,
+  MULTI_SITE_SCREEN_TITLE,
   MULTI_SITE_SUCCESS_BANNER,
-  SINGLE_SITE_COMPARE_SECTIONS,
-  SINGLE_SITE_COMPARE_UPGRADE_POINTS,
-  SINGLE_SITE_CORE_FEATURES,
-  SINGLE_SITE_UPGRADE_BODY,
-  SINGLE_SITE_UPGRADE_TITLE,
+  SINGLE_SITE_SCREEN_TITLE,
   TRUST_POINTS,
   billingCycleLabel,
   billingUserMessage,
@@ -41,15 +43,22 @@ import {
   isNoActiveSubscriptionError,
   isPlanChangeRequiredError,
   isTrialAlreadyUsedError,
+  isTrialNotOfferedError,
+  missingModule,
+  perSiteEstimate,
+  planCardCopy,
+  planCtaLabel,
+  planPriceForCycle,
+  resolveCurrentPlanRef,
+  type PlanRelation,
 } from "@/lib/businessPlanCopy";
-import { statusLabel, type AvailablePlan, type BillingCycle, type Entitlements } from "@/lib/businessTypes";
-
-const CORE_ICONS = {
-  surplus: ClipboardList,
-  matching: Heart,
-  impact: BarChart3,
-  secure: ShieldCheck,
-} as const;
+import {
+  PRODUCT_MODULES,
+  statusLabel,
+  type AvailablePlan,
+  type BillingCycle,
+  type Entitlements,
+} from "@/lib/businessTypes";
 
 export default function BusinessPlansPage() {
   return (
@@ -59,6 +68,20 @@ export default function BusinessPlansPage() {
   );
 }
 
+type CardAction = {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  /** "Applies today" / "Applies at your next renewal" */
+  hint: string | null;
+};
+
+/**
+ * "Your Plan": Make Food Count and Saveful Connect side by side, Complete
+ * Solution full width underneath, and Enterprise last for multi-site orgs.
+ * Each card has its own CTA; the trial, checkout and change-plan rules match
+ * the app and the backend.
+ */
 function PlansInner() {
   const user = useBusinessSession();
   const { entitlements, loading: entitlementsLoading, refresh } = useEntitlements();
@@ -68,11 +91,8 @@ function PlansInner() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState<number | "portal" | "cancel" | "pending" | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [compareOpen, setCompareOpen] = useState(false);
   const [salesOpen, setSalesOpen] = useState(false);
   const [locationCount, setLocationCount] = useState<number | null>(null);
-  const compareRef = useRef<HTMLDivElement>(null);
 
   const isMulti = user?.role === "restaurant_multi";
   const canManage = Boolean(user?.isSuperAdmin);
@@ -97,34 +117,38 @@ function PlansInner() {
     if (entitlements?.billingCycle) setCycle(entitlements.billingCycle);
   }, [entitlements?.billingCycle]);
 
-  useEffect(() => {
-    if (!compareOpen) return;
-    const node = compareRef.current;
-    if (!node) return;
-    const timer = window.setTimeout(() => {
-      node.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
-    return () => window.clearTimeout(timer);
-  }, [compareOpen]);
-
-  const visible = useMemo(() => {
-    const rows = isMulti ? [...plans] : plans.filter((plan) => !plan.contactSalesOnly);
-    return rows.sort((a, b) => Number(a.contactSalesOnly) - Number(b.contactSalesOnly));
-  }, [isMulti, plans]);
+  // Design order: Make Food Count, Saveful Connect, then Complete, then Enterprise.
+  const moduleCards = useMemo(
+    () =>
+      plans
+        .filter((plan) => !plan.contactSalesOnly && plan.module !== "COMPLETE")
+        .sort((a, b) => (a.module === b.module ? 0 : a.module === "MFC" ? -1 : 1)),
+    [plans],
+  );
+  const completeCards = useMemo(
+    () => plans.filter((plan) => !plan.contactSalesOnly && plan.module === "COMPLETE"),
+    [plans],
+  );
+  const enterpriseCards = useMemo(
+    () => (isMulti ? plans.filter((plan) => plan.contactSalesOnly) : []),
+    [isMulti, plans],
+  );
 
   const live = hasLiveSubscription(entitlements);
-  const currentPlan = visible.find((plan) => plan.id === entitlements?.planId) ?? null;
+  // May be a legacy plan (Single Site +, Multi Site) that is no longer listed.
+  const currentPlan = resolveCurrentPlanRef(plans, entitlements);
   const currentCycle = entitlements?.billingCycle ?? "MONTHLY";
-  const trialAvailable = Boolean(entitlements?.freeTrialAvailable) && !live;
+  // Stripe bills per real site, at least one.
+  const siteCount = Math.max(1, locationCount ?? 0, entitlements?.quantity ?? 0);
 
-  useEffect(() => {
-    if (selectedId != null || !visible.length) return;
-    setSelectedId(currentPlan?.id ?? visible.find((plan) => plan.isMostPopular)?.id ?? visible[0]?.id ?? null);
-  }, [currentPlan?.id, selectedId, visible]);
+  /** Per plan: Make Food Count is never trialled, and each org gets one trial. */
+  const trialFor = (plan: AvailablePlan) =>
+    !live && plan.trialDays > 0 && (plan.trialAvailable ?? Boolean(entitlements?.freeTrialAvailable));
 
   const startCheckout = async (plan: AvailablePlan, billingCycle: BillingCycle) => {
+    const useTrial = trialFor(plan);
     try {
-      const session = trialAvailable
+      const session = useTrial
         ? await startBillingTrial(plan.id, billingCycle)
         : await startBillingCheckout(plan.id, billingCycle);
       if (session.checkoutUrl) {
@@ -132,9 +156,10 @@ function PlansInner() {
         return;
       }
       await refresh();
-      setNotice(trialAvailable ? "Your free trial has started." : "Your plan is now active.");
+      setNotice(useTrial ? "Your free trial has started." : "Your plan is now active.");
     } catch (err) {
-      if (trialAvailable && isTrialAlreadyUsedError(err)) {
+      // Trial already used, or this plan is sold without one: paid checkout.
+      if (useTrial && (isTrialAlreadyUsedError(err) || isTrialNotOfferedError(err))) {
         const paid = await startBillingCheckout(plan.id, billingCycle);
         if (paid.checkoutUrl) window.location.href = paid.checkoutUrl;
         return;
@@ -148,15 +173,17 @@ function PlansInner() {
     const recurring = `${formatPlanPrice(quote.recurringAmount, quote.currency)} ${billingCycleLabel(quote.billingCycle)}`;
     const effective = formatBillingDate(quote.effectiveAt);
     const nextBilling = formatBillingDate(quote.nextBillingDate);
-    const confirmed =
-      quote.direction === "UPGRADE"
-        ? window.confirm(
-            `You'll be charged ${formatPlanPrice(quote.amountDueToday, quote.currency)} today — the cost of ${quote.planDisplayName} less credit for the unused part of your current plan.\n\n${quote.planDisplayName} then renews at ${recurring}${nextBilling ? ` from ${nextBilling}` : ""}.`,
-          )
-        : window.confirm(
-            `Nothing is charged today. You keep your current plan until ${effective ?? "the end of this billing period"}, then move to ${quote.planDisplayName} at ${recurring}.`,
-          );
-    if (!confirmed) return;
+    // Saveful Connect trial → Complete: the trial carries over, nothing is billed.
+    const keepsTrial =
+      quote.direction === "UPGRADE" &&
+      quote.endsTrialEarly === false &&
+      String(entitlements?.status ?? "").toUpperCase() === "TRIALING";
+    const message = keepsTrial
+      ? `Nothing is charged today. Your free trial continues on ${quote.planDisplayName}${nextBilling ? ` until ${nextBilling}` : ""}, then it renews at ${recurring}.`
+      : quote.direction === "UPGRADE"
+        ? `You'll be charged ${formatPlanPrice(quote.amountDueToday, quote.currency)} today — the cost of ${quote.planDisplayName} less credit for the unused part of your current plan.\n\n${quote.planDisplayName} then renews at ${recurring}${nextBilling ? ` from ${nextBilling}` : ""}.`
+        : `Nothing is charged today. You keep your current plan until ${effective ?? "the end of this billing period"}, then ${quote.changeType === "SWITCH" ? "switch" : "move"} to ${quote.planDisplayName} at ${recurring}.`;
+    if (!window.confirm(message)) return;
     const result = await changeBusinessPlan(plan.id, billingCycle);
     await refresh();
     setNotice(result.message);
@@ -207,20 +234,30 @@ function PlansInner() {
     }
   };
 
-  const ctaLabel = (plan: AvailablePlan) => {
-    if (busyId === plan.id) return "Opening…";
-    if (plan.contactSalesOnly) return "Talk to Sales Team";
-    if (!canManage) return "Admin required";
-    const relation = getPlanRelation({ plan, currentPlan, targetCycle: cycle, currentCycle });
-    if (live && plan.id === currentPlan?.id && cycle === currentCycle) return "You're on this plan";
-    if (live && plan.id === currentPlan?.id) return cycle === "ANNUAL" ? "Switch to yearly billing" : "Switch to monthly billing";
-    if (live) return relation === "UPGRADE" ? "Upgrade to this plan" : "Switch to this plan";
-    return trialAvailable ? "Start Free 30 Day Trial" : "Continue to checkout";
+  const actionFor = (plan: AvailablePlan): CardAction => {
+    const relation: PlanRelation = live
+      ? getPlanRelation({ plan, currentPlan, targetCycle: cycle, currentCycle })
+      : "NEW";
+    const busy = busyId === plan.id;
+    return {
+      label: busy ? "Opening…" : planCtaLabel(plan, { relation, currentPlan, trialAvailable: trialFor(plan), cycle }),
+      onClick: () => void start(plan),
+      disabled: busy || relation === "CURRENT" || !canManage,
+      hint:
+        relation === "UPGRADE"
+          ? "Applies today"
+          : relation === "DOWNGRADE" || relation === "SWITCH"
+            ? "Applies at your next renewal"
+            : null,
+    };
   };
+  const isCurrent = (plan: AvailablePlan) => currentPlan?.id === plan.id;
+  const estimateFor = (plan: AvailablePlan) => (isMulti ? perSiteEstimate(plan, cycle, siteCount) : null);
 
   const loading = plansLoading || entitlementsLoading;
   const billingBusy = busyId === "cancel" || busyId === "portal";
   const showCurrent = Boolean(entitlements?.entitled && entitlements.billingRequired);
+  const anyTrial = plans.some((plan) => !plan.contactSalesOnly && trialFor(plan));
 
   const openPortal = async () => {
     setBusyId("portal");
@@ -261,20 +298,22 @@ function PlansInner() {
     }
   };
 
+  const noPlans = !loading && moduleCards.length + completeCards.length + enterpriseCards.length === 0;
+
   return (
     <PortalPageShell className="!space-y-3 sm:!space-y-3">
       <section className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <header className="flex flex-col gap-3 border-b border-gray-100 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div className="min-w-0">
             <h1 className="font-saveful-bold text-xl leading-none text-gray-900 sm:text-2xl">
-              {currentPlan ? "Your plan" : isMulti ? "Choose your plan" : "Compare plans"}
+              {isMulti ? MULTI_SITE_SCREEN_TITLE : SINGLE_SITE_SCREEN_TITLE}
             </h1>
             <p className="mt-1.5 font-saveful text-xs text-gray-500">
               {currentPlan
-                ? "Review your subscription or move to a different plan"
+                ? "Review your plan, add a module or change how you are billed"
                 : isMulti
                   ? MULTI_SITE_INTRO
-                  : "Choose the plan that's right for you"}
+                  : "Choose the plan that's right for your kitchen"}
             </p>
           </div>
           <BillingCycleToggle cycle={cycle} onChange={setCycle} />
@@ -325,26 +364,22 @@ function PlansInner() {
           </div>
         ) : null}
 
-        <div className="p-4 sm:p-5">
+        <div className="space-y-4 p-4 sm:p-5">
           {isMulti ? (
-            <p className="mb-4 font-saveful text-xs text-gray-500">{MULTI_SITE_SUCCESS_BANNER}</p>
-          ) : (
-            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-gray-100 pb-3">
-              <span className="font-saveful-semibold text-[11px] uppercase tracking-wide text-gray-400">Included</span>
-              {SINGLE_SITE_CORE_FEATURES.map((feature) => {
-                const Icon = CORE_ICONS[feature.key];
-                return (
-                  <span key={feature.key} className="inline-flex items-center gap-1.5 font-saveful text-xs text-gray-600">
-                    <Icon className="h-3.5 w-3.5 text-saveful-green" />
-                    {feature.label}
-                  </span>
-                );
-              })}
-            </div>
-          )}
+            <p className="flex items-center gap-2 font-saveful text-xs text-gray-500">
+              <Sparkles className="h-3.5 w-3.5 text-saveful-green" />
+              {MULTI_SITE_SUCCESS_BANNER}
+            </p>
+          ) : null}
 
-          {error ? <p className="mb-3 font-saveful text-sm text-amber-700">{error}</p> : null}
-          {notice ? <p className="mb-3 font-saveful text-sm text-saveful-green">{notice}</p> : null}
+          {!canManage ? (
+            <p className="rounded-xl border border-gray-200 bg-[#F7F6F2] px-4 py-3 font-saveful text-sm text-gray-600">
+              Only your organisation Super Admin can start or change a plan.
+            </p>
+          ) : null}
+
+          {error ? <p className="font-saveful text-sm text-amber-700">{error}</p> : null}
+          {notice ? <p className="font-saveful text-sm text-saveful-green">{notice}</p> : null}
 
           {loading ? (
             <div className="flex items-center justify-center py-10">
@@ -352,170 +387,62 @@ function PlansInner() {
             </div>
           ) : null}
 
-          {!loading && visible.length === 0 ? (
+          {noPlans ? (
             <p className="py-8 text-center font-saveful text-sm text-gray-500">
               No plans are available for your organisation right now.
             </p>
           ) : null}
 
-          <div className={`grid gap-4 ${visible.length > 1 ? "lg:grid-cols-2" : ""}`}>
-          {visible.map((plan) => {
-            const relation = getPlanRelation({ plan, currentPlan, targetCycle: cycle, currentCycle });
-            const isCurrent = plan.id === currentPlan?.id && cycle === currentCycle;
-            const selected = selectedId === plan.id;
-            const price = cycle === "ANNUAL" ? plan.priceAnnual : plan.priceMonthly;
-            const suffix = plan.contactSalesOnly
-              ? ""
-              : cycle === "ANNUAL"
-                ? plan.isPerSite
-                  ? "/year / site"
-                  : "/year"
-                : plan.isPerSite
-                  ? "/month / site"
-                  : "/month";
-            return (
-              <article
-                key={plan.id}
-                className={`flex flex-col rounded-2xl border bg-white p-5 shadow-sm ${
-                  selected || isCurrent ? "border-saveful-green/35" : "border-black/[0.06]"
-                }`}
-              >
-                <button type="button" className="flex-1 text-left" onClick={() => setSelectedId(plan.id)}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-saveful-bold text-base text-gray-900">{plan.displayName}</h3>
-                      {!isCurrent && relation !== "NEW" ? (
-                        <p className="mt-1 font-saveful text-xs text-saveful-green">
-                          {relation === "UPGRADE" ? "Upgrade — applies today" : "Applies at next renewal"}
-                        </p>
-                      ) : null}
-                    </div>
-                    {isCurrent ? (
-                      <StatusBadge tone="green">Current</StatusBadge>
-                    ) : plan.isMostPopular ? (
-                      <StatusBadge tone="green">Popular</StatusBadge>
-                    ) : null}
-                  </div>
-                  <p className="mt-3 font-saveful-bold text-3xl leading-none text-gray-900">
-                    {plan.contactSalesOnly ? "Custom" : formatPlanPrice(price, plan.currency)}
-                    {suffix ? <span className="ml-1.5 font-saveful text-sm font-normal text-gray-400">{suffix}</span> : null}
-                  </p>
-                  {plan.description ? (
-                    <p className="mt-3 font-saveful text-sm leading-relaxed text-gray-500">{plan.description}</p>
-                  ) : null}
-                  {plan.inheritsFrom ? (
-                    <p className="mt-3 font-saveful-semibold text-xs text-saveful-green">
-                      Everything in {plan.inheritsFrom.replace(/\s*plan$/i, "")}, plus
-                    </p>
-                  ) : null}
-                  <ul className="mt-4 space-y-2">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2 font-saveful text-sm text-gray-700">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-saveful-green" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </button>
-                <Button
-                  type="button"
-                  variant={plan.contactSalesOnly || isCurrent ? "secondary" : "primary"}
-                  disabled={busyId === plan.id || (isCurrent && !plan.contactSalesOnly)}
-                  onClick={() => void start(plan)}
-                  className="mt-5 w-full"
-                >
-                  {ctaLabel(plan)}
-                </Button>
-              </article>
-            );
-          })}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {TRUST_POINTS.map((point) => (
-              <span
-                key={point.key}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#F0F8F3] px-2.5 py-1 font-saveful-semibold text-[11px] text-saveful-green"
-              >
-                <Check className="h-3 w-3" />
-                {point.label}
-              </span>
-            ))}
-          </div>
-
-          {!isMulti && visible.length >= 2 ? (
-            <div
-              ref={compareRef}
-              className="mt-4 scroll-mt-20 overflow-hidden rounded-2xl border border-saveful-green/25 bg-white"
-            >
-              <button
-                type="button"
-                onClick={() => setCompareOpen((value) => !value)}
-                className="flex w-full items-start justify-between gap-3 bg-[#F0F8F3] px-3 py-3 text-left sm:items-center sm:px-4 sm:py-3.5"
-              >
-                <span className="min-w-0">
-                  <span className="block font-saveful-bold text-sm text-gray-900">Compare plans</span>
-                  <span className="mt-0.5 block font-saveful text-xs leading-relaxed text-gray-600">
-                    See what&apos;s included in Single Site and Single Site +
-                  </span>
-                </span>
-                <ChevronDown
-                  className={`mt-0.5 h-5 w-5 shrink-0 text-saveful-green transition sm:mt-0 ${compareOpen ? "rotate-180" : ""}`}
+          {!loading && moduleCards.length ? (
+            <div className={`grid items-stretch gap-4 ${moduleCards.length > 1 ? "md:grid-cols-2" : ""}`}>
+              {moduleCards.map((plan) => (
+                <ModulePlanCard
+                  key={plan.id}
+                  plan={plan}
+                  cycle={cycle}
+                  action={actionFor(plan)}
+                  current={isCurrent(plan)}
+                  estimate={estimateFor(plan)}
                 />
-              </button>
+              ))}
+            </div>
+          ) : null}
 
-              {compareOpen ? (
-                <div className="border-t border-saveful-green/15 p-3 sm:p-4">
-                  <p className="font-saveful-semibold text-sm text-saveful-green">{SINGLE_SITE_UPGRADE_TITLE}</p>
-                  <p className="mt-1 font-saveful text-xs leading-relaxed text-gray-600">{SINGLE_SITE_UPGRADE_BODY}</p>
+          {!loading
+            ? completeCards.map((plan) => (
+                <CompletePlanCard
+                  key={plan.id}
+                  plan={plan}
+                  cycle={cycle}
+                  action={actionFor(plan)}
+                  current={isCurrent(plan)}
+                  estimate={estimateFor(plan)}
+                />
+              ))
+            : null}
 
-                  <div className="mt-3 overflow-hidden rounded-xl border border-saveful-green/15">
-                    <div className="grid grid-cols-[minmax(0,1fr)_4.75rem_5.25rem] sm:grid-cols-[minmax(0,1fr)_7rem_8rem]">
-                      <div className="bg-[#F7F6F2] px-2.5 py-2.5 font-saveful-semibold text-[10px] uppercase tracking-[0.12em] text-gray-500 sm:px-3 sm:text-[11px]">
-                        Feature
-                      </div>
-                      <div className="bg-[#F7F6F2] px-1 py-2.5 text-center font-saveful-bold text-[11px] leading-tight text-gray-700 sm:text-xs">
-                        Single Site
-                      </div>
-                      <div className="bg-[#E8F6EC] px-1 py-2.5 text-center font-saveful-bold text-[11px] leading-tight text-saveful-green sm:text-xs">
-                        Single Site +
-                      </div>
-                      {SINGLE_SITE_COMPARE_SECTIONS.flatMap((section) => [
-                        <div
-                          key={section.title}
-                          className="col-span-3 border-t border-gray-100 bg-white px-2.5 py-2 font-saveful-semibold text-[10px] uppercase tracking-[0.12em] text-gray-400 sm:px-3 sm:text-[11px]"
-                        >
-                          {section.title}
-                        </div>,
-                        ...section.rows.map((row) => (
-                          <div key={`${section.title}-${row.label}`} className="contents">
-                            <div className="border-t border-gray-100 px-2.5 py-2 font-saveful text-xs leading-snug text-gray-700 sm:px-3 sm:py-2.5 sm:text-sm">
-                              {row.label}
-                            </div>
-                            <div className="flex items-center justify-center border-t border-gray-100 px-1 py-2 sm:py-2.5">
-                              {compareCell(row.single)}
-                            </div>
-                            <div className="flex items-center justify-center border-t border-gray-100 bg-[#E8F6EC] px-1 py-2 sm:py-2.5">
-                              {compareCell(row.plus)}
-                            </div>
-                          </div>
-                        )),
-                      ])}
-                    </div>
-                  </div>
+          {!loading
+            ? enterpriseCards.map((plan) => (
+                <EnterprisePlanCard
+                  key={plan.id}
+                  plan={plan}
+                  current={isCurrent(plan)}
+                  onContactSales={() => setSalesOpen(true)}
+                />
+              ))
+            : null}
 
-                  <ul className="mt-3 space-y-2 rounded-xl bg-[#F0F8F3] p-3">
-                    {SINGLE_SITE_COMPARE_UPGRADE_POINTS.map((point) => (
-                      <li key={point} className="flex items-start gap-2 font-saveful text-xs text-gray-800 sm:text-sm">
-                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saveful-green text-white">
-                          <Check className="h-2.5 w-2.5" />
-                        </span>
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
+          {!loading && !noPlans ? (
+            <div className="flex flex-wrap gap-2">
+              {TRUST_POINTS.filter((point) => point.key !== "trial" || anyTrial).map((point) => (
+                <span
+                  key={point.key}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#F0F8F3] px-2.5 py-1 font-saveful-semibold text-[11px] text-saveful-green"
+                >
+                  <Check className="h-3 w-3" />
+                  {point.label}
+                </span>
+              ))}
             </div>
           ) : null}
         </div>
@@ -526,14 +453,210 @@ function PlansInner() {
   );
 }
 
-function compareCell(value: boolean | string) {
-  if (value === true) {
-    return <Check className="mx-auto h-4 w-4 text-saveful-green" />;
-  }
-  if (value === false) {
-    return <span className="font-saveful text-gray-300">—</span>;
-  }
-  return <span className="font-saveful-semibold text-sm text-saveful-green">{value}</span>;
+// ─── Cards ───────────────────────────────────────────────────────────────────
+
+function Tick({ label, color }: { label: string; color: string }) {
+  return (
+    <li className="flex items-start gap-2.5 font-saveful text-sm text-gray-800">
+      <span
+        className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-white"
+        style={{ backgroundColor: color }}
+      >
+        <Check className="h-3 w-3" strokeWidth={3} />
+      </span>
+      {label}
+    </li>
+  );
+}
+
+function Allowances({ rows, color }: { rows: { label: string; kind: string }[]; color: string }) {
+  if (!rows.length) return null;
+  return (
+    <ul className="space-y-2">
+      {rows.map((row) => {
+        const Icon = row.kind === "users" ? User : MapPin;
+        return (
+          <li key={row.label} className="flex items-center gap-2.5 font-saveful text-sm text-gray-800">
+            <Icon className="h-[18px] w-[18px] shrink-0" style={{ color }} />
+            {row.label}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Cta({ action, buttonClass }: { action: CardAction; buttonClass: string }) {
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={action.onClick}
+        disabled={action.disabled}
+        className={`flex min-h-10 w-full items-center justify-center rounded-lg px-4 py-2 text-center font-saveful-semibold text-sm text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${buttonClass}`}
+      >
+        {action.label}
+      </button>
+      {action.hint ? <p className="text-center font-saveful text-[11px] text-gray-500">{action.hint}</p> : null}
+    </div>
+  );
+}
+
+function Price({ plan, cycle, color, estimate }: { plan: AvailablePlan; cycle: BillingCycle; color: string; estimate?: string | null }) {
+  const price = planPriceForCycle(plan, cycle);
+  return (
+    <div>
+      <p className="font-saveful-bold text-3xl leading-none" style={{ color }}>
+        {price.amount}
+        <span className="ml-1.5 font-saveful text-sm font-normal text-gray-500">{price.suffix}</span>
+      </p>
+      {estimate ? <p className="mt-1 font-saveful-semibold text-xs text-gray-500">{estimate}</p> : null}
+    </div>
+  );
+}
+
+function YourPlanPill({ color }: { color: string }) {
+  return (
+    <span className="rounded-md px-2 py-0.5 font-saveful-bold text-[11px] text-white" style={{ backgroundColor: color }}>
+      Your plan
+    </span>
+  );
+}
+
+/** Make Food Count / Saveful Connect card from the design. CTA at the top and bottom. */
+function ModulePlanCard({
+  plan,
+  cycle,
+  action,
+  current,
+  estimate,
+}: {
+  plan: AvailablePlan;
+  cycle: BillingCycle;
+  action: CardAction;
+  current: boolean;
+  estimate: string | null;
+}) {
+  const theme = MODULE_THEME[plan.module];
+  const copy = planCardCopy(plan);
+  return (
+    <article
+      className={`flex flex-col gap-4 rounded-2xl border p-5 ${theme.tint} ${current ? "border-2" : theme.border}`}
+      style={current ? { borderColor: theme.color } : undefined}
+    >
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <h2 className={`text-center font-saveful-bold text-lg ${theme.text}`}>{plan.displayName}</h2>
+        {current ? <YourPlanPill color={theme.color} /> : null}
+      </div>
+      <p className={`font-saveful-bold text-sm ${theme.text}`}>{copy.tagline}</p>
+      <Price plan={plan} cycle={cycle} color={theme.color} estimate={estimate} />
+      <p className="font-saveful text-sm leading-relaxed text-gray-500">{copy.description}</p>
+      <Cta action={action} buttonClass={theme.button} />
+      <Allowances rows={copy.allowances} color={theme.color} />
+      <ul className="space-y-2.5">
+        {copy.ticks.map((tick) => (
+          <Tick key={tick} label={tick} color={theme.color} />
+        ))}
+      </ul>
+      <div className="flex-1" />
+      <p className={`font-saveful-bold text-sm ${theme.text}`}>{copy.closingLine}</p>
+      <Cta action={action} buttonClass={theme.button} />
+    </article>
+  );
+}
+
+/** Full-width Complete Solution card: pitch and price left, "Everything in both modules, plus:" right. */
+function CompletePlanCard({
+  plan,
+  cycle,
+  action,
+  current,
+  estimate,
+}: {
+  plan: AvailablePlan;
+  cycle: BillingCycle;
+  action: CardAction;
+  current: boolean;
+  estimate: string | null;
+}) {
+  const theme = MODULE_THEME.COMPLETE;
+  const copy = planCardCopy(plan);
+  return (
+    <article
+      className={`rounded-2xl border p-5 ${theme.tint} ${current ? "border-2" : theme.border}`}
+      style={current ? { borderColor: theme.color } : undefined}
+    >
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {current ? <YourPlanPill color={theme.color} /> : null}
+            {plan.badge && !current ? (
+              <span className="rounded-md px-2 py-0.5 font-saveful-bold text-[11px] text-white" style={{ backgroundColor: theme.color }}>
+                {plan.badge}
+              </span>
+            ) : null}
+          </div>
+          <h2 className={`font-saveful-bold text-lg ${theme.text}`}>{plan.displayName}</h2>
+          <p className={`font-saveful-bold text-sm ${theme.text}`}>{copy.tagline}</p>
+          <Price plan={plan} cycle={cycle} color={theme.color} estimate={estimate} />
+          <p className="font-saveful text-sm leading-relaxed text-gray-500">{copy.description}</p>
+          <Allowances rows={copy.allowances} color={theme.color} />
+        </div>
+        <div className="space-y-3">
+          <p className={`font-saveful-bold text-sm ${theme.text}`}>{COMPLETE_LIST_HEADING}</p>
+          <ul className="space-y-2.5">
+            {copy.ticks.map((tick) => (
+              <Tick key={tick} label={tick} color={theme.color} />
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <p className={`font-saveful-bold text-sm ${theme.text}`}>{copy.closingLine}</p>
+        <div className="lg:min-w-[45%]">
+          <Cta action={action} buttonClass={theme.button} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/** Enterprise (10+ locations): quote-based, opens the sales enquiry. */
+function EnterprisePlanCard({
+  plan,
+  current,
+  onContactSales,
+}: {
+  plan: AvailablePlan;
+  current: boolean;
+  onContactSales: () => void;
+}) {
+  const features = plan.features.length ? plan.features : ENTERPRISE_FALLBACK_FEATURES;
+  return (
+    <article className={`rounded-2xl border bg-white p-5 ${current ? "border-2 border-gray-900" : "border-black/[0.08]"}`}>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="space-y-2">
+          {current ? <YourPlanPill color="#111827" /> : null}
+          <h2 className="font-saveful-bold text-lg text-gray-900">{plan.displayName}</h2>
+          <p className="font-saveful-bold text-sm text-gray-500">{plan.tagline ?? "10+ locations"}</p>
+          <p className="font-saveful-bold text-2xl text-gray-900">Custom Pricing</p>
+          {plan.description ? <p className="font-saveful text-sm leading-relaxed text-gray-500">{plan.description}</p> : null}
+        </div>
+        <ul className="space-y-2.5">
+          {features.map((feature) => (
+            <Tick key={feature} label={feature} color="#111827" />
+          ))}
+        </ul>
+      </div>
+      {current ? null : (
+        <div className="mt-5 flex justify-end">
+          <Button type="button" variant="secondary" onClick={onContactSales} className="w-full lg:w-auto">
+            Talk to Sales Team
+          </Button>
+        </div>
+      )}
+    </article>
+  );
 }
 
 function BillingCycleToggle({
@@ -567,7 +690,7 @@ function BillingCycleToggle({
             cycle === "ANNUAL" ? "bg-white/20 text-white" : "bg-saveful-green text-white"
           }`}
         >
-          2 months free
+          {ANNUAL_PILL}
         </span>
       </button>
     </div>
@@ -599,6 +722,7 @@ function CurrentPlanBar({
         ? { label: "Payment due", detail: "Update your card to keep your plan active." }
         : { label: statusLabel(entitlements.status), detail: null };
   const periodEnd = formatBillingDate(entitlements.currentPeriodEnd);
+  const missing = missingModule(entitlements);
   const locations =
     locationCount == null ? null : `${locationCount} ${locationCount === 1 ? "location" : "locations"}`;
   const meta = [
@@ -617,17 +741,36 @@ function CurrentPlanBar({
 
   return (
     <div className="flex flex-col gap-2.5 border-b border-gray-100 bg-[#F7F6F2]/70 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-      <p className="min-w-0 font-saveful text-xs text-gray-600">
-        <span className="font-saveful-semibold text-gray-900">
-          {entitlements.planDisplayName || entitlements.planName || "Your plan"}
-        </span>
-        {meta.map((item) => (
-          <span key={String(item)}>
-            <span className="text-gray-400"> · </span>
-            {item}
+      <div className="min-w-0 space-y-1.5">
+        <p className="font-saveful text-xs text-gray-600">
+          <span className="font-saveful-semibold text-gray-900">
+            {entitlements.planDisplayName || entitlements.planName || "Your plan"}
           </span>
-        ))}
-      </p>
+          {meta.map((item) => (
+            <span key={String(item)}>
+              <span className="text-gray-400"> · </span>
+              {item}
+            </span>
+          ))}
+        </p>
+        {entitlements.modules.length ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {PRODUCT_MODULES.filter((module) => entitlements.modules.includes(module)).map((module) => (
+              <span
+                key={module}
+                className={`rounded-full border px-2 py-0.5 font-saveful-semibold text-[11px] ${MODULE_THEME[module].tint} ${MODULE_THEME[module].border} ${MODULE_THEME[module].text}`}
+              >
+                {MODULE_LABEL[module]}
+              </span>
+            ))}
+            {missing ? (
+              <span className="font-saveful text-[11px] text-gray-500">
+                {MODULE_LABEL[missing]} isn&apos;t in your plan — Complete Solution includes both.
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       {canManage ? (
         <div className="flex shrink-0 items-center gap-2">
           <Button type="button" size="sm" disabled={busy} onClick={onPortal}>

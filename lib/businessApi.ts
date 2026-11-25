@@ -1,11 +1,73 @@
 import { API_BASE_URL, ApiError } from "@/lib/api";
 import { readAccessToken } from "@/lib/portalSession";
-import type {
-  AvailablePlan,
-  BillingCycle,
-  BusinessProfile,
-  Entitlements,
+import {
+  PLAN_MODULES,
+  PLAN_SCOPES,
+  PRODUCT_MODULES,
+  type AvailablePlan,
+  type BillingCycle,
+  type BusinessProfile,
+  type Entitlements,
+  type PlanChangeType,
+  type PlanModule,
+  type PlanScope,
+  type ProductModule,
 } from "@/lib/businessTypes";
+
+/** Trial length a backend from before modular billing gave every plan. */
+const LEGACY_TRIAL_DAYS = 30;
+
+function textOrNull(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+/**
+ * Fills the modular-billing fields on a plan. An older backend omits them;
+ * every plan it sold was Saveful Connect, with a 30-day trial.
+ */
+function normalisePlan(raw: AvailablePlan): AvailablePlan {
+  const contactSalesOnly = Boolean(raw.contactSalesOnly);
+  const scope: PlanScope = PLAN_SCOPES.includes(raw.scope)
+    ? raw.scope
+    : contactSalesOnly
+      ? "ENTERPRISE"
+      : (raw.maxSites ?? 1) > 1
+        ? "MULTI"
+        : "SINGLE";
+  const trialDays = typeof raw.trialDays === "number" ? raw.trialDays : contactSalesOnly ? 0 : LEGACY_TRIAL_DAYS;
+  return {
+    ...raw,
+    contactSalesOnly,
+    module: PLAN_MODULES.includes(raw.module) ? raw.module : "CONNECT",
+    scope,
+    trialDays,
+    // Without the per-plan flag, the org flag decides (applied on the plans page).
+    trialAvailable: typeof raw.trialAvailable === "boolean" ? raw.trialAvailable : undefined,
+    tagline: textOrNull(raw.tagline),
+    closingLine: textOrNull(raw.closingLine),
+    badge: textOrNull(raw.badge),
+    features: Array.isArray(raw.features) ? raw.features : [],
+  };
+}
+
+/** Adds modules for an older backend: never billed = all; any entitled plan was Saveful Connect. */
+function normaliseEntitlements(raw: Entitlements): Entitlements {
+  // An empty body is passed through as-is, like before.
+  if (!raw) return raw;
+  const modules: ProductModule[] = Array.isArray(raw.modules)
+    ? raw.modules.filter((m): m is ProductModule => PRODUCT_MODULES.includes(m))
+    : !raw.billingRequired
+      ? [...PRODUCT_MODULES]
+      : raw.entitled
+        ? ["CONNECT"]
+        : [];
+  return {
+    ...raw,
+    planModule: PLAN_MODULES.includes(raw.planModule as PlanModule) ? raw.planModule : null,
+    planScope: PLAN_SCOPES.includes(raw.planScope as PlanScope) ? raw.planScope : null,
+    modules,
+  };
+}
 
 type FetchOptions = RequestInit & { auth?: boolean; optional?: boolean };
 
@@ -60,7 +122,12 @@ export async function businessFetch<T>(path: string, options: FetchOptions = {})
       body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string"
         ? (body as { error: string }).error
         : undefined;
-    throw new ApiError(messageFromBody(body, `Request failed (${response.status})`), response.status, code);
+    throw new ApiError(
+      messageFromBody(body, `Request failed (${response.status})`),
+      response.status,
+      code,
+      body && typeof body === "object" ? (body as Record<string, unknown>) : undefined,
+    );
   }
   if (body && typeof body === "object" && "data" in body && (body as { data: unknown }).data != null) {
     return (body as { data: T }).data;
@@ -140,15 +207,17 @@ export function getBusinessProfile() {
   return businessFetch<BusinessProfile>("/auth/profile", { auth: true });
 }
 
-export function getAvailablePlans() {
-  return businessFetch<{ billingRequired: boolean; currency?: string; plans: AvailablePlan[] }>(
+export async function getAvailablePlans() {
+  const payload = await businessFetch<{ billingRequired: boolean; currency?: string; plans: AvailablePlan[] }>(
     "/subscriptions/available",
     { auth: true },
   );
+  return { ...payload, plans: (payload?.plans ?? []).map(normalisePlan) };
 }
 
-export function getEntitlements() {
-  return businessFetch<Entitlements>("/subscriptions/me", { auth: true, optional: true });
+export async function getEntitlements() {
+  const payload = await businessFetch<Entitlements>("/subscriptions/me", { auth: true, optional: true });
+  return normaliseEntitlements(payload);
 }
 
 export function startBillingTrial(planId: number, billingCycle?: BillingCycle) {
@@ -173,6 +242,11 @@ export function startBillingCheckout(planId: number, billingCycle: BillingCycle)
 export function previewPlanChange(planId: number, billingCycle?: BillingCycle) {
   return businessFetch<{
     direction: "UPGRADE" | "DOWNGRADE";
+    /** SWITCH = Make Food Count ↔ Saveful Connect, billed at the period end. */
+    changeType?: PlanChangeType;
+    /** false when a trial carries over to the new plan (Saveful Connect → Complete). */
+    endsTrialEarly?: boolean;
+    requiresPaymentMethod?: boolean;
     currency: string;
     amountDueToday: number;
     recurringAmount: number;
@@ -196,6 +270,7 @@ export function changeBusinessPlan(planId: number, billingCycle?: BillingCycle) 
     effectiveAt: string;
     nextBillingDate: string | null;
     message: string;
+    changeType?: PlanChangeType;
   }>("/billing/change-plan", {
     method: "POST",
     auth: true,
